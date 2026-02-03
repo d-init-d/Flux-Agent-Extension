@@ -28,15 +28,17 @@ Tạo một extension cho phép người dùng:
 
 | Task | Priority | Status | Description |
 |------|----------|--------|-------------|
-| Project Setup | 🔴 High | ⬜ Todo | Vite + React + TypeScript + Tailwind |
-| Manifest V3 | 🔴 High | ⬜ Todo | Permissions, service worker, content scripts |
-| Message Hub | 🔴 High | ⬜ Todo | Communication giữa sidebar ↔ background ↔ content |
-| Basic Sidebar UI | 🟡 Medium | ⬜ Todo | Chat interface cơ bản |
+| Project Setup | 🔴 High | ✅ Done | Vite + React + TypeScript + Tailwind |
+| Manifest V3 | 🔴 High | ✅ Done | Permissions, service worker, content scripts |
+| Message Hub | 🔴 High | ✅ Done | Communication giữa sidebar ↔ background ↔ content |
+| Basic Sidebar UI | 🟡 Medium | ✅ Done | Chat interface cơ bản |
 
 **Deliverables:**
-- [ ] Extension có thể load vào Chrome
-- [ ] Sidebar mở được và hiển thị UI
-- [ ] Message passing hoạt động
+- [x] Extension có thể load vào Chrome
+- [x] Sidebar mở được và hiển thị UI
+- [x] Message passing hoạt động
+
+**Completed:** 2025-02-03
 
 ---
 
