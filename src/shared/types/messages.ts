@@ -17,15 +17,33 @@ export type MessageType =
   | 'ACTION_STATUS'
   | 'ERROR'
   
-  // Background → Content
+  // Background ↔ Content - Core
   | 'DOM_ACTION'
-  | 'SCREENSHOT_REQUEST'
-  | 'PAGE_CONTEXT_REQUEST'
-  
-  // Content → Background
   | 'DOM_ACTION_RESULT'
+  | 'SCREENSHOT_REQUEST'
   | 'SCREENSHOT_RESULT'
-  | 'PAGE_CONTEXT_RESULT';
+  | 'PAGE_CONTEXT_REQUEST'
+  | 'PAGE_CONTEXT_RESULT'
+  
+  // Quick Actions (Phase 2)
+  | 'CLICK'
+  | 'CLICK_RESULT'
+  | 'TYPE'
+  | 'TYPE_RESULT'
+  | 'SCROLL'
+  | 'SCROLL_RESULT'
+  | 'SCROLL_TO'
+  | 'SCROLL_TO_RESULT'
+  | 'HOVER'
+  | 'HOVER_RESULT'
+  | 'EXTRACT_TEXT'
+  | 'EXTRACT_TEXT_RESULT'
+  | 'EXTRACT_TABLE'
+  | 'EXTRACT_TABLE_RESULT'
+  | 'EXTRACT_LINKS'
+  | 'EXTRACT_LINKS_RESULT'
+  | 'HIGHLIGHT'
+  | 'REMOVE_HIGHLIGHT';
 
 // Base message structure
 export interface Message<T = unknown> {
@@ -47,7 +65,7 @@ export interface ChatMessage {
 // Actions
 export interface Action {
   id: string;
-  type: 'click' | 'type' | 'scroll' | 'hover' | 'extract' | 'screenshot';
+  type: 'click' | 'type' | 'scroll' | 'scrollToElement' | 'hover' | 'leaveHover' | 'extract' | 'screenshot';
   params: Record<string, unknown>;
   status: 'pending' | 'running' | 'completed' | 'failed';
   result?: ActionResult;

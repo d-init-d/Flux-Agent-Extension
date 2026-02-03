@@ -5,6 +5,7 @@
 import { messageHub } from './message-hub';
 import { logger } from '@shared/logger';
 import { Message } from '@shared/types';
+import { generateId } from '@shared/utils';
 
 logger.info('Background service worker initialized');
 
@@ -48,30 +49,49 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
-// Example message handlers
+/**
+ * Helper to get active tab ID
+ */
+async function getActiveTabId(): Promise<number | null> {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab?.id || null;
+}
+
+/**
+ * Forward message to content script of active tab
+ */
+async function forwardToActiveTab(message: Message): Promise<any> {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
+    throw new Error('No active tab found');
+  }
+  return chrome.tabs.sendMessage(tabId, message);
+}
+
+// ==================== Message Handlers ====================
+
+// Chat message handler
 messageHub.on('CHAT_SEND', async (message) => {
   logger.info('Chat message received:', message.payload);
   
-  // TODO: Send to AI provider
-  // For now, just echo back
+  // TODO: Send to AI provider (Phase 4)
+  // For now, just echo back with helpful message
+  const userContent = (message.payload as any)?.messages?.slice(-1)?.[0]?.content || 'Hello';
+  
   return {
     type: 'CHAT_RESPONSE',
     payload: {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'assistant',
-      content: `Echo: ${JSON.stringify(message.payload)}`,
+      content: `I received your message: "${userContent}"\n\nDOM Controller is now active! You can ask me to:\n• Click on elements\n• Type text into inputs\n• Scroll the page\n• Extract data from the page\n\n(AI integration coming in Phase 4)`,
       timestamp: Date.now(),
     },
   };
 });
 
-messageHub.on('PAGE_CONTEXT_REQUEST', async (message, sender) => {
-  if (!sender.tab?.id) {
-    throw new Error('No tab ID in sender');
-  }
-
-  // Forward to content script
-  return messageHub.sendToTab(sender.tab.id, {
+// Page context request - forward to content script
+messageHub.on('PAGE_CONTEXT_REQUEST', async (message) => {
+  return forwardToActiveTab({
     type: 'PAGE_CONTEXT_REQUEST',
     payload: {},
     timestamp: Date.now(),
@@ -79,4 +99,56 @@ messageHub.on('PAGE_CONTEXT_REQUEST', async (message, sender) => {
   });
 });
 
-logger.info('Background service worker ready');
+// DOM Action - forward to content script
+messageHub.on('DOM_ACTION', async (message) => {
+  logger.info('DOM action requested:', message.payload);
+  return forwardToActiveTab({
+    type: 'DOM_ACTION',
+    payload: message.payload,
+    timestamp: Date.now(),
+    id: message.id,
+  });
+});
+
+// Screenshot request - use chrome.tabs.captureVisibleTab
+messageHub.on('SCREENSHOT_REQUEST', async (message) => {
+  const tabId = await getActiveTabId();
+  if (!tabId) {
+    return { success: false, message: 'No active tab found' };
+  }
+
+  try {
+    const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' });
+    return {
+      success: true,
+      data: {
+        screenshot: dataUrl,
+        timestamp: Date.now(),
+      },
+    };
+  } catch (error) {
+    logger.error('Screenshot failed:', error);
+    return { success: false, message: String(error) };
+  }
+});
+
+// Quick action handlers - forward to content script
+const quickActionTypes = [
+  'CLICK', 'TYPE', 'SCROLL', 'SCROLL_TO', 'HOVER',
+  'EXTRACT_TEXT', 'EXTRACT_TABLE', 'EXTRACT_LINKS',
+  'HIGHLIGHT', 'REMOVE_HIGHLIGHT'
+] as const;
+
+quickActionTypes.forEach(actionType => {
+  messageHub.on(actionType as any, async (message) => {
+    logger.info(`${actionType} action requested:`, message.payload);
+    return forwardToActiveTab({
+      type: actionType as any,
+      payload: message.payload,
+      timestamp: Date.now(),
+      id: message.id,
+    });
+  });
+});
+
+logger.info('Background service worker ready with DOM action handlers');

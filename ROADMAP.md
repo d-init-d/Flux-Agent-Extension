@@ -47,17 +47,19 @@ Tạo một extension cho phép người dùng:
 
 | Task | Priority | Status | Description |
 |------|----------|--------|-------------|
-| DOM Query System | 🔴 High | ⬜ Todo | Tìm elements bằng selector, text, role |
-| Click Action | 🔴 High | ⬜ Todo | Click vào elements |
-| Type Action | 🔴 High | ⬜ Todo | Điền text vào inputs |
-| Scroll Action | 🟡 Medium | ⬜ Todo | Scroll trang, scroll to element |
-| Hover Action | 🟢 Low | ⬜ Todo | Hover để trigger tooltips, menus |
-| Element Highlighter | 🟡 Medium | ⬜ Todo | Visual feedback khi AI đang tương tác |
+| DOM Query System | 🔴 High | ✅ Done | Tìm elements bằng selector, text, role |
+| Click Action | 🔴 High | ✅ Done | Click vào elements |
+| Type Action | 🔴 High | ✅ Done | Điền text vào inputs |
+| Scroll Action | 🟡 Medium | ✅ Done | Scroll trang, scroll to element |
+| Hover Action | 🟢 Low | ✅ Done | Hover để trigger tooltips, menus |
+| Element Highlighter | 🟡 Medium | ✅ Done | Visual feedback khi AI đang tương tác |
 
 **Deliverables:**
-- [ ] AI có thể click vào bất kỳ element nào
-- [ ] AI có thể điền form
-- [ ] Visual highlighting khi AI thao tác
+- [x] AI có thể click vào bất kỳ element nào
+- [x] AI có thể điền form
+- [x] Visual highlighting khi AI thao tác
+
+**Completed:** 2025-02-03
 
 ---
 
