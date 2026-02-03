@@ -2,12 +2,15 @@ import { create } from 'zustand';
 import { ChatMessage } from '@shared/types';
 import { createMessage, generateId } from '@shared/utils';
 import { logger } from '@shared/logger';
+import type { AgentPlan } from '../../agent/types';
 
 interface ChatStore {
   // State
   messages: ChatMessage[];
   isLoading: boolean;
   error: string | null;
+  currentPlan: AgentPlan | null;
+  isAgentMode: boolean;
 
   // Actions
   sendMessage: (content: string) => Promise<void>;
@@ -15,6 +18,9 @@ interface ChatStore {
   clearMessages: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setPlan: (plan: AgentPlan | null) => void;
+  clearPlan: () => void;
+  toggleAgentMode: () => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -22,6 +28,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   isLoading: false,
   error: null,
+  currentPlan: null,
+  isAgentMode: true, // Default to agent mode
 
   // Send message to background
   sendMessage: async (content: string) => {
@@ -37,35 +45,68 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       messages: [...state.messages, userMessage],
       isLoading: true,
       error: null,
+      currentPlan: null,
     }));
 
     try {
       logger.info('Sending message to background:', content);
 
-      // Send to background service worker
-      const response = await chrome.runtime.sendMessage(
-        createMessage('CHAT_SEND', {
-          messages: [...get().messages, userMessage],
-        })
-      );
+      if (get().isAgentMode) {
+        // Agent mode - use AGENT_CHAT
+        const response = await chrome.runtime.sendMessage({
+          type: 'AGENT_CHAT',
+          payload: {
+            content,
+            messages: [...get().messages, userMessage],
+          },
+          timestamp: Date.now(),
+          id: generateId(),
+        });
 
-      logger.info('Received response from background:', response);
+        logger.info('Agent chat response:', response);
 
-      // Add assistant response
-      if (response && response.payload) {
-        const assistantMessage: ChatMessage = {
-          id: response.payload.id || generateId(),
-          role: 'assistant',
-          content: response.payload.content,
-          timestamp: response.payload.timestamp || Date.now(),
-        };
+        if (response?.success) {
+          // Add assistant response
+          const assistantMessage: ChatMessage = {
+            id: generateId(),
+            role: 'assistant',
+            content: response.response,
+            timestamp: Date.now(),
+          };
 
-        set(state => ({
-          messages: [...state.messages, assistantMessage],
-          isLoading: false,
-        }));
+          set(state => ({
+            messages: [...state.messages, assistantMessage],
+            isLoading: false,
+            currentPlan: response.plan || null,
+          }));
+        } else {
+          throw new Error(response?.error || 'Agent chat failed');
+        }
       } else {
-        throw new Error('Invalid response from background');
+        // Regular chat mode
+        const response = await chrome.runtime.sendMessage(
+          createMessage('CHAT_SEND', {
+            messages: [...get().messages, userMessage],
+          })
+        );
+
+        logger.info('Received response from background:', response);
+
+        if (response && response.payload) {
+          const assistantMessage: ChatMessage = {
+            id: response.payload.id || generateId(),
+            role: 'assistant',
+            content: response.payload.content,
+            timestamp: response.payload.timestamp || Date.now(),
+          };
+
+          set(state => ({
+            messages: [...state.messages, assistantMessage],
+            isLoading: false,
+          }));
+        } else {
+          throw new Error('Invalid response from background');
+        }
       }
     } catch (error) {
       logger.error('Error sending message:', error);
@@ -78,7 +119,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const errorMessage: ChatMessage = {
         id: generateId(),
         role: 'assistant',
-        content: `Error: ${String(error)}`,
+        content: `❌ Error: ${String(error)}`,
         timestamp: Date.now(),
       };
 
@@ -95,7 +136,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   clearMessages: () => {
-    set({ messages: [], error: null });
+    set({ messages: [], error: null, currentPlan: null });
   },
 
   setLoading: (loading) => {
@@ -105,4 +146,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setError: (error) => {
     set({ error });
   },
+
+  setPlan: (plan) => {
+    set({ currentPlan: plan });
+  },
+
+  clearPlan: () => {
+    set({ currentPlan: null });
+  },
+
+  toggleAgentMode: () => {
+    set(state => ({ isAgentMode: !state.isAgentMode }));
+  },
 }));
+
+export default useChatStore;

@@ -5,6 +5,7 @@
 import { messageHub } from './message-hub';
 import { initProviderHandlers } from './provider-handlers';
 import { providerManager } from '../providers';
+import { fluxAgent } from '../agent';
 import { logger } from '@shared/logger';
 import { Message } from '@shared/types';
 import { generateId } from '@shared/utils';
@@ -14,9 +15,12 @@ logger.info('Background service worker initialized');
 // Initialize provider handlers
 initProviderHandlers();
 
-// Load provider config
-providerManager.loadFromStorage().catch(err => {
-  logger.error('Failed to load provider config:', err);
+// Load configs
+Promise.all([
+  providerManager.loadFromStorage(),
+  fluxAgent.initialize(),
+]).catch(err => {
+  logger.error('Failed to initialize:', err);
 });
 
 // Set up message listener
@@ -187,4 +191,65 @@ quickActionTypes.forEach(actionType => {
   });
 });
 
-logger.info('Background service worker ready with DOM action handlers');
+// ==================== Agent Handlers (Phase 5) ====================
+
+// Execute plan
+messageHub.on('EXECUTE_PLAN', async (message) => {
+  const { plan } = message.payload as { plan: import('../agent/types').AgentPlan };
+  if (!plan) {
+    return { success: false, error: 'No plan provided' };
+  }
+
+  try {
+    const result = await fluxAgent.executePlan();
+    return { success: true, plan: result };
+  } catch (error) {
+    logger.error('Failed to execute plan:', error);
+    return { success: false, error: String(error) };
+  }
+});
+
+// Cancel execution
+messageHub.on('CANCEL_EXECUTION', async () => {
+  fluxAgent.cancel();
+  return { success: true };
+});
+
+// Get agent state
+messageHub.on('GET_AGENT_STATE', async () => {
+  return {
+    success: true,
+    state: fluxAgent.getState(),
+  };
+});
+
+// Agent mode chat (uses tools)
+messageHub.on('AGENT_CHAT', async (message) => {
+  const { content, pageContext } = message.payload as {
+    content: string;
+    pageContext?: string;
+  };
+
+  if (!content) {
+    return { success: false, error: 'No message content' };
+  }
+
+  try {
+    const result = await fluxAgent.handleMessage(content, {
+      pageContext,
+      autoExecute: false,
+    });
+
+    return {
+      success: true,
+      response: result.response,
+      plan: result.plan,
+      needsExecution: result.plan && !result.executed,
+    };
+  } catch (error) {
+    logger.error('Agent chat failed:', error);
+    return { success: false, error: String(error) };
+  }
+});
+
+logger.info('Background service worker ready with DOM and Agent handlers');
