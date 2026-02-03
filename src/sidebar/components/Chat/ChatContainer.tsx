@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { MessageBubble } from './MessageBubble';
 import { InputArea } from './InputArea';
 import { TypingIndicator } from './TypingIndicator';
+import { ProviderSettings } from '../Settings/ProviderSettings';
 import { useChatStore } from '../../stores/chatStore';
 import { Bot } from 'lucide-react';
 
@@ -21,10 +22,11 @@ export const ChatContainer: React.FC = () => {
         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
           <Bot className="w-5 h-5 text-white" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-base font-semibold">Flux Agent</h1>
           <p className="text-xs text-secondary">AI Browser Assistant</p>
         </div>
+        <ProviderSettings />
       </div>
 
       {/* Messages Area */}

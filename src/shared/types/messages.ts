@@ -11,6 +11,12 @@ export type MessageType =
   | 'ACTION_EXECUTE'
   | 'ACTION_CANCEL'
   
+  // Provider management (Phase 4)
+  | 'GET_PROVIDER_SETTINGS'
+  | 'SET_PROVIDER'
+  | 'SET_API_KEY'
+  | 'CHAT_WITH_AI'
+  
   // Background → Sidebar
   | 'CHAT_RESPONSE'
   | 'CHAT_STREAM'

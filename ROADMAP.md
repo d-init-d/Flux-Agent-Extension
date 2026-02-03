@@ -68,15 +68,17 @@ Tạo một extension cho phép người dùng:
 
 | Task | Priority | Status | Description |
 |------|----------|--------|-------------|
-| Full Page Screenshot | 🔴 High | ⬜ Todo | Capture toàn bộ viewport |
-| Element Screenshot | 🟡 Medium | ⬜ Todo | Screenshot 1 element cụ thể |
-| DOM to Text | 🔴 High | ⬜ Todo | Convert DOM thành text mô tả cho AI |
-| Accessibility Tree | 🟡 Medium | ⬜ Todo | Extract accessibility info |
-| Page Context | 🔴 High | ⬜ Todo | URL, title, meta, structured data |
+| Full Page Screenshot | 🔴 High | ✅ Done | Capture toàn bộ viewport |
+| Element Screenshot | 🟡 Medium | ✅ Done | Screenshot 1 element cụ thể |
+| DOM to Text | 🔴 High | ✅ Done | Convert DOM thành text mô tả cho AI |
+| Accessibility Tree | 🟡 Medium | ✅ Done | Extract accessibility info |
+| Page Context | 🔴 High | ✅ Done | URL, title, meta, structured data |
 
 **Deliverables:**
-- [ ] AI nhận được screenshot của trang
-- [ ] AI có context về nội dung trang
+- [x] AI nhận được screenshot của trang
+- [x] AI có context về nội dung trang
+
+**Completed:** 2025-02-03
 
 ---
 
@@ -85,18 +87,20 @@ Tạo một extension cho phép người dùng:
 
 | Task | Priority | Status | Description |
 |------|----------|--------|-------------|
-| Provider Interface | 🔴 High | ⬜ Todo | Abstract base class cho providers |
-| Claude API | 🔴 High | ⬜ Todo | Anthropic Claude integration |
-| OpenAI GPT-4 | 🔴 High | ⬜ Todo | OpenAI integration |
-| Google Gemini | 🟡 Medium | ⬜ Todo | Gemini API integration |
+| Provider Interface | 🔴 High | ✅ Done | Abstract base class cho providers |
+| Claude API | 🔴 High | ✅ Done | Anthropic Claude integration |
+| OpenAI GPT-4 | 🔴 High | ✅ Done | OpenAI integration |
+| Google Gemini | 🟡 Medium | ✅ Done | Gemini API integration |
 | Ollama Local | 🟡 Medium | ⬜ Todo | Local LLM support |
 | Google Account Auth | 🔴 High | ⬜ Todo | OAuth flow cho Google AI (custom implementation) |
-| Provider Switcher | 🟡 Medium | ⬜ Todo | UI để chọn/switch provider |
+| Provider Switcher | 🟡 Medium | ✅ Done | UI để chọn/switch provider |
 
 **Deliverables:**
-- [ ] Có thể chat với ít nhất 2 providers
+- [x] Có thể chat với ít nhất 2 providers
+- [x] Settings UI để configure API keys
 - [ ] Google Account authentication hoạt động
-- [ ] Settings UI để configure API keys
+
+**Completed:** 2025-02-03
 
 ---
 

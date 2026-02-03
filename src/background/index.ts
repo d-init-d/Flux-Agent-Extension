@@ -3,11 +3,21 @@
  */
 
 import { messageHub } from './message-hub';
+import { initProviderHandlers } from './provider-handlers';
+import { providerManager } from '../providers';
 import { logger } from '@shared/logger';
 import { Message } from '@shared/types';
 import { generateId } from '@shared/utils';
 
 logger.info('Background service worker initialized');
+
+// Initialize provider handlers
+initProviderHandlers();
+
+// Load provider config
+providerManager.loadFromStorage().catch(err => {
+  logger.error('Failed to load provider config:', err);
+});
 
 // Set up message listener
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
@@ -74,8 +84,34 @@ async function forwardToActiveTab(message: Message): Promise<any> {
 messageHub.on('CHAT_SEND', async (message) => {
   logger.info('Chat message received:', message.payload);
   
-  // TODO: Send to AI provider (Phase 4)
-  // For now, just echo back with helpful message
+  // Try to use AI provider
+  const provider = providerManager.getCurrentProvider();
+  
+  if (provider && provider.isReady()) {
+    try {
+      const messages = (message.payload as any)?.messages || [];
+      const response = await provider.chat(messages, {
+        systemPrompt: `You are Flux Agent, an AI assistant integrated into a Chrome browser extension.
+You can see and interact with web pages. When the user asks you to do something on a webpage,
+explain what you would do. You have access to tools like click, type, scroll, and extract data.
+Be helpful, concise, and explain your actions clearly.`,
+      });
+      
+      return {
+        type: 'CHAT_RESPONSE',
+        payload: {
+          id: generateId(),
+          role: 'assistant',
+          content: response.content,
+          timestamp: Date.now(),
+        },
+      };
+    } catch (error) {
+      logger.error('AI chat error:', error);
+    }
+  }
+  
+  // Fallback if no provider configured
   const userContent = (message.payload as any)?.messages?.slice(-1)?.[0]?.content || 'Hello';
   
   return {
@@ -83,7 +119,7 @@ messageHub.on('CHAT_SEND', async (message) => {
     payload: {
       id: generateId(),
       role: 'assistant',
-      content: `I received your message: "${userContent}"\n\nDOM Controller is now active! You can ask me to:\n• Click on elements\n• Type text into inputs\n• Scroll the page\n• Extract data from the page\n\n(AI integration coming in Phase 4)`,
+      content: `I received your message: "${userContent}"\n\n⚠️ No AI provider configured. Please click the settings button to add an API key for Claude, OpenAI, or Gemini.\n\nOnce configured, I can help you:\n• Navigate and interact with web pages\n• Fill out forms automatically\n• Extract data from websites\n• And much more!`,
       timestamp: Date.now(),
     },
   };
