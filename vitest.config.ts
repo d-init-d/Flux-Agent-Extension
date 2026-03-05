@@ -5,6 +5,9 @@ import path from 'node:path';
 export default defineConfig({
   resolve: {
     alias: {
+      '@shared': path.resolve(__dirname, './src/shared'),
+      '@core': path.resolve(__dirname, './src/core'),
+      '@ui': path.resolve(__dirname, './src/ui'),
       '@': path.resolve(__dirname, './src'),
     },
   },
