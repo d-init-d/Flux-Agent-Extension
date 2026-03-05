@@ -1,0 +1,186 @@
+/* ==========================================================================
+   Design Tokens - Flux Agent Extension
+   
+   CSS Custom Properties for light and dark themes.
+   Uses [data-theme="dark"] selector for dark mode switching.
+   All values follow a 4px base grid system.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Light Theme (Default)
+   -------------------------------------------------------------------------- */
+:root {
+  /* -- Primary Colors -- */
+  --color-primary-50: 239 246 255;   /* #EFF6FF */
+  --color-primary-100: 219 234 254;  /* #DBEAFE */
+  --color-primary-200: 191 219 254;  /* #BFDBFE */
+  --color-primary-300: 147 197 253;  /* #93C5FD */
+  --color-primary-400: 96 165 250;   /* #60A5FA */
+  --color-primary-500: 59 130 246;   /* #3B82F6 */
+  --color-primary-600: 37 99 235;    /* #2563EB */
+  --color-primary-700: 29 78 216;    /* #1D4ED8 */
+  --color-primary-800: 30 64 175;    /* #1E40AF */
+  --color-primary-900: 30 58 138;    /* #1E3A8A */
+
+  /* -- Secondary (Slate) -- */
+  --color-secondary-50: 248 250 252;   /* #F8FAFC */
+  --color-secondary-100: 241 245 249;  /* #F1F5F9 */
+  --color-secondary-200: 226 232 240;  /* #E2E8F0 */
+  --color-secondary-300: 203 213 225;  /* #CBD5E1 */
+  --color-secondary-400: 148 163 184;  /* #94A3B8 */
+  --color-secondary-500: 100 116 139;  /* #64748B */
+  --color-secondary-600: 71 85 105;    /* #475569 */
+  --color-secondary-700: 51 65 85;     /* #334155 */
+  --color-secondary-800: 30 41 59;     /* #1E293B */
+  --color-secondary-900: 15 23 42;     /* #0F172A */
+
+  /* -- Semantic: Success -- */
+  --color-success-50: 240 253 244;
+  --color-success-100: 220 252 231;
+  --color-success-500: 34 197 94;    /* #22C55E */
+  --color-success-600: 22 163 74;    /* #16A34A */
+  --color-success-700: 21 128 61;
+
+  /* -- Semantic: Warning -- */
+  --color-warning-50: 255 251 235;
+  --color-warning-100: 254 243 199;
+  --color-warning-500: 245 158 11;   /* #F59E0B */
+  --color-warning-600: 217 119 6;    /* #D97706 */
+  --color-warning-700: 180 83 9;
+
+  /* -- Semantic: Error -- */
+  --color-error-50: 254 242 242;
+  --color-error-100: 254 226 226;
+  --color-error-500: 239 68 68;      /* #EF4444 */
+  --color-error-600: 220 38 38;      /* #DC2626 */
+  --color-error-700: 185 28 28;
+
+  /* -- Semantic: Info -- */
+  --color-info-50: 239 246 255;
+  --color-info-100: 219 234 254;
+  --color-info-500: 59 130 246;      /* #3B82F6 */
+  --color-info-600: 37 99 235;
+  --color-info-700: 29 78 216;
+
+  /* -- Surface Colors -- */
+  --color-bg-primary: 255 255 255;        /* #FFFFFF - main background */
+  --color-bg-secondary: 248 250 252;      /* #F8FAFC - secondary background */
+  --color-bg-elevated: 255 255 255;       /* #FFFFFF - cards, modals */
+  --color-bg-overlay: 15 23 42;           /* #0F172A - overlay backdrop */
+
+  /* -- Text Colors -- */
+  --color-text-primary: 15 23 42;         /* #0F172A */
+  --color-text-secondary: 71 85 105;      /* #475569 */
+  --color-text-tertiary: 148 163 184;     /* #94A3B8 */
+  --color-text-inverse: 255 255 255;      /* #FFFFFF */
+  --color-text-link: 37 99 235;           /* #2563EB */
+
+  /* -- Border Colors -- */
+  --color-border-default: 226 232 240;    /* #E2E8F0 */
+  --color-border-strong: 148 163 184;     /* #94A3B8 */
+  --color-border-subtle: 241 245 249;     /* #F1F5F9 */
+  --color-border-focus: 59 130 246;       /* #3B82F6 */
+
+  /* -- Typography -- */
+  --font-family-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+
+  --font-size-xs: 0.75rem;     /* 12px */
+  --font-size-sm: 0.8125rem;   /* 13px */
+  --font-size-base: 0.875rem;  /* 14px - default for extension */
+  --font-size-lg: 1rem;        /* 16px */
+  --font-size-xl: 1.125rem;    /* 18px */
+  --font-size-2xl: 1.25rem;    /* 20px */
+  --font-size-3xl: 1.5rem;     /* 24px */
+
+  --line-height-tight: 1.25;
+  --line-height-snug: 1.375;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.625;
+
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --tracking-tighter: -0.05em;
+  --tracking-tight: -0.025em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.025em;
+
+  /* -- Spacing (4px base grid) -- */
+  --spacing-0: 0rem;
+  --spacing-0-5: 0.125rem;   /* 2px */
+  --spacing-1: 0.25rem;      /* 4px */
+  --spacing-1-5: 0.375rem;   /* 6px */
+  --spacing-2: 0.5rem;       /* 8px */
+  --spacing-2-5: 0.625rem;   /* 10px */
+  --spacing-3: 0.75rem;      /* 12px */
+  --spacing-3-5: 0.875rem;   /* 14px */
+  --spacing-4: 1rem;         /* 16px */
+  --spacing-5: 1.25rem;      /* 20px */
+  --spacing-6: 1.5rem;       /* 24px */
+  --spacing-8: 2rem;         /* 32px */
+  --spacing-10: 2.5rem;      /* 40px */
+  --spacing-12: 3rem;        /* 48px */
+
+  /* -- Border Radius -- */
+  --radius-sm: 0.25rem;      /* 4px */
+  --radius-md: 0.375rem;     /* 6px */
+  --radius-lg: 0.5rem;       /* 8px */
+  --radius-xl: 0.75rem;      /* 12px */
+  --radius-2xl: 1rem;        /* 16px */
+  --radius-full: 9999px;
+
+  /* -- Shadows (Light Theme) -- */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.04);
+
+  /* -- Transitions -- */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* -- Z-Index Scale -- */
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-modal-backdrop: 1900;
+  --z-modal: 2000;
+  --z-overlay: 3000;
+  --z-toast: 4000;
+}
+
+/* --------------------------------------------------------------------------
+   Dark Theme
+   -------------------------------------------------------------------------- */
+[data-theme="dark"] {
+  /* -- Surface Colors -- */
+  --color-bg-primary: 15 23 42;           /* #0F172A */
+  --color-bg-secondary: 30 41 59;         /* #1E293B */
+  --color-bg-elevated: 30 41 59;          /* #1E293B */
+  --color-bg-overlay: 0 0 0;             /* #000000 */
+
+  /* -- Text Colors -- */
+  --color-text-primary: 241 245 249;      /* #F1F5F9 */
+  --color-text-secondary: 148 163 184;    /* #94A3B8 */
+  --color-text-tertiary: 100 116 139;     /* #64748B */
+  --color-text-inverse: 15 23 42;         /* #0F172A */
+  --color-text-link: 96 165 250;          /* #60A5FA */
+
+  /* -- Primary shifted for dark -- */
+  --color-primary-600: 59 130 246;        /* #3B82F6 (brighter in dark) */
+
+  /* -- Border Colors -- */
+  --color-border-default: 51 65 85;       /* #334155 */
+  --color-border-strong: 100 116 139;     /* #64748B */
+  --color-border-subtle: 30 41 59;        /* #1E293B */
+  --color-border-focus: 96 165 250;       /* #60A5FA */
+
+  /* -- Shadows (Dark Theme - subtler, use elevation instead) -- */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.6), 0 8px 10px -6px rgb(0 0 0 / 0.3);
+}

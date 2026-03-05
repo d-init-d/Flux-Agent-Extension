@@ -1,123 +1,188 @@
+import type { Action } from './actions';
+import type { ActionResult, PageContext } from './browser';
+import type { SessionConfig, Session } from './session';
+import type { ContextBuilderOptions } from '../../core/session/interfaces';
+
 /**
- * Message types for communication between extension components
+ * Message channels
  */
+export type MessageChannel = 'popup' | 'sidePanel' | 'contentScript' | 'offscreen';
 
-// Message types enum
-export type MessageType = 
-  // Sidebar → Background
-  | 'CHAT_SEND'
-  | 'SETTINGS_UPDATE'
-  | 'PROVIDER_SWITCH'
+/**
+ * All message types in the extension
+ */
+export type ExtensionMessageType =
+  // Session management
+  | 'SESSION_CREATE'
+  | 'SESSION_START'
+  | 'SESSION_PAUSE'
+  | 'SESSION_RESUME'
+  | 'SESSION_ABORT'
+  | 'SESSION_SEND_MESSAGE'
+  | 'SESSION_GET_STATE'
+  | 'SESSION_LIST'
+
+  // Action execution
   | 'ACTION_EXECUTE'
-  | 'ACTION_CANCEL'
-  
-  // Provider management (Phase 4)
-  | 'GET_PROVIDER_SETTINGS'
-  | 'SET_PROVIDER'
-  | 'SET_API_KEY'
-  | 'CHAT_WITH_AI'
-  
-  // Background → Sidebar
-  | 'CHAT_RESPONSE'
-  | 'CHAT_STREAM'
-  | 'ACTION_STATUS'
-  | 'ERROR'
-  
-  // Background ↔ Content - Core
-  | 'DOM_ACTION'
-  | 'DOM_ACTION_RESULT'
-  | 'SCREENSHOT_REQUEST'
-  | 'SCREENSHOT_RESULT'
-  | 'PAGE_CONTEXT_REQUEST'
-  | 'PAGE_CONTEXT_RESULT'
-  
-  // Quick Actions (Phase 2)
-  | 'CLICK'
-  | 'CLICK_RESULT'
-  | 'TYPE'
-  | 'TYPE_RESULT'
-  | 'SCROLL'
-  | 'SCROLL_RESULT'
-  | 'SCROLL_TO'
-  | 'SCROLL_TO_RESULT'
-  | 'HOVER'
-  | 'HOVER_RESULT'
-  | 'EXTRACT_TEXT'
-  | 'EXTRACT_TEXT_RESULT'
-  | 'EXTRACT_TABLE'
-  | 'EXTRACT_TABLE_RESULT'
-  | 'EXTRACT_LINKS'
-  | 'EXTRACT_LINKS_RESULT'
-  | 'HIGHLIGHT'
-  | 'REMOVE_HIGHLIGHT';
+  | 'ACTION_EXECUTE_BATCH'
+  | 'ACTION_ABORT'
+  | 'ACTION_UNDO'
 
-// Base message structure
-export interface Message<T = unknown> {
-  type: MessageType;
+  // Tab management
+  | 'TAB_ATTACH'
+  | 'TAB_DETACH'
+  | 'TAB_GET_STATE'
+  | 'TAB_CAPTURE'
+
+  // Settings
+  | 'SETTINGS_GET'
+  | 'SETTINGS_UPDATE'
+  | 'PROVIDER_SET'
+  | 'API_KEY_SET'
+  | 'API_KEY_VALIDATE'
+
+  // Context
+  | 'CONTEXT_GET'
+  | 'CONTEXT_UPDATE'
+
+  // Events (broadcasts)
+  | 'EVENT_SESSION_UPDATE'
+  | 'EVENT_ACTION_PROGRESS'
+  | 'EVENT_AI_STREAM'
+  | 'EVENT_ERROR';
+
+/**
+ * Base message structure
+ */
+export interface ExtensionMessage<T = unknown> {
+  id: string;
+  channel: MessageChannel;
+  type: ExtensionMessageType;
   payload: T;
   timestamp: number;
-  id: string;
 }
 
-// Chat messages
-export interface ChatMessage {
-  id: string;
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-  timestamp: number;
-  actions?: Action[];
-}
-
-// Actions
-export interface Action {
-  id: string;
-  type: 'click' | 'type' | 'scroll' | 'scrollToElement' | 'hover' | 'leaveHover' | 'extract' | 'screenshot';
-  params: Record<string, unknown>;
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  result?: ActionResult;
-}
-
-export interface ActionResult {
+/**
+ * Response wrapper
+ */
+export interface ExtensionResponse<T = unknown> {
   success: boolean;
-  message?: string;
-  data?: unknown;
-  screenshot?: string;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
 }
 
-// Page context
-export interface PageContext {
-  url: string;
-  title: string;
-  description?: string;
-  headings: string[];
-  forms: FormInfo[];
-  links: LinkInfo[];
-  interactiveElements: InteractiveElement[];
+// ============================================================================
+// Request/Response types for each message
+// ============================================================================
+
+export interface SessionCreateRequest {
+  config: Omit<SessionConfig, 'id'>;
+  tabId?: number;
 }
 
-export interface FormInfo {
-  id?: string;
-  name?: string;
-  action?: string;
-  method?: string;
-  fields: FormField[];
+export interface SessionCreateResponse {
+  session: Session;
 }
 
-export interface FormField {
-  name: string;
-  type: string;
-  label?: string;
-  placeholder?: string;
-  required: boolean;
+export interface SessionStartRequest {
+  sessionId: string;
+  prompt?: string;
 }
 
-export interface LinkInfo {
-  href: string;
-  text: string;
+export interface ActionExecuteRequest {
+  sessionId?: string;
+  action: Action;
 }
 
-export interface InteractiveElement {
-  type: 'button' | 'link' | 'input' | 'select';
-  text: string;
-  selector: string;
+export interface ActionExecuteResponse {
+  result: ActionResult;
+}
+
+export interface ContextGetRequest {
+  tabId?: number;
+  options?: ContextBuilderOptions;
+}
+
+export interface ContextGetResponse {
+  context: PageContext;
+}
+
+/**
+ * Type-safe message sender interface
+ */
+export interface MessageSender {
+  <T extends ExtensionMessageType>(
+    type: T,
+    payload: RequestPayloadMap[T],
+  ): Promise<ResponsePayloadMap[T]>;
+}
+
+/**
+ * Type maps for request payloads
+ */
+export interface RequestPayloadMap {
+  SESSION_CREATE: SessionCreateRequest;
+  SESSION_START: SessionStartRequest;
+  SESSION_PAUSE: { sessionId: string };
+  SESSION_RESUME: { sessionId: string };
+  SESSION_ABORT: { sessionId: string };
+  SESSION_SEND_MESSAGE: { sessionId: string; message: string };
+  SESSION_GET_STATE: { sessionId: string };
+  SESSION_LIST: void;
+  ACTION_EXECUTE: ActionExecuteRequest;
+  ACTION_EXECUTE_BATCH: { sessionId?: string; actions: Action[] };
+  ACTION_ABORT: { sessionId?: string };
+  ACTION_UNDO: { sessionId: string; steps?: number };
+  TAB_ATTACH: { tabId: number };
+  TAB_DETACH: { tabId: number };
+  TAB_GET_STATE: { tabId?: number };
+  TAB_CAPTURE: { tabId?: number };
+  SETTINGS_GET: void;
+  SETTINGS_UPDATE: { settings: Record<string, unknown> };
+  PROVIDER_SET: { provider: string; config: Record<string, unknown> };
+  API_KEY_SET: { provider: string; apiKey: string };
+  API_KEY_VALIDATE: { provider: string; apiKey: string };
+  CONTEXT_GET: ContextGetRequest;
+  CONTEXT_UPDATE: { tabId: number };
+  EVENT_SESSION_UPDATE: { sessionId: string };
+  EVENT_ACTION_PROGRESS: { actionId: string; progress: number };
+  EVENT_AI_STREAM: { sessionId: string; chunk: string };
+  EVENT_ERROR: { code: string; message: string };
+}
+
+/**
+ * Type maps for response payloads
+ */
+export interface ResponsePayloadMap {
+  SESSION_CREATE: SessionCreateResponse;
+  SESSION_START: void;
+  SESSION_PAUSE: void;
+  SESSION_RESUME: void;
+  SESSION_ABORT: void;
+  SESSION_SEND_MESSAGE: void;
+  SESSION_GET_STATE: { session: Session | null };
+  SESSION_LIST: { sessions: Session[] };
+  ACTION_EXECUTE: ActionExecuteResponse;
+  ACTION_EXECUTE_BATCH: { results: ActionResult[] };
+  ACTION_ABORT: void;
+  ACTION_UNDO: void;
+  TAB_ATTACH: void;
+  TAB_DETACH: void;
+  TAB_GET_STATE: { state: Record<string, unknown> | null };
+  TAB_CAPTURE: { screenshot: string };
+  SETTINGS_GET: { settings: Record<string, unknown> };
+  SETTINGS_UPDATE: void;
+  PROVIDER_SET: void;
+  API_KEY_SET: void;
+  API_KEY_VALIDATE: { valid: boolean };
+  CONTEXT_GET: ContextGetResponse;
+  CONTEXT_UPDATE: void;
+  EVENT_SESSION_UPDATE: void;
+  EVENT_ACTION_PROGRESS: void;
+  EVENT_AI_STREAM: void;
+  EVENT_ERROR: void;
 }

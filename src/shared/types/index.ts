@@ -1,6 +1,102 @@
-/**
- * Re-export all types from a single entry point
- */
+// AI types
+export type {
+  AIProviderType,
+  AIModelConfig,
+  AIMessage,
+  AIMessageContent,
+  AIStreamChunk,
+  AIRequestOptions,
+  AITool,
+} from './ai';
 
-export * from './messages';
-export * from './providers';
+// Action types
+export type {
+  ActionType,
+  ElementSelector,
+  BaseAction,
+  NavigateAction,
+  GoBackAction,
+  GoForwardAction,
+  ReloadAction,
+  ClickAction,
+  HoverAction,
+  FocusAction,
+  FillAction,
+  TypeAction,
+  ClearAction,
+  SelectAction,
+  CheckAction,
+  PressAction,
+  HotkeyAction,
+  ScrollAction,
+  ScrollIntoViewAction,
+  WaitAction,
+  WaitForElementAction,
+  WaitForNavigationAction,
+  WaitForNetworkAction,
+  ExtractAction,
+  ExtractAllAction,
+  ScreenshotAction,
+  NewTabAction,
+  CloseTabAction,
+  SwitchTabAction,
+  EvaluateAction,
+  Action,
+  ParsedResponse,
+} from './actions';
+
+// Browser types
+export type {
+  TabState,
+  ActionResult,
+  BrowserControllerOptions,
+  PageContext,
+  InteractiveElement,
+  FormInfo,
+  ScreenshotOptions,
+} from './browser';
+
+// Bridge types
+export type {
+  MessageType,
+  BridgeMessage,
+  ExecuteActionPayload,
+  ActionResultPayload,
+  PageContextPayload,
+  HighlightPayload,
+} from './bridge';
+
+// Session types
+export type {
+  SessionStatus,
+  SessionConfig,
+  Session,
+  ActionRecord,
+  SessionEvent,
+} from './session';
+
+// Storage types
+export type {
+  StorageSchema,
+  ExtensionSettings,
+  ProviderConfig,
+  UsageStats,
+} from './storage';
+
+// Message types
+export type {
+  MessageChannel,
+  ExtensionMessageType,
+  ExtensionMessage,
+  ExtensionResponse,
+  SessionCreateRequest,
+  SessionCreateResponse,
+  SessionStartRequest,
+  ActionExecuteRequest,
+  ActionExecuteResponse,
+  ContextGetRequest,
+  ContextGetResponse,
+  MessageSender,
+  RequestPayloadMap,
+  ResponsePayloadMap,
+} from './messages';

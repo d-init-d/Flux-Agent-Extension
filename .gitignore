@@ -50,6 +50,11 @@ tmp/
 temp/
 *.tmp
 *.temp
+_fix.js
+nul
+tsc_errors.txt
+tsc_out.txt
+pnpm-workspace.yaml
 
 # API Keys (NEVER commit these)
 **/api-keys.json

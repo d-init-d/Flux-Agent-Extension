@@ -1,27 +1,37 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { crx } from '@crxjs/vite-plugin';
-import manifest from './manifest.json';
-import path from 'path';
+import { resolve } from 'path';
+import manifest from './src/manifest.json';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
-    crx({ manifest: manifest as any })
+    crx({ manifest }),
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
-      '@shared': path.resolve(__dirname, 'src/shared'),
-      '@components': path.resolve(__dirname, 'src/sidebar/components')
-    }
+      '@': resolve(__dirname, 'src'),
+      '@shared': resolve(__dirname, 'src/shared'),
+      '@core': resolve(__dirname, 'src/core'),
+      '@ui': resolve(__dirname, 'src/ui'),
+    },
   },
   build: {
+    outDir: 'dist',
+    sourcemap: process.env.NODE_ENV === 'development',
+    minify: 'esbuild',
     rollupOptions: {
-      input: {
-        sidebar: 'src/sidebar/index.html'
-      }
-    }
-  }
+      output: {
+        chunkFileNames: 'assets/[name]-[hash].js',
+      },
+    },
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    hmr: {
+      port: 5173,
+    },
+  },
 });
