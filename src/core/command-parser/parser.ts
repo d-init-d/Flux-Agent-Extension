@@ -2,26 +2,9 @@ import { ErrorCode, ExtensionError } from '@shared/errors';
 import type { Action, ParsedResponse } from '@shared/types';
 import { generateId } from '@shared/utils';
 import type { ICommandParser, ParserConfig, ValidationResult } from './interfaces';
+import { actionSchema, validateActionSchema } from './schemas';
 
 const CODE_BLOCK_REGEX = /```(?:json)?\s*([\s\S]*?)```/gi;
-
-const ACTIONS_REQUIRING_SELECTOR = new Set([
-  'click',
-  'doubleClick',
-  'rightClick',
-  'hover',
-  'focus',
-  'fill',
-  'type',
-  'clear',
-  'select',
-  'check',
-  'uncheck',
-  'waitForElement',
-  'extract',
-  'extractAll',
-  'scrollIntoView',
-]);
 
 const DEFAULT_CONFIG: ParserConfig = {
   strictMode: true,
@@ -35,6 +18,9 @@ interface JsonCandidate {
   parsed: unknown;
   score: number;
 }
+
+const ALLOWED_URL_PROTOCOLS = new Set(['http:', 'https:']);
+const HAS_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
 export class CommandParser implements ICommandParser {
   private readonly config: ParserConfig;
@@ -53,53 +39,44 @@ export class CommandParser implements ICommandParser {
 
     const parsedPayload = this.extractBestPayload(response);
     const normalized = this.normalizeParsedResponse(parsedPayload);
+    const safeActions: Action[] = [];
 
-    if (this.config.strictMode) {
-      const invalid = normalized.actions
-        .map((action) => ({ action, result: this.validate(action) }))
-        .find(({ result }) => !result.valid);
+    for (const rawAction of normalized.actions) {
+      this.enforceEvaluatePolicy(rawAction);
 
-      if (invalid) {
-        throw new ExtensionError(
-          ErrorCode.ACTION_INVALID,
-          invalid.result.errors?.[0] ?? 'Invalid action in AI response',
-          true,
-          { action: invalid.action, errors: invalid.result.errors },
-        );
+      const schemaResult = actionSchema.safeParse(rawAction);
+      if (!schemaResult.success) {
+        if (this.config.strictMode) {
+          const errors = schemaResult.error.issues.map((issue) => {
+            const path = issue.path.length > 0 ? issue.path.join('.') : 'action';
+            return `${path}: ${issue.message}`;
+          });
+
+          throw new ExtensionError(
+            ErrorCode.ACTION_INVALID,
+            errors[0] ?? 'Invalid action in AI response',
+            true,
+            { action: rawAction, errors },
+          );
+        }
+
+        continue;
       }
+
+      let action = schemaResult.data as unknown as Action;
+      action = this.enforceNavigationPolicy(action);
+      safeActions.push(this.sanitize(action));
     }
 
     return {
       ...normalized,
-      actions: normalized.actions.map((action) => this.sanitize(action)),
+      actions: safeActions,
     };
   }
 
   validate(action: Action): ValidationResult {
-    const errors: string[] = [];
-
-    if (!action || typeof action !== 'object') {
-      return { valid: false, errors: ['Action must be an object'] };
-    }
-
-    if (!action.id || action.id.trim().length === 0) {
-      errors.push('Action id is required');
-    }
-
-    if (!action.type || action.type.trim().length === 0) {
-      errors.push('Action type is required');
-    }
-
-    if (action.type === 'navigate' && (!('url' in action) || typeof action.url !== 'string')) {
-      errors.push('Navigate action requires a url string');
-    }
-
-    if (ACTIONS_REQUIRING_SELECTOR.has(action.type)) {
-      const hasSelector = 'selector' in action && typeof action.selector === 'object' && action.selector !== null;
-      if (!hasSelector) {
-        errors.push(`Action type ${action.type} requires a selector`);
-      }
-    }
+    const schemaResult = validateActionSchema(action);
+    const errors = schemaResult.errors ? [...schemaResult.errors] : [];
 
     if (!this.config.allowEvaluate && action.type === 'evaluate') {
       errors.push('Evaluate action is disabled by parser config');
@@ -122,7 +99,65 @@ export class CommandParser implements ICommandParser {
       cloned.url = cloned.url.trim();
     }
 
+    if (cloned.type === 'newTab' && typeof cloned.url === 'string') {
+      cloned.url = cloned.url.trim();
+    }
+
     return cloned;
+  }
+
+  private enforceEvaluatePolicy(action: Action): void {
+    if (!this.config.allowEvaluate && action.type === 'evaluate') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_BLOCKED,
+        'Evaluate action is disabled by parser config',
+        true,
+      );
+    }
+  }
+
+  private enforceNavigationPolicy(action: Action): Action {
+    if (action.type === 'navigate') {
+      return {
+        ...action,
+        url: this.normalizeAndValidateUrl(action.url),
+      };
+    }
+
+    if (action.type === 'newTab' && typeof action.url === 'string') {
+      return {
+        ...action,
+        url: this.normalizeAndValidateUrl(action.url),
+      };
+    }
+
+    return action;
+  }
+
+  private normalizeAndValidateUrl(rawUrl: string): string {
+    const trimmed = rawUrl.trim();
+    const candidate = HAS_SCHEME_REGEX.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(candidate);
+    } catch {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Invalid URL provided: ${trimmed}`,
+        true,
+      );
+    }
+
+    if (!ALLOWED_URL_PROTOCOLS.has(parsed.protocol)) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_BLOCKED,
+        `Blocked URL protocol: ${parsed.protocol}`,
+        true,
+      );
+    }
+
+    return candidate;
   }
 
   private extractBestPayload(input: string): unknown {

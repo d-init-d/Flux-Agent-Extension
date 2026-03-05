@@ -78,11 +78,49 @@ describe('CommandParser', () => {
   it('rejects evaluate action in strict mode when allowEvaluate=false', () => {
     const parser = new CommandParser();
 
-    expect(() =>
+    try {
       parser.parse(
         JSON.stringify({ actions: [{ type: 'evaluate', script: 'return document.title' }] }),
-      ),
-    ).toThrowError(ExtensionError);
+      );
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_BLOCKED);
+    }
+  });
+
+  it('rejects evaluate action even when strictMode=false', () => {
+    const parser = new CommandParser({ strictMode: false, allowEvaluate: false });
+
+    try {
+      parser.parse(
+        JSON.stringify({ actions: [{ type: 'evaluate', script: 'return document.title' }] }),
+      );
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_BLOCKED);
+    }
+  });
+
+  it('throws ACTION_INVALID for invalid payload in strict mode', () => {
+    const parser = new CommandParser();
+
+    try {
+      parser.parse(JSON.stringify({ actions: [{ type: 'navigate' }] }));
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_INVALID);
+    }
+  });
+
+  it('throws ACTION_INVALID when selector payload is empty', () => {
+    const parser = new CommandParser();
+
+    try {
+      parser.parse(JSON.stringify({ actions: [{ type: 'click', selector: {} }] }));
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_INVALID);
+    }
   });
 
   it('accepts evaluate action when explicitly enabled', () => {
@@ -113,7 +151,49 @@ describe('CommandParser', () => {
     const result = parser.validate(invalidClick);
 
     expect(result.valid).toBe(false);
-    expect(result.errors?.[0]).toContain('requires a selector');
+    expect(result.errors?.[0]).toContain('selector');
+  });
+
+  it('validate() reports empty selector as invalid', () => {
+    const parser = new CommandParser();
+    const invalidClick = { id: 'a1', type: 'click', selector: {} } as unknown as Action;
+    const result = parser.validate(invalidClick);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors?.[0]).toContain('selector must include at least one selector strategy');
+  });
+
+  it('blocks non-http URL protocols for navigate actions', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+
+    try {
+      parser.parse(JSON.stringify({ actions: [{ type: 'navigate', url: 'javascript:alert(1)' }] }));
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_BLOCKED);
+    }
+  });
+
+  it('normalizes scheme-less URLs to https', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+    const result = parser.parse(JSON.stringify({ actions: [{ type: 'navigate', url: 'example.com' }] }));
+
+    expect(result.actions[0]).toMatchObject({
+      type: 'navigate',
+      url: 'https://example.com',
+    });
+  });
+
+  it('strips unknown action fields through schema parsing', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+    const result = parser.parse(
+      JSON.stringify({
+        actions: [{ type: 'navigate', url: 'https://example.com', injected: 'drop-me' }],
+      }),
+    );
+
+    const action = result.actions[0] as unknown as Record<string, unknown>;
+    expect(action.injected).toBeUndefined();
   });
 
   it('sanitize() trims description and navigate URL', () => {

@@ -123,7 +123,7 @@ Status summary: AI client done, command parser started, execution engine largely
 ### Sprint 2.2
 
 - [x] `C-08` Command parser JSON extraction
-- [ ] `C-09` Zod schemas for all action types
+- [x] `C-09` Zod schemas for all action types
 - [~] `C-10` Command sanitizer (partial shared primitives exist, parser integration pending)
 - [ ] `C-10a` URL validation in parser pipeline
 - [ ] `C-10b` Selector sanitization in parser pipeline
@@ -348,7 +348,7 @@ Status summary: Minimal prep only, ship tasks pending.
 ## Immediate Task Queue (Locked)
 
 - [ ] `T-01` Close current `C-08` by commit and push.
-- [ ] `T-02` Implement `C-09` (Zod schemas + parser integration + tests).
+- [x] `T-02` Implement `C-09` (Zod schemas + parser integration + tests).
 - [ ] `T-03` Implement `C-10` (security sanitization pipeline + tests).
 - [ ] `T-04` Address bridge unhandled rejection failures in full test run.
 - [ ] `T-05` Fix lint gate (ESLint flat config).

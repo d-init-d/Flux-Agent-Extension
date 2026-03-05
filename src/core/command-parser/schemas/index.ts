@@ -1,5 +1,3 @@
-export { CommandParser } from './parser';
-export type { ICommandParser, ParserConfig, ValidationResult } from './interfaces';
 export {
   ACTION_TYPES,
   actionSchema,
@@ -8,4 +6,4 @@ export {
   baseActionSchema,
   elementSelectorSchema,
   validateActionSchema,
-} from './schemas';
+} from './action-schemas';
