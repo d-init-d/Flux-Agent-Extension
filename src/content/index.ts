@@ -14,6 +14,7 @@
 import { ContentScriptBridge } from '@core/bridge';
 import { Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
+import { executeInteractionAction } from './actions/interaction';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -183,20 +184,33 @@ export class ContentScriptManager {
   }
 
   // --------------------------------------------------------------------------
-  // EXECUTE_ACTION (Stub — Sprint 2.2)
+  // EXECUTE_ACTION (C-15: interaction actions)
   // --------------------------------------------------------------------------
 
   private async handleExecuteAction(
     payload: ExecuteActionPayload,
   ): Promise<ActionResultPayload> {
-    this.logger.debug('EXECUTE_ACTION received (stub)', { actionType: payload.action.type });
+    const { action } = payload;
+    this.logger.debug('EXECUTE_ACTION received', { actionType: action.type });
+
+    switch (action.type) {
+      case 'click':
+      case 'doubleClick':
+      case 'rightClick':
+      case 'hover':
+      case 'focus':
+        return executeInteractionAction(action, this.selectorEngine);
+      default:
+        break;
+    }
+
     return {
-      actionId: payload.action.id,
+      actionId: action.id,
       success: false,
       data: null,
       error: {
         code: 'NOT_IMPLEMENTED',
-        message: 'Action execution not yet implemented',
+        message: `Action type "${action.type}" is not implemented yet`,
       },
       duration: 0,
     };

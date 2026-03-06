@@ -144,7 +144,7 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-14b` XPath resolution baseline
 - [x] `C-14c` Text/ARIA/placeholder baseline
 - [x] `C-14d` nearText strategy
-- [ ] `C-15` Click/hover/focus actions
+- [x] `C-15` Click/hover/focus actions
 - [ ] `C-16` Fill/type/select actions
 - [ ] `C-16a` React-safe value setter
 - [ ] `C-16b` Dropdown handler
