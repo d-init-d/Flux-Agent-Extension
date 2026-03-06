@@ -97,7 +97,25 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
     inputRef.current?.focus();
   };
 
+  const submitInput = () => {
+    if (!canSend) {
+      return;
+    }
+
+    onSend?.(normalizedValue);
+    setInputValue('');
+  };
+
   const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const isSubmitShortcut =
+      event.key === 'Enter' && !event.shiftKey && !event.altKey && (event.ctrlKey || event.metaKey);
+
+    if (isSubmitShortcut) {
+      event.preventDefault();
+      submitInput();
+      return;
+    }
+
     if (!isSlashMode) {
       return;
     }
@@ -142,13 +160,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
-    if (!canSend) {
-      return;
-    }
-
-    onSend?.(normalizedValue);
-    setInputValue('');
+    submitInput();
   };
 
   return (
@@ -206,6 +218,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
           onKeyDown={handleInputKeyDown}
           placeholder="Type a message or command..."
           aria-autocomplete="list"
+          aria-keyshortcuts="Control+Enter Meta+Enter"
           aria-controls={isSlashMode ? 'sidepanel-command-list' : undefined}
           aria-activedescendant={
             isSlashMode && filteredCommands.length > 0

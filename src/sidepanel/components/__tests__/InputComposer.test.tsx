@@ -117,7 +117,7 @@ describe('InputComposer', () => {
     expect(textbox).toHaveValue('/screenshot ');
   });
 
-  it('does not send message on Ctrl+Enter before U-03c', async () => {
+  it('sends message on Ctrl+Enter without inserting a newline', async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();
     render(<InputComposer onSend={onSend} />);
@@ -126,8 +126,50 @@ describe('InputComposer', () => {
     await user.type(textbox, 'Draft command');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith('Draft command');
+    expect(textbox).toHaveValue('');
+  });
+
+  it('sends slash command text on Command+Enter without autocompleting', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<InputComposer onSend={onSend} />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/ex');
+    await user.keyboard('{Meta>}{Enter}{/Meta}');
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith('/ex');
+    expect(textbox).toHaveValue('');
+    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+  });
+
+  it('keeps plain Enter mapped to slash autocomplete selection', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<InputComposer onSend={onSend} />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/ex');
+    await user.keyboard('{Enter}');
+
     expect(onSend).not.toHaveBeenCalled();
-    expect(textbox).toHaveValue('Draft command');
+    expect(textbox).toHaveValue('/extract ');
+  });
+
+  it('does not send whitespace-only input on Ctrl+Enter', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<InputComposer onSend={onSend} />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '   ');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textbox).toHaveValue('   ');
   });
 
   it('adds newline on Shift+Enter during multiline editing', async () => {
