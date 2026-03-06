@@ -128,7 +128,7 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-10a` URL validation in parser pipeline
 - [x] `C-10b` Selector sanitization in parser pipeline
 - [x] `C-10c` Sensitivity classification wiring
-- [ ] `C-11` Tab manager
+- [x] `C-11` Tab manager
 - [ ] `C-12` Scripting adapter
 - [ ] `C-13` Debugger adapter
 - [ ] `C-13a` CDP mouse events
