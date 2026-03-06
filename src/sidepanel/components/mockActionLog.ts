@@ -1,4 +1,4 @@
-export type ActionLogStatus = 'queued' | 'running' | 'done' | 'failed';
+export type ActionLogStatus = 'pending' | 'running' | 'done' | 'failed';
 
 export interface ActionLogEntry {
   id: string;
@@ -21,7 +21,7 @@ export const MOCK_ACTION_LOG: ActionLogEntry[] = [
     title: 'Scanned pricing cards',
     detail: 'Detected visible card groups before extraction started.',
     timeLabel: '09:42',
-    status: 'done',
+    status: 'failed',
   },
   {
     id: 'log-3',
@@ -29,5 +29,12 @@ export const MOCK_ACTION_LOG: ActionLogEntry[] = [
     detail: 'Preparing a structured response for the side panel conversation.',
     timeLabel: '09:43',
     status: 'running',
+  },
+  {
+    id: 'log-4',
+    title: 'Preparing handoff summary',
+    detail: 'Queued to publish the next update after the current response completes.',
+    timeLabel: '09:44',
+    status: 'pending',
   },
 ];

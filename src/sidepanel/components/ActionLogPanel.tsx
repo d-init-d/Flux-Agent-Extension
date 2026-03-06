@@ -1,36 +1,11 @@
 import { useId, useState } from 'react';
-import { Badge, Button } from '@/ui/components';
-import { MOCK_ACTION_LOG, type ActionLogEntry, type ActionLogStatus } from './mockActionLog';
+import { Button } from '@/ui/components';
+import { ActionTimeline } from './ActionTimeline';
+import { MOCK_ACTION_LOG, type ActionLogEntry } from './mockActionLog';
 
 interface ActionLogPanelProps {
   actions?: ActionLogEntry[];
   initiallyExpanded?: boolean;
-}
-
-function getStatusBadgeVariant(status: ActionLogStatus): 'default' | 'info' | 'success' | 'error' {
-  switch (status) {
-    case 'running':
-      return 'info';
-    case 'done':
-      return 'success';
-    case 'failed':
-      return 'error';
-    default:
-      return 'default';
-  }
-}
-
-function getStatusLabel(status: ActionLogStatus): string {
-  switch (status) {
-    case 'done':
-      return 'Completed';
-    case 'running':
-      return 'Running';
-    case 'failed':
-      return 'Failed';
-    default:
-      return 'Queued';
-  }
 }
 
 function getCollapsedSummary(actions: ActionLogEntry[]): string {
@@ -130,50 +105,7 @@ export function ActionLogPanel({
                   </p>
                 </div>
               ) : (
-                <ol aria-label="Executed actions timeline" className="space-y-3">
-                  {actions.map((action, index) => {
-                    const isLast = index === actions.length - 1;
-
-                    return (
-                      <li key={action.id} className="relative pl-8">
-                        {!isLast ? (
-                          <span
-                            className="absolute left-[0.7rem] top-7 h-[calc(100%-0.75rem)] w-px bg-[rgb(var(--color-border-default))]"
-                            aria-hidden="true"
-                          />
-                        ) : null}
-
-                        <span
-                          className="absolute left-0 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))]"
-                          aria-hidden="true"
-                        >
-                          <span className="h-2.5 w-2.5 rounded-full bg-[rgb(var(--color-primary-600))]" />
-                        </span>
-
-                        <div className="rounded-2xl border border-[rgb(var(--color-border-default)/0.75)] bg-[rgb(var(--color-bg-secondary))] px-4 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-sm font-semibold leading-snug tracking-tight text-[rgb(var(--color-text-primary))]">
-                                {action.title}
-                              </p>
-                              <p className="mt-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                                {action.detail}
-                              </p>
-                            </div>
-
-                            <Badge variant={getStatusBadgeVariant(action.status)} size="md" dot>
-                              {getStatusLabel(action.status)}
-                            </Badge>
-                          </div>
-
-                          <p className="mt-3 text-xs font-medium tracking-tight text-[rgb(var(--color-text-tertiary))]">
-                            {action.timeLabel}
-                          </p>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ol>
+                <ActionTimeline actions={actions} />
               )}
             </div>
           ) : (

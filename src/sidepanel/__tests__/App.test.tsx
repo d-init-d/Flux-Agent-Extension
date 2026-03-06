@@ -86,6 +86,10 @@ describe('Side panel App (U-03 input baseline)', () => {
       'true',
     );
     expect(screen.getByRole('list', { name: 'Executed actions timeline' })).toBeInTheDocument();
+    expect(screen.getByTestId('action-timeline-icon-log-1')).toHaveAttribute('data-status', 'done');
+    expect(screen.getByTestId('action-timeline-icon-log-2')).toHaveAttribute('data-status', 'failed');
+    expect(screen.getByTestId('action-timeline-icon-log-3')).toHaveAttribute('data-status', 'running');
+    expect(screen.getByTestId('action-timeline-icon-log-4')).toHaveAttribute('data-status', 'pending');
   });
 
   it('filters baseline slash commands by typed prefix', async () => {
