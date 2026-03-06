@@ -1,5 +1,5 @@
-import { Button } from '@/ui/components';
 import { ChatContainer } from './components/ChatContainer';
+import { InputComposer } from './components/InputComposer';
 
 export function App() {
   return (
@@ -30,23 +30,7 @@ export function App() {
         className="border-t border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-4 py-3 sm:px-6"
         data-testid="sidepanel-input-section"
       >
-        <form className="mx-auto flex w-full max-w-3xl items-end gap-2" onSubmit={(event) => event.preventDefault()}>
-          <label htmlFor="sidepanel-input" className="sr-only">
-            Message input
-          </label>
-
-          <textarea
-            id="sidepanel-input"
-            name="sidepanel-input"
-            rows={2}
-            placeholder="Type a message or command..."
-            className="min-h-11 max-h-32 w-full resize-y rounded-xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] placeholder:text-[rgb(var(--color-text-tertiary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-border-focus))]"
-          />
-
-          <Button type="submit" size="lg" className="min-w-20" disabled>
-            Send
-          </Button>
-        </form>
+        <InputComposer />
       </footer>
     </div>
   );

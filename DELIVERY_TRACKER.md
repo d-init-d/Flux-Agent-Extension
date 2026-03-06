@@ -195,7 +195,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [ ] `U-02b` AI markdown bubble
 - [ ] `U-02c` Action progress bubble
 - [ ] `U-02d` Error bubble
-- [ ] `U-03` Input area + commands
+- [x] `U-03` Input area + commands
 - [ ] `U-03a` Slash command autocomplete
 - [ ] `U-03b` Multi-line input
 - [ ] `U-03c` Ctrl+Enter send
