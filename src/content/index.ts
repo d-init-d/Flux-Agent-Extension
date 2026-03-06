@@ -13,12 +13,12 @@
 
 import { ContentScriptBridge } from '@core/bridge';
 import { Logger } from '@shared/utils';
+import { SelectorEngine } from './dom/selector-engine';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
   PageContextPayload,
   HighlightPayload,
-  ElementSelector,
   InteractiveElement,
   FormInfo,
   PageContext,
@@ -78,6 +78,7 @@ const HIGHLIGHT_DATA_ATTR = 'data-flux-highlight';
 export class ContentScriptManager {
   private readonly bridge: ContentScriptBridge;
   private readonly logger: Logger;
+  private readonly selectorEngine: SelectorEngine;
   private mutationObserver: MutationObserver | null = null;
   private highlightOverlays: HTMLElement[] = [];
 
@@ -91,6 +92,7 @@ export class ContentScriptManager {
   constructor() {
     this.bridge = new ContentScriptBridge();
     this.logger = new Logger('ContentScript');
+    this.selectorEngine = new SelectorEngine();
   }
 
   // --------------------------------------------------------------------------
@@ -365,7 +367,7 @@ export class ContentScriptManager {
   ): Promise<{ highlighted: boolean }> {
     this.logger.debug('HIGHLIGHT_ELEMENT received', { selector: payload.selector });
 
-    const element = this.findElement(payload.selector);
+    const element = this.selectorEngine.findElement(payload.selector);
     if (!element) {
       this.logger.warn('Element not found for highlight', { selector: payload.selector });
       return { highlighted: false };
@@ -452,131 +454,6 @@ export class ContentScriptManager {
     const idx = this.highlightOverlays.indexOf(overlay);
     if (idx !== -1) {
       this.highlightOverlays.splice(idx, 1);
-    }
-  }
-
-  // --------------------------------------------------------------------------
-  // Element Finding
-  // --------------------------------------------------------------------------
-
-  /**
-   * Find a DOM element using the prioritized selector strategies defined in
-   * ElementSelector. Tries in order: css, xpath, textExact, text, ariaLabel,
-   * placeholder, testId, role. Applies `nth` filter if provided.
-   */
-  private findElement(selector: ElementSelector): Element | null {
-    const strategies: { key: keyof ElementSelector; finder: (value: string) => Element[] }[] = [
-      { key: 'css', finder: (v) => this.findByCss(v) },
-      { key: 'xpath', finder: (v) => this.findByXpath(v) },
-      { key: 'textExact', finder: (v) => this.findByTextExact(v) },
-      { key: 'text', finder: (v) => this.findByTextContains(v) },
-      { key: 'ariaLabel', finder: (v) => this.findByAttribute('aria-label', v) },
-      { key: 'placeholder', finder: (v) => this.findByAttribute('placeholder', v) },
-      { key: 'testId', finder: (v) => this.findByAttribute('data-testid', v) },
-      { key: 'role', finder: (v) => this.findByAttribute('role', v) },
-    ];
-
-    for (const { key, finder } of strategies) {
-      const value = selector[key];
-      if (value === undefined || typeof value !== 'string') continue;
-
-      try {
-        const matches = finder(value);
-        if (matches.length === 0) continue;
-
-        // Apply nth-index filter if specified
-        if (selector.nth !== undefined && selector.nth >= 0) {
-          return matches[selector.nth] ?? null;
-        }
-
-        return matches[0] ?? null;
-      } catch (error) {
-        this.logger.debug(`Selector strategy "${key}" failed`, error);
-      }
-    }
-
-    return null;
-  }
-
-  private findByCss(css: string): Element[] {
-    return Array.from(document.querySelectorAll(css));
-  }
-
-  private findByXpath(xpath: string): Element[] {
-    const results: Element[] = [];
-    try {
-      const xpathResult = document.evaluate(
-        xpath,
-        document,
-        null,
-        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-        null,
-      );
-      for (let i = 0; i < xpathResult.snapshotLength; i++) {
-        const node = xpathResult.snapshotItem(i);
-        if (node instanceof Element) {
-          results.push(node);
-        }
-      }
-    } catch (error) {
-      this.logger.debug('XPath evaluation failed', error);
-    }
-    return results;
-  }
-
-  private findByTextExact(text: string): Element[] {
-    const results: Element[] = [];
-    try {
-      const escapedText = text.replace(/"/g, '\\"');
-      const xpath = `//*[normalize-space(text())="${escapedText}"]`;
-      const xpathResult = document.evaluate(
-        xpath,
-        document,
-        null,
-        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-        null,
-      );
-      for (let i = 0; i < xpathResult.snapshotLength; i++) {
-        const node = xpathResult.snapshotItem(i);
-        if (node instanceof Element) {
-          results.push(node);
-        }
-      }
-    } catch (error) {
-      this.logger.debug('Text exact search failed', error);
-    }
-    return results;
-  }
-
-  private findByTextContains(text: string): Element[] {
-    const results: Element[] = [];
-    try {
-      const escapedText = text.replace(/"/g, '\\"');
-      const xpath = `//*[contains(normalize-space(text()), "${escapedText}")]`;
-      const xpathResult = document.evaluate(
-        xpath,
-        document,
-        null,
-        XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
-        null,
-      );
-      for (let i = 0; i < xpathResult.snapshotLength; i++) {
-        const node = xpathResult.snapshotItem(i);
-        if (node instanceof Element) {
-          results.push(node);
-        }
-      }
-    } catch (error) {
-      this.logger.debug('Text contains search failed', error);
-    }
-    return results;
-  }
-
-  private findByAttribute(attr: string, value: string): Element[] {
-    try {
-      return Array.from(document.querySelectorAll(`[${CSS.escape(attr)}="${CSS.escape(value)}"]`));
-    } catch {
-      return [];
     }
   }
 
