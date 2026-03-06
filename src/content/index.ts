@@ -17,6 +17,7 @@ import { SelectorEngine } from './dom/selector-engine';
 import { executeInteractionAction } from './actions/interaction';
 import { executeInputAction } from './actions/input';
 import { executeScrollAction } from './actions/scroll';
+import { executeExtractAction } from './actions/extract';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -212,6 +213,11 @@ export class ContentScriptManager {
       case 'scroll':
       case 'scrollIntoView':
         return executeScrollAction(action, this.selectorEngine);
+      case 'extract':
+      case 'extractAll':
+      case 'screenshot':
+      case 'fullPageScreenshot':
+        return executeExtractAction(action, this.selectorEngine);
       default:
         break;
     }
