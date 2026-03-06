@@ -38,10 +38,10 @@ describe('InputComposer', () => {
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
     await user.type(textbox, '/');
 
-    expect(screen.getByText('/summarize')).toBeInTheDocument();
+    expect(screen.getByText('/screenshot')).toBeInTheDocument();
     expect(screen.getByText('/extract')).toBeInTheDocument();
-    expect(screen.getByText('/click')).toBeInTheDocument();
-    expect(screen.getByText('/wait')).toBeInTheDocument();
+    expect(screen.getByText('/settings')).toBeInTheDocument();
+    expect(screen.getByText('/summarize')).toBeInTheDocument();
   });
 
   it('hides slash list after submitting a slash command message', async () => {
@@ -57,5 +57,76 @@ describe('InputComposer', () => {
 
     expect(onSend).toHaveBeenCalledWith('/extract');
     expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+  });
+
+  it('supports arrow navigation and enter selection in slash autocomplete', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/');
+
+    const screenshotOption = screen.getByRole('option', { name: /\/screenshot/i });
+    const extractOption = screen.getByRole('option', { name: /\/extract/i });
+
+    expect(screenshotOption).toHaveAttribute('aria-selected', 'true');
+    expect(extractOption).toHaveAttribute('aria-selected', 'false');
+
+    await user.keyboard('{ArrowDown}');
+
+    expect(screenshotOption).toHaveAttribute('aria-selected', 'false');
+    expect(extractOption).toHaveAttribute('aria-selected', 'true');
+
+    await user.keyboard('{Enter}');
+    expect(textbox).toHaveValue('/extract ');
+  });
+
+  it('supports ArrowUp wrap-around to the last autocomplete option', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/');
+
+    const screenshotOption = screen.getByRole('option', { name: /\/screenshot/i });
+    const summarizeOption = screen.getByRole('option', { name: /\/summarize/i });
+
+    expect(screenshotOption).toHaveAttribute('aria-selected', 'true');
+    expect(summarizeOption).toHaveAttribute('aria-selected', 'false');
+
+    await user.keyboard('{ArrowUp}');
+
+    expect(screenshotOption).toHaveAttribute('aria-selected', 'false');
+    expect(summarizeOption).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('supports tab and mouse click selection in slash autocomplete', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/se');
+    await user.keyboard('{Tab}');
+
+    expect(textbox).toHaveValue('/settings ');
+
+    await user.clear(textbox);
+    await user.type(textbox, '/');
+    await user.click(screen.getByRole('option', { name: /\/screenshot/i }));
+
+    expect(textbox).toHaveValue('/screenshot ');
+  });
+
+  it('does not send message on Ctrl+Enter before U-03c', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<InputComposer onSend={onSend} />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, 'Draft command');
+    await user.keyboard('{Control>}{Enter}{/Control}');
+
+    expect(onSend).not.toHaveBeenCalled();
+    expect(textbox).toHaveValue('Draft command');
   });
 });

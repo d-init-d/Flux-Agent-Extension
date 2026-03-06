@@ -196,7 +196,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [ ] `U-02c` Action progress bubble
 - [ ] `U-02d` Error bubble
 - [x] `U-03` Input area + commands
-- [ ] `U-03a` Slash command autocomplete
+- [x] `U-03a` Slash command autocomplete
 - [ ] `U-03b` Multi-line input
 - [ ] `U-03c` Ctrl+Enter send
 - [ ] `U-04` Collapsible action log

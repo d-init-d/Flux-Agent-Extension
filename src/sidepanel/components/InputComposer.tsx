@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ui/components';
 
 interface SlashCommand {
@@ -14,9 +14,9 @@ interface InputComposerProps {
 
 const DEFAULT_COMMANDS: SlashCommand[] = [
   {
-    id: 'summarize',
-    command: '/summarize',
-    description: 'Summarize visible page content.',
+    id: 'screenshot',
+    command: '/screenshot',
+    description: 'Capture the current page as an image.',
   },
   {
     id: 'extract',
@@ -24,19 +24,21 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     description: 'Extract structured data from current page.',
   },
   {
-    id: 'click',
-    command: '/click',
-    description: 'Trigger an element interaction by selector.',
+    id: 'settings',
+    command: '/settings',
+    description: 'Open extension settings and preferences.',
   },
   {
-    id: 'wait',
-    command: '/wait',
-    description: 'Pause workflow for a short duration.',
+    id: 'summarize',
+    command: '/summarize',
+    description: 'Summarize visible page content.',
   },
 ];
 
 export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComposerProps) {
   const [inputValue, setInputValue] = useState('');
+  const [activeCommandIndex, setActiveCommandIndex] = useState(0);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isSlashMode = inputValue.startsWith('/');
   const normalizedValue = inputValue.trim();
@@ -54,6 +56,61 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
 
     return commands.filter((item) => item.command.slice(1).toLowerCase().startsWith(query));
   }, [commands, inputValue, isSlashMode]);
+
+  useEffect(() => {
+    if (!isSlashMode || filteredCommands.length === 0) {
+      setActiveCommandIndex(0);
+      return;
+    }
+
+    setActiveCommandIndex((current) => {
+      if (current < 0 || current >= filteredCommands.length) {
+        return 0;
+      }
+
+      return current;
+    });
+  }, [filteredCommands.length, isSlashMode]);
+
+  const applyCommand = (command: string) => {
+    setInputValue(`${command} `);
+    setActiveCommandIndex(0);
+    inputRef.current?.focus();
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!isSlashMode) {
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      if (filteredCommands.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      setActiveCommandIndex((current) => (current + 1) % filteredCommands.length);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      if (filteredCommands.length === 0) {
+        return;
+      }
+
+      event.preventDefault();
+      setActiveCommandIndex((current) =>
+        current === 0 ? filteredCommands.length - 1 : current - 1,
+      );
+      return;
+    }
+
+    if ((event.key === 'Enter' || event.key === 'Tab') && filteredCommands.length > 0) {
+      event.preventDefault();
+      const selected = filteredCommands[activeCommandIndex] ?? filteredCommands[0];
+      applyCommand(selected.command);
+    }
+  };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -80,12 +137,20 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
 
           <ul id="sidepanel-command-list" role="listbox" className="max-h-44 overflow-y-auto py-1">
             {filteredCommands.length > 0 ? (
-              filteredCommands.map((item) => (
+              filteredCommands.map((item, index) => (
                 <li
                   key={item.id}
+                  id={`sidepanel-command-option-${item.id}`}
                   role="option"
-                  aria-selected="false"
-                  className="px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))]"
+                  aria-selected={index === activeCommandIndex}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveCommandIndex(index)}
+                  onClick={() => applyCommand(item.command)}
+                  className={`cursor-pointer px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] transition-colors ${
+                    index === activeCommandIndex
+                      ? 'bg-[rgb(var(--color-border-default)/0.35)]'
+                      : 'hover:bg-[rgb(var(--color-border-default)/0.25)]'
+                  }`}
                 >
                   <span className="font-medium tracking-tight">{item.command}</span>
                   <span className="ml-2 text-[rgb(var(--color-text-secondary))]">{item.description}</span>
@@ -104,14 +169,21 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
         </label>
 
         <textarea
+          ref={inputRef}
           id="sidepanel-input"
           name="sidepanel-input"
           rows={2}
           value={inputValue}
           onChange={(event) => setInputValue(event.target.value)}
+          onKeyDown={handleInputKeyDown}
           placeholder="Type a message or command..."
           aria-autocomplete="list"
           aria-controls={isSlashMode ? 'sidepanel-command-list' : undefined}
+          aria-activedescendant={
+            isSlashMode && filteredCommands.length > 0
+              ? `sidepanel-command-option-${filteredCommands[activeCommandIndex]?.id}`
+              : undefined
+          }
           aria-expanded={isSlashMode}
           className="min-h-11 max-h-32 w-full resize-y rounded-xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] placeholder:text-[rgb(var(--color-text-tertiary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-border-focus))]"
         />
