@@ -190,11 +190,11 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 ### Sprint 3.1
 
 - [x] `U-01` Side panel container baseline
-- [ ] `U-02` Message bubbles (4 variants)
-- [ ] `U-02a` User bubble
-- [ ] `U-02b` AI markdown bubble
-- [ ] `U-02c` Action progress bubble
-- [ ] `U-02d` Error bubble
+- [x] `U-02` Message bubbles (4 variants)
+- [x] `U-02a` User bubble
+- [x] `U-02b` AI markdown bubble
+- [x] `U-02c` Action progress bubble
+- [x] `U-02d` Error bubble
 - [x] `U-03` Input area + commands
 - [x] `U-03a` Slash command autocomplete
 - [x] `U-03b` Multi-line input

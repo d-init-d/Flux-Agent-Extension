@@ -1,4 +1,4 @@
-import { ChatContainer } from './components/ChatContainer';
+import { ChatContainer, MOCK_CONVERSATION } from './components/ChatContainer';
 import { InputComposer } from './components/InputComposer';
 
 export function App() {
@@ -23,7 +23,7 @@ export function App() {
       </header>
 
       <main className="min-h-0 flex-1" data-testid="sidepanel-chat-area">
-        <ChatContainer />
+        <ChatContainer messages={MOCK_CONVERSATION} />
       </main>
 
       <footer

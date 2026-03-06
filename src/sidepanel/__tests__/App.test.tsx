@@ -11,7 +11,8 @@ describe('Side panel App (U-03 input baseline)', () => {
 
     const chatArea = screen.getByTestId('sidepanel-chat-area');
     expect(within(chatArea).getByRole('region', { name: 'Chat conversation' })).toBeInTheDocument();
-    expect(within(chatArea).getByText('Start a conversation')).toBeInTheDocument();
+    expect(within(chatArea).getByTestId('message-bubble-user')).toBeInTheDocument();
+    expect(within(chatArea).getByTestId('message-bubble-assistant')).toBeInTheDocument();
 
     const inputSection = screen.getByTestId('sidepanel-input-section');
     expect(within(inputSection).getByRole('textbox', { name: 'Message input' })).toBeInTheDocument();
