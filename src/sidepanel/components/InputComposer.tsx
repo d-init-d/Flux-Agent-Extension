@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ui/components';
 
 interface SlashCommand {
@@ -34,6 +34,17 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     description: 'Summarize visible page content.',
   },
 ];
+
+const INPUT_MIN_HEIGHT_PX = 44;
+const INPUT_MAX_HEIGHT_PX = 160;
+
+function resizeTextarea(textarea: HTMLTextAreaElement): void {
+  textarea.style.height = 'auto';
+
+  const nextHeight = Math.min(Math.max(textarea.scrollHeight, INPUT_MIN_HEIGHT_PX), INPUT_MAX_HEIGHT_PX);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
+}
 
 export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComposerProps) {
   const [inputValue, setInputValue] = useState('');
@@ -72,6 +83,14 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
     });
   }, [filteredCommands.length, isSlashMode]);
 
+  useEffect(() => {
+    if (!inputRef.current) {
+      return;
+    }
+
+    resizeTextarea(inputRef.current);
+  }, [inputValue]);
+
   const applyCommand = (command: string) => {
     setInputValue(`${command} `);
     setActiveCommandIndex(0);
@@ -105,11 +124,20 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
       return;
     }
 
-    if ((event.key === 'Enter' || event.key === 'Tab') && filteredCommands.length > 0) {
+    const isAutocompleteEnter =
+      event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey;
+    const isAutocompleteTab = event.key === 'Tab' && !event.shiftKey;
+
+    if ((isAutocompleteEnter || isAutocompleteTab) && filteredCommands.length > 0) {
       event.preventDefault();
       const selected = filteredCommands[activeCommandIndex] ?? filteredCommands[0];
       applyCommand(selected.command);
     }
+  };
+
+  const handleInputChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    setInputValue(event.target.value);
+    resizeTextarea(event.currentTarget);
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -174,7 +202,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
           name="sidepanel-input"
           rows={2}
           value={inputValue}
-          onChange={(event) => setInputValue(event.target.value)}
+          onChange={handleInputChange}
           onKeyDown={handleInputKeyDown}
           placeholder="Type a message or command..."
           aria-autocomplete="list"
@@ -185,7 +213,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
               : undefined
           }
           aria-expanded={isSlashMode}
-          className="min-h-11 max-h-32 w-full resize-y rounded-xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] placeholder:text-[rgb(var(--color-text-tertiary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-border-focus))]"
+          className="min-h-11 w-full resize-none rounded-xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] placeholder:text-[rgb(var(--color-text-tertiary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-border-focus))]"
         />
 
         <Button type="submit" size="lg" className="min-w-20" disabled={!canSend}>

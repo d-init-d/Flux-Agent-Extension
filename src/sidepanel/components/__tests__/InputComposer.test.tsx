@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { InputComposer } from '../InputComposer';
@@ -128,5 +128,50 @@ describe('InputComposer', () => {
 
     expect(onSend).not.toHaveBeenCalled();
     expect(textbox).toHaveValue('Draft command');
+  });
+
+  it('adds newline on Shift+Enter during multiline editing', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, 'Line one{Shift>}{Enter}{/Shift}Line two');
+
+    expect(textbox).toHaveValue('Line one\nLine two');
+  });
+
+  it('does not consume Shift+Enter while in slash mode autocomplete', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/se');
+    await user.keyboard('{Shift>}{Enter}{/Shift}');
+
+    expect(textbox).toHaveValue('/se\n');
+    expect(screen.getByTestId('slash-command-list')).toBeInTheDocument();
+    expect(screen.getByText('No commands found.')).toBeInTheDocument();
+  });
+
+  it('auto-resizes textarea and caps height at max size', () => {
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' }) as HTMLTextAreaElement;
+
+    let mockScrollHeight = 80;
+    Object.defineProperty(textbox, 'scrollHeight', {
+      configurable: true,
+      get: () => mockScrollHeight,
+    });
+
+    fireEvent.change(textbox, { target: { value: 'Short note' } });
+    expect(textbox.style.height).toBe('80px');
+    expect(textbox.style.overflowY).toBe('hidden');
+
+    mockScrollHeight = 320;
+    fireEvent.change(textbox, { target: { value: 'Very long\n'.repeat(50) } });
+
+    expect(textbox.style.height).toBe('160px');
+    expect(textbox.style.overflowY).toBe('auto');
   });
 });
