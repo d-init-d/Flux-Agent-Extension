@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-05
+> Last updated: 2026-03-06
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
 
@@ -189,7 +189,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 
 ### Sprint 3.1
 
-- [~] `U-01` Side panel container baseline
+- [x] `U-01` Side panel container baseline
 - [ ] `U-02` Message bubbles (4 variants)
 - [ ] `U-02a` User bubble
 - [ ] `U-02b` AI markdown bubble
