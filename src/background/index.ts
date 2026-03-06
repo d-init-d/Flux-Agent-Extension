@@ -47,6 +47,130 @@ const DEFAULT_SETTINGS = {
   logNetworkRequests: false,
 };
 
+const INSTALL_PAGE_TRACKERS_MESSAGE_TYPE = 'FLUX_INSTALL_PAGE_TRACKERS';
+
+interface PatchedXMLHttpRequestPrototype extends XMLHttpRequest {
+  __fluxPageTrackerPatched__?: boolean;
+}
+
+function installFluxPageTrackersInMainWorld(): void {
+  const pageTrackersInstalledKey = '__fluxPageTrackersInstalled__';
+  const networkActivityEventName = '__flux_network_activity__';
+  const navigationActivityEventName = '__flux_navigation_activity__';
+
+  const win = window as unknown as Record<string, unknown>;
+  if (win[pageTrackersInstalledKey]) {
+    return;
+  }
+  win[pageTrackersInstalledKey] = true;
+
+  let activeRequests = 0;
+
+  const emitNetwork = (): void => {
+    window.dispatchEvent(
+      new CustomEvent(networkActivityEventName, {
+        detail: {
+          activeRequests,
+          timestamp: Date.now(),
+        },
+      }),
+    );
+  };
+
+  const emitNavigation = (): void => {
+    window.dispatchEvent(
+      new CustomEvent(navigationActivityEventName, {
+        detail: {
+          url: location.href,
+          timestamp: Date.now(),
+        },
+      }),
+    );
+  };
+
+  const begin = (): void => {
+    activeRequests += 1;
+    emitNetwork();
+  };
+
+  const end = (): void => {
+    activeRequests = Math.max(0, activeRequests - 1);
+    emitNetwork();
+  };
+
+  const originalFetch = window.fetch;
+  if (typeof originalFetch === 'function') {
+    window.fetch = function fluxTrackedFetch(
+      ...args: Parameters<typeof fetch>
+    ): Promise<Response> {
+      begin();
+
+      try {
+        const result = originalFetch.apply(this, args);
+        return Promise.resolve(result).finally(() => {
+          end();
+        });
+      } catch (error) {
+        end();
+        throw error;
+      }
+    };
+  }
+
+  const xhrProto = XMLHttpRequest.prototype as unknown as PatchedXMLHttpRequestPrototype;
+  if (!xhrProto.__fluxPageTrackerPatched__) {
+    xhrProto.__fluxPageTrackerPatched__ = true;
+
+    const originalSend = xhrProto.send;
+    xhrProto.send = function fluxTrackedSend(
+      this: XMLHttpRequest,
+      ...args: Parameters<XMLHttpRequest['send']>
+    ): void {
+      begin();
+
+      const finalize = (): void => {
+        this.removeEventListener('loadend', finalize);
+        end();
+      };
+
+      this.addEventListener('loadend', finalize);
+
+      try {
+        return originalSend.apply(this, args);
+      } catch (error) {
+        this.removeEventListener('loadend', finalize);
+        end();
+        throw error;
+      }
+    };
+  }
+
+  const originalPushState = history.pushState;
+  history.pushState = function fluxTrackedPushState(
+    this: History,
+    ...args: Parameters<History['pushState']>
+  ): void {
+    const result = originalPushState.apply(this, args);
+    emitNavigation();
+    return result;
+  };
+
+  const originalReplaceState = history.replaceState;
+  history.replaceState = function fluxTrackedReplaceState(
+    this: History,
+    ...args: Parameters<History['replaceState']>
+  ): void {
+    const result = originalReplaceState.apply(this, args);
+    emitNavigation();
+    return result;
+  };
+
+  window.addEventListener('popstate', emitNavigation);
+  window.addEventListener('hashchange', emitNavigation);
+
+  emitNetwork();
+}
+
 // ============================================================================
 // KeepAliveManager
 // ============================================================================
@@ -238,6 +362,16 @@ export class ServiceWorkerManager {
     chrome.runtime.onMessage.addListener(
       (message, sender, sendResponse): boolean | undefined => {
         try {
+          const internalHandled = this.handleInternalContentMessage(
+            message,
+            sender,
+            sendResponse,
+          );
+
+          if (internalHandled !== undefined) {
+            return internalHandled;
+          }
+
           return this.handleExtensionMessage(message, sender, sendResponse);
         } catch (error: unknown) {
           this.logger.error('Error in runtime.onMessage (extension)', error);
@@ -422,6 +556,59 @@ export class ServiceWorkerManager {
       transitionType: details.transitionType,
     });
   };
+
+  // --------------------------------------------------------------------------
+  // Internal Content-Script Messages
+  // --------------------------------------------------------------------------
+
+  private handleInternalContentMessage(
+    message: unknown,
+    sender: Parameters<Parameters<typeof chrome.runtime.onMessage.addListener>[0]>[1],
+    sendResponse: Parameters<Parameters<typeof chrome.runtime.onMessage.addListener>[0]>[2],
+  ): boolean | undefined {
+    const tabId = sender.tab?.id;
+    if (tabId === undefined) {
+      return undefined;
+    }
+
+    if (!this.isInternalTrackerInstallMessage(message)) {
+      return undefined;
+    }
+
+    chrome.scripting
+      .executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: installFluxPageTrackersInMainWorld,
+      })
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(`Failed to install page trackers in tab ${tabId}: ${errorMessage}`);
+        sendResponse({
+          success: false,
+          error: {
+            code: 'TRACKER_INSTALL_FAILED',
+            message: errorMessage,
+          },
+        });
+      });
+
+    return true;
+  }
+
+  private isInternalTrackerInstallMessage(
+    value: unknown,
+  ): value is { type: typeof INSTALL_PAGE_TRACKERS_MESSAGE_TYPE } {
+    if (value === null || value === undefined || typeof value !== 'object') {
+      return false;
+    }
+
+    const maybeMessage = value as Record<string, unknown>;
+    return maybeMessage.type === INSTALL_PAGE_TRACKERS_MESSAGE_TYPE;
+  }
 
   // --------------------------------------------------------------------------
   // Extension Message Handler (UI ↔ SW)

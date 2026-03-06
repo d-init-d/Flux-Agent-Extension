@@ -15,10 +15,12 @@ import { ContentScriptBridge } from '@core/bridge';
 import { Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
 import { DOMInspector } from './dom/inspector';
+import { AutoWaitEngine } from './dom/auto-wait-engine';
 import { executeInteractionAction } from './actions/interaction';
 import { executeInputAction } from './actions/input';
 import { executeScrollAction } from './actions/scroll';
 import { executeExtractAction } from './actions/extract';
+import { executeWaitAction } from './actions/wait';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -63,6 +65,7 @@ export class ContentScriptManager {
   private readonly logger: Logger;
   private readonly selectorEngine: SelectorEngine;
   private readonly domInspector: DOMInspector;
+  private readonly autoWaitEngine: AutoWaitEngine;
   private mutationObserver: MutationObserver | null = null;
   private highlightOverlays: HTMLElement[] = [];
 
@@ -78,6 +81,7 @@ export class ContentScriptManager {
     this.logger = new Logger('ContentScript');
     this.selectorEngine = new SelectorEngine();
     this.domInspector = new DOMInspector(this.logger);
+    this.autoWaitEngine = new AutoWaitEngine(this.selectorEngine);
   }
 
   // --------------------------------------------------------------------------
@@ -128,6 +132,8 @@ export class ContentScriptManager {
       window.removeEventListener('beforeunload', this.unloadHandler);
       this.unloadHandler = null;
     }
+
+    this.autoWaitEngine.destroy();
 
     this.bridge.destroy();
     this.logger.info('ContentScriptManager destroyed');
@@ -199,6 +205,11 @@ export class ContentScriptManager {
       case 'screenshot':
       case 'fullPageScreenshot':
         return executeExtractAction(action, this.selectorEngine);
+      case 'wait':
+      case 'waitForElement':
+      case 'waitForNavigation':
+      case 'waitForNetwork':
+        return executeWaitAction(action, this.autoWaitEngine);
       default:
         break;
     }

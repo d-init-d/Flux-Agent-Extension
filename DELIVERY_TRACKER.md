@@ -155,7 +155,7 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-19a` Visible-element extraction tuning
 - [x] `C-19b` Interactive-element detection tuning
 - [x] `C-19c` Page summary quality tuning
-- [ ] `C-20` Auto-wait engine
+- [x] `C-20` Auto-wait engine
 - [ ] `C-21` Session manager
 - [ ] `C-22` Context builder
 - [ ] `C-23` Orchestrator action queue
