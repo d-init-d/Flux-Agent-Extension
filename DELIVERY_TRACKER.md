@@ -149,7 +149,7 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-16a` React-safe value setter
 - [x] `C-16b` Dropdown handler
 - [x] `C-16c` Checkbox/radio handler
-- [ ] `C-17` Scroll actions
+- [x] `C-17` Scroll actions
 - [ ] `C-18` Extract/screenshot actions
 - [~] `C-19` DOM inspector baseline
 - [~] `C-19a` Visible-element extraction tuning

@@ -16,6 +16,7 @@ import { Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
 import { executeInteractionAction } from './actions/interaction';
 import { executeInputAction } from './actions/input';
+import { executeScrollAction } from './actions/scroll';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -208,6 +209,9 @@ export class ContentScriptManager {
       case 'check':
       case 'uncheck':
         return executeInputAction(action, this.selectorEngine);
+      case 'scroll':
+      case 'scrollIntoView':
+        return executeScrollAction(action, this.selectorEngine);
       default:
         break;
     }
