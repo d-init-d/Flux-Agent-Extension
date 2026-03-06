@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe, expect, it } from 'vitest';
 import { App } from '../App';
 
 describe('Side panel App (U-03 input baseline)', () => {
@@ -10,6 +11,8 @@ describe('Side panel App (U-03 input baseline)', () => {
     expect(within(header).getByRole('heading', { level: 1, name: 'Flux Agent' })).toBeInTheDocument();
 
     const chatArea = screen.getByTestId('sidepanel-chat-area');
+    expect(within(chatArea).getByTestId('sidepanel-action-log')).toBeInTheDocument();
+    expect(within(chatArea).getByRole('button', { name: 'Expand action log' })).toBeInTheDocument();
     expect(within(chatArea).getByRole('region', { name: 'Chat conversation' })).toBeInTheDocument();
     expect(within(chatArea).getByTestId('message-bubble-user')).toBeInTheDocument();
     expect(within(chatArea).getByTestId('message-bubble-assistant')).toBeInTheDocument();
@@ -36,6 +39,11 @@ describe('Side panel App (U-03 input baseline)', () => {
 
     const chatRegion = screen.getByRole('region', { name: 'Chat conversation' });
     expect(chatRegion).toHaveAttribute('aria-live', 'polite');
+
+    const mainChildren = Array.from(children[1]?.children ?? []);
+    expect(mainChildren).toHaveLength(2);
+    expect(mainChildren[0]).toContainElement(chatRegion);
+    expect(mainChildren[1]).toHaveAttribute('data-testid', 'sidepanel-action-log');
   });
 
   it('enables send button when user types a message', async () => {
@@ -64,6 +72,20 @@ describe('Side panel App (U-03 input baseline)', () => {
 
     await user.clear(textbox);
     expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+  });
+
+  it('expands the action log timeline from the sidepanel layout', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const toggle = screen.getByRole('button', { name: 'Expand action log' });
+    await user.click(toggle);
+
+    expect(screen.getByRole('button', { name: 'Collapse action log' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('list', { name: 'Executed actions timeline' })).toBeInTheDocument();
   });
 
   it('filters baseline slash commands by typed prefix', async () => {

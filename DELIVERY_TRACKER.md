@@ -199,7 +199,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-03a` Slash command autocomplete
 - [x] `U-03b` Multi-line input
 - [x] `U-03c` Ctrl+Enter send
-- [ ] `U-04` Collapsible action log
+- [x] `U-04` Collapsible action log
 - [ ] `U-05` Action timeline states
 - [~] `U-06` Popup baseline
 - [~] `U-13` Theme toggle infra (needs product wiring)

@@ -1,3 +1,4 @@
+import { ActionLogPanel, MOCK_ACTION_LOG } from './components/ActionLogPanel';
 import { ChatContainer, MOCK_CONVERSATION } from './components/ChatContainer';
 import { InputComposer } from './components/InputComposer';
 
@@ -22,8 +23,11 @@ export function App() {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1" data-testid="sidepanel-chat-area">
-        <ChatContainer messages={MOCK_CONVERSATION} />
+      <main className="flex min-h-0 flex-1 flex-col" data-testid="sidepanel-chat-area">
+        <div className="min-h-0 flex-1">
+          <ChatContainer messages={MOCK_CONVERSATION} />
+        </div>
+        <ActionLogPanel actions={MOCK_ACTION_LOG} />
       </main>
 
       <footer
