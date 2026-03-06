@@ -112,6 +112,26 @@ const BLOCKED_SCRIPT_PATTERNS = [
   /\bwindow\s*\.\s*chrome\s*\.\s*\w+/i,
 ] as const;
 
+const DESTRUCTIVE_INTENT_PATTERNS = [
+  /\bdelete\b/i,
+  /\bremove\b/i,
+  /\bdestroy\b/i,
+  /\berase\b/i,
+  /\btruncate\b/i,
+  /\bwipe\b/i,
+  /\bdeactivate\b/i,
+  /\bcancel\s+subscription\b/i,
+  /\bclose\s+account\b/i,
+  /\btransfer\b/i,
+  /\bwire\b/i,
+  /\bpay\b/i,
+  /\bpurchase\b/i,
+  /\bplace\s+order\b/i,
+  /\bcheckout\b/i,
+  /\bsubmit\s+payment\b/i,
+  /\bconfirm\b/i,
+] as const;
+
 // ============================================================================
 // Private Helpers
 // ============================================================================
@@ -235,6 +255,51 @@ function hasDangerousScript(script: string): boolean {
   return false;
 }
 
+function hasDestructiveIntent(action: Action): boolean {
+  const probeValues: string[] = [];
+
+  if ('selector' in action && action.selector) {
+    const selector = action.selector;
+    const selectorValues: Array<string | undefined> = [
+      selector.css,
+      selector.xpath,
+      selector.text,
+      selector.textExact,
+      selector.ariaLabel,
+      selector.placeholder,
+      selector.nearText,
+      selector.withinSection,
+    ];
+
+    for (const value of selectorValues) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        probeValues.push(value);
+      }
+    }
+  }
+
+  if ('value' in action) {
+    const value = action.value;
+    if (typeof value === 'string' && value.trim().length > 0) {
+      probeValues.push(value);
+    }
+  }
+
+  if ('keys' in action && Array.isArray(action.keys)) {
+    probeValues.push(action.keys.join('+'));
+  }
+
+  for (const candidate of probeValues) {
+    for (const pattern of DESTRUCTIVE_INTENT_PATTERNS) {
+      if (pattern.test(candidate)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 // ============================================================================
 // Main Classifier
 // ============================================================================
@@ -286,6 +351,14 @@ export function classifyAction(action: Action): ClassificationResult {
 
     case 'fill':
     case 'type': {
+      if (hasDestructiveIntent(action)) {
+        return {
+          level: 'high',
+          reason: 'Input action contains destructive or financial intent',
+          requiresConfirmation: true,
+        };
+      }
+
       if (isPasswordField(action)) {
         return {
           level: 'high',
@@ -297,6 +370,31 @@ export function classifyAction(action: Action): ClassificationResult {
         level: 'medium',
         reason: 'Form input action',
         requiresConfirmation: false,
+      };
+    }
+
+    case 'click':
+    case 'doubleClick':
+    case 'rightClick':
+    case 'focus':
+    case 'press':
+    case 'hotkey':
+    case 'select':
+    case 'check':
+    case 'uncheck': {
+      if (hasDestructiveIntent(action)) {
+        return {
+          level: 'high',
+          reason: 'Interaction action contains destructive or financial intent',
+          requiresConfirmation: true,
+        };
+      }
+
+      const base = BASE_SENSITIVITY[action.type];
+      return {
+        level: base,
+        reason: 'Default classification for action type: ' + action.type,
+        requiresConfirmation: requiresConfirmation(base),
       };
     }
 

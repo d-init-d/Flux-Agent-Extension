@@ -164,10 +164,10 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-25c` Browser controller tests
 - [x] `C-25d` Session/orchestrator tests
 - [x] `C-25e` SW-CS integration tests
-- [ ] `C-26` Phase-2 security review
-- [ ] `C-26a` Prompt injection battery (50+)
-- [ ] `C-26b` XSS content script review
-- [~] `C-26c` Message security review report
+- [x] `C-26` Phase-2 security review
+- [x] `C-26a` Prompt injection battery (50+)
+- [x] `C-26b` XSS content script review
+- [x] `C-26c` Message security review report
 
 Phase-2 execution order locked:
 

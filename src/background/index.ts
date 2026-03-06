@@ -14,7 +14,9 @@ import { ServiceWorkerBridge } from '@core/bridge';
 import { Logger } from '@shared/utils';
 import type {
   TabState,
+  MessageChannel,
   MessageType,
+  ExtensionMessageType,
   ExtensionMessage,
   ExtensionResponse,
 } from '@shared/types';
@@ -48,6 +50,45 @@ const DEFAULT_SETTINGS = {
 };
 
 const INSTALL_PAGE_TRACKERS_MESSAGE_TYPE = 'FLUX_INSTALL_PAGE_TRACKERS';
+const EXTENSION_MESSAGE_MAX_AGE_MS = 60_000;
+const EXTENSION_MESSAGE_MAX_FUTURE_DRIFT_MS = 5_000;
+const EXTENSION_MESSAGE_REPLAY_CACHE_LIMIT = 2_000;
+
+const ALLOWED_EXTENSION_CHANNELS: readonly MessageChannel[] = [
+  'popup',
+  'sidePanel',
+  'offscreen',
+];
+
+const ALLOWED_EXTENSION_MESSAGE_TYPES: readonly ExtensionMessageType[] = [
+  'SESSION_CREATE',
+  'SESSION_START',
+  'SESSION_PAUSE',
+  'SESSION_RESUME',
+  'SESSION_ABORT',
+  'SESSION_SEND_MESSAGE',
+  'SESSION_GET_STATE',
+  'SESSION_LIST',
+  'ACTION_EXECUTE',
+  'ACTION_EXECUTE_BATCH',
+  'ACTION_ABORT',
+  'ACTION_UNDO',
+  'TAB_ATTACH',
+  'TAB_DETACH',
+  'TAB_GET_STATE',
+  'TAB_CAPTURE',
+  'SETTINGS_GET',
+  'SETTINGS_UPDATE',
+  'PROVIDER_SET',
+  'API_KEY_SET',
+  'API_KEY_VALIDATE',
+  'CONTEXT_GET',
+  'CONTEXT_UPDATE',
+  'EVENT_SESSION_UPDATE',
+  'EVENT_ACTION_PROGRESS',
+  'EVENT_AI_STREAM',
+  'EVENT_ERROR',
+];
 
 interface PatchedXMLHttpRequestPrototype extends XMLHttpRequest {
   __fluxPageTrackerPatched__?: boolean;
@@ -242,6 +283,7 @@ export class ServiceWorkerManager {
   private readonly logger: Logger;
   private readonly keepAlive: KeepAliveManager;
   private readonly tabStates: Map<number, TabState> = new Map();
+  private readonly extensionMessageReplayCache = new Map<string, number>();
 
   /** Unsubscribe functions returned by `bridge.onEvent()`. */
   private readonly bridgeUnsubscribers: Array<() => void> = [];
@@ -292,6 +334,7 @@ export class ServiceWorkerManager {
 
     this.bridge.destroy();
     this.tabStates.clear();
+    this.extensionMessageReplayCache.clear();
 
     this.logger.info('Flux Agent Service Worker destroyed');
   }
@@ -640,12 +683,34 @@ export class ServiceWorkerManager {
       return undefined;
     }
 
+    if (!this.isTrustedExtensionSender(sender)) {
+      sendResponse({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED_SENDER',
+          message: 'Extension message sender is not trusted',
+        },
+      } satisfies ExtensionResponse);
+      return false;
+    }
+
     // Validate ExtensionMessage structure
     if (!this.isExtensionMessage(message)) {
       return undefined;
     }
 
     const extMsg = message as ExtensionMessage;
+
+    if (this.isReplayedExtensionMessage(extMsg.id)) {
+      sendResponse({
+        success: false,
+        error: {
+          code: 'REPLAY_DETECTED',
+          message: 'Duplicate extension message ID detected',
+        },
+      } satisfies ExtensionResponse);
+      return false;
+    }
 
     this.logger.debug(`ExtensionMessage received: type="${extMsg.type}"`, {
       id: extMsg.id,
@@ -677,13 +742,92 @@ export class ServiceWorkerManager {
       return false;
     }
     const obj = value as Record<string, unknown>;
-    return (
-      typeof obj['id'] === 'string' &&
-      typeof obj['channel'] === 'string' &&
-      typeof obj['type'] === 'string' &&
-      'payload' in obj &&
-      typeof obj['timestamp'] === 'number'
-    );
+    const channel = obj['channel'];
+    const type = obj['type'];
+    const id = obj['id'];
+    const timestamp = obj['timestamp'];
+
+    if (typeof id !== 'string' || id.trim().length === 0) {
+      return false;
+    }
+
+    if (typeof channel !== 'string' || !this.isAllowedExtensionChannel(channel)) {
+      return false;
+    }
+
+    if (typeof type !== 'string' || !this.isAllowedExtensionMessageType(type)) {
+      return false;
+    }
+
+    if (typeof timestamp !== 'number' || !this.isFreshExtensionTimestamp(timestamp)) {
+      return false;
+    }
+
+    return 'payload' in obj;
+  }
+
+  private isAllowedExtensionChannel(value: string): value is MessageChannel {
+    return (ALLOWED_EXTENSION_CHANNELS as readonly string[]).includes(value);
+  }
+
+  private isTrustedExtensionSender(
+    sender: Parameters<Parameters<typeof chrome.runtime.onMessage.addListener>[0]>[1],
+  ): boolean {
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
+    if (typeof sender.url !== 'string') {
+      return false;
+    }
+
+    const extensionOrigin = chrome.runtime.getURL('');
+    return sender.url.startsWith(extensionOrigin);
+  }
+
+  private isAllowedExtensionMessageType(value: string): value is ExtensionMessageType {
+    return (ALLOWED_EXTENSION_MESSAGE_TYPES as readonly string[]).includes(value);
+  }
+
+  private isFreshExtensionTimestamp(timestamp: number): boolean {
+    if (!Number.isFinite(timestamp)) {
+      return false;
+    }
+
+    const now = Date.now();
+    if (timestamp > now + EXTENSION_MESSAGE_MAX_FUTURE_DRIFT_MS) {
+      return false;
+    }
+
+    return now - timestamp <= EXTENSION_MESSAGE_MAX_AGE_MS;
+  }
+
+  private isReplayedExtensionMessage(id: string): boolean {
+    const now = Date.now();
+    this.pruneExtensionMessageReplayCache(now);
+
+    if (this.extensionMessageReplayCache.has(id)) {
+      return true;
+    }
+
+    this.extensionMessageReplayCache.set(id, now);
+
+    if (this.extensionMessageReplayCache.size > EXTENSION_MESSAGE_REPLAY_CACHE_LIMIT) {
+      const oldest = this.extensionMessageReplayCache.keys().next();
+      if (!oldest.done) {
+        this.extensionMessageReplayCache.delete(oldest.value);
+      }
+    }
+
+    return false;
+  }
+
+  private pruneExtensionMessageReplayCache(nowTimestamp: number): void {
+    for (const [id, timestamp] of this.extensionMessageReplayCache) {
+      if (nowTimestamp - timestamp > EXTENSION_MESSAGE_MAX_AGE_MS) {
+        this.extensionMessageReplayCache.delete(id);
+      }
+    }
   }
 
   // --------------------------------------------------------------------------

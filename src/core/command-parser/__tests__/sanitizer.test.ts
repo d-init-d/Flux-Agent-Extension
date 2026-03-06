@@ -15,7 +15,7 @@ describe('sanitizeCommandAction', () => {
         id: 'a1',
         type: 'navigate',
         description: '  open site  ',
-        url: 'example.com/docs',
+        url: 'localhost/docs',
       },
       defaultConfig,
     );
@@ -23,8 +23,25 @@ describe('sanitizeCommandAction', () => {
     expect(sanitized).toMatchObject({
       type: 'navigate',
       description: 'open site',
-      url: 'https://example.com/docs',
+      url: 'https://localhost/docs',
     });
+  });
+
+  it('requires confirmation for high-risk actions in strict mode', () => {
+    try {
+      sanitizeCommandAction(
+        {
+          id: 'a1b',
+          type: 'navigate',
+          url: 'https://example.com/account',
+        },
+        defaultConfig,
+      );
+      throw new Error('Expected sanitizer to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_BLOCKED);
+      expect((error as ExtensionError).message).toContain('requires explicit user confirmation');
+    }
   });
 
   it('sanitizes selector fields', () => {

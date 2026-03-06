@@ -10,7 +10,7 @@ describe('CommandParser', () => {
       JSON.stringify({
         thinking: 'Need two steps',
         actions: [
-          { type: 'navigate', url: 'https://example.com' },
+          { type: 'navigate', url: 'https://localhost/dashboard' },
           { type: 'click', selector: { text: 'Login' } },
         ],
         summary: 'Navigate and click login',
@@ -20,7 +20,7 @@ describe('CommandParser', () => {
     expect(result.thinking).toBe('Need two steps');
     expect(result.summary).toBe('Navigate and click login');
     expect(result.actions).toHaveLength(2);
-    expect(result.actions[0]).toMatchObject({ type: 'navigate', url: 'https://example.com' });
+    expect(result.actions[0]).toMatchObject({ type: 'navigate', url: 'https://localhost/dashboard' });
     expect(result.actions[0].id).toBeTypeOf('string');
     expect(result.actions[1]).toMatchObject({ type: 'click', selector: { text: 'Login' } });
   });
@@ -30,14 +30,14 @@ describe('CommandParser', () => {
     const response = [
       'I will do this:',
       '```json',
-      '{"actions":[{"type":"navigate","url":"https://github.com"}]}',
+      '{"actions":[{"type":"navigate","url":"https://localhost/docs"}]}',
       '```',
     ].join('\n');
 
     const result = parser.parse(response);
 
     expect(result.actions).toHaveLength(1);
-    expect(result.actions[0]).toMatchObject({ type: 'navigate', url: 'https://github.com' });
+    expect(result.actions[0]).toMatchObject({ type: 'navigate', url: 'https://localhost/docs' });
   });
 
   it('extracts balanced JSON object from surrounding text', () => {
@@ -124,7 +124,7 @@ describe('CommandParser', () => {
   });
 
   it('accepts evaluate action when explicitly enabled', () => {
-    const parser = new CommandParser({ allowEvaluate: true });
+    const parser = new CommandParser({ strictMode: false, allowEvaluate: true });
     const result = parser.parse(
       JSON.stringify({ actions: [{ type: 'evaluate', script: 'return document.title' }] }),
     );
@@ -219,20 +219,20 @@ describe('CommandParser', () => {
   });
 
   it('normalizes scheme-less URLs to https', () => {
-    const parser = new CommandParser({ allowEvaluate: true });
-    const result = parser.parse(JSON.stringify({ actions: [{ type: 'navigate', url: 'example.com' }] }));
+    const parser = new CommandParser({ strictMode: false, allowEvaluate: true });
+    const result = parser.parse(JSON.stringify({ actions: [{ type: 'navigate', url: 'example.com/path' }] }));
 
     expect(result.actions[0]).toMatchObject({
       type: 'navigate',
-      url: 'https://example.com',
+      url: 'https://example.com/path',
     });
   });
 
   it('strips unknown action fields through schema parsing', () => {
-    const parser = new CommandParser({ allowEvaluate: true });
+    const parser = new CommandParser({ strictMode: false, allowEvaluate: true });
     const result = parser.parse(
       JSON.stringify({
-        actions: [{ type: 'navigate', url: 'https://example.com', injected: 'drop-me' }],
+        actions: [{ type: 'navigate', url: 'https://example.com/path', injected: 'drop-me' }],
       }),
     );
 
@@ -291,10 +291,10 @@ describe('CommandParser', () => {
       id: 'a1',
       type: 'navigate',
       description: '  go to site  ',
-      url: '   https://example.com/path  ',
+      url: '   https://localhost/path  ',
     });
 
     expect(sanitized.description).toBe('go to site');
-    expect(sanitized.url).toBe('https://example.com/path');
+    expect(sanitized.url).toBe('https://localhost/path');
   });
 });

@@ -45,7 +45,7 @@ export function sanitizeCommandAction(action: Action, config: ParserSanitizerCon
   sanitizeUrls(cloned, config);
   sanitizeActionSelectors(cloned, config);
   sanitizeEvaluate(cloned, config);
-  enforceClassificationPolicy(cloned);
+  enforceClassificationPolicy(cloned, config);
 
   return cloned;
 }
@@ -198,16 +198,24 @@ function sanitizeEvaluate(action: Action, config: ParserSanitizerConfig): void {
   }
 }
 
-function enforceClassificationPolicy(action: Action): void {
+function enforceClassificationPolicy(action: Action, config: ParserSanitizerConfig): void {
   const classification = classifyAction(action);
-  if (classification.level !== 'blocked') {
-    return;
+
+  if (classification.level === 'blocked') {
+    throw new ExtensionError(
+      ErrorCode.ACTION_BLOCKED,
+      classification.reason,
+      true,
+      { actionType: action.type, classification },
+    );
   }
 
-  throw new ExtensionError(
-    ErrorCode.ACTION_BLOCKED,
-    classification.reason,
-    true,
-    { actionType: action.type, classification },
-  );
+  if (config.strictMode && classification.requiresConfirmation) {
+    throw new ExtensionError(
+      ErrorCode.ACTION_BLOCKED,
+      'Action requires explicit user confirmation: ' + classification.reason,
+      true,
+      { actionType: action.type, classification, requiresConfirmation: true },
+    );
+  }
 }
