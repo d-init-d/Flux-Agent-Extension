@@ -15,6 +15,7 @@ import { ContentScriptBridge } from '@core/bridge';
 import { Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
 import { executeInteractionAction } from './actions/interaction';
+import { executeInputAction } from './actions/input';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -200,6 +201,13 @@ export class ContentScriptManager {
       case 'hover':
       case 'focus':
         return executeInteractionAction(action, this.selectorEngine);
+      case 'fill':
+      case 'type':
+      case 'clear':
+      case 'select':
+      case 'check':
+      case 'uncheck':
+        return executeInputAction(action, this.selectorEngine);
       default:
         break;
     }

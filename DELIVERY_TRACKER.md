@@ -145,10 +145,10 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-14c` Text/ARIA/placeholder baseline
 - [x] `C-14d` nearText strategy
 - [x] `C-15` Click/hover/focus actions
-- [ ] `C-16` Fill/type/select actions
-- [ ] `C-16a` React-safe value setter
-- [ ] `C-16b` Dropdown handler
-- [ ] `C-16c` Checkbox/radio handler
+- [x] `C-16` Fill/type/select actions
+- [x] `C-16a` React-safe value setter
+- [x] `C-16b` Dropdown handler
+- [x] `C-16c` Checkbox/radio handler
 - [ ] `C-17` Scroll actions
 - [ ] `C-18` Extract/screenshot actions
 - [~] `C-19` DOM inspector baseline
