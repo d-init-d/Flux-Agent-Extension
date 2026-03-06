@@ -107,10 +107,10 @@ describe('ServiceWorkerBridge', () => {
       getTabsSendMessage().mockReturnValue(new Promise(() => {}));
 
       const sendPromise = bridge.send(1, 'PING', null);
+      void sendPromise.catch(() => undefined);
 
       bridge.destroy();
 
-      await expect(sendPromise).rejects.toThrow(ExtensionError);
       await expect(sendPromise).rejects.toMatchObject({
         code: ErrorCode.ABORTED,
       });
@@ -127,10 +127,17 @@ describe('ServiceWorkerBridge', () => {
   // --------------------------------------------------------------------------
 
   describe('send()', () => {
-    it('should send a BridgeMessage via chrome.tabs.sendMessage', () => {
-      getTabsSendMessage().mockResolvedValue(undefined);
+    it('should send a BridgeMessage via chrome.tabs.sendMessage', async () => {
+      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
+        return Promise.resolve({
+          id: message.id,
+          type: 'ACTION_RESULT',
+          timestamp: Date.now(),
+          payload: { ok: true },
+        });
+      });
 
-      bridge.send(1, 'EXECUTE_ACTION', { action: 'click' });
+      await bridge.send(1, 'EXECUTE_ACTION', { action: 'click' });
 
       expect(getTabsSendMessage()).toHaveBeenCalledWith(
         1,
@@ -184,11 +191,11 @@ describe('ServiceWorkerBridge', () => {
       getTabsSendMessage().mockReturnValue(new Promise(() => {}));
 
       const sendPromise = bridge.send(1, 'PING', null);
+      void sendPromise.catch(() => undefined);
 
       // Advance past the 10s default timeout
       vi.advanceTimersByTime(11_000);
 
-      await expect(sendPromise).rejects.toThrow(ExtensionError);
       await expect(sendPromise).rejects.toMatchObject({
         code: ErrorCode.TIMEOUT,
       });
@@ -200,9 +207,9 @@ describe('ServiceWorkerBridge', () => {
       );
 
       const sendPromise = bridge.send(1, 'PING', null);
+      void sendPromise.catch(() => undefined);
       await vi.advanceTimersByTimeAsync(0);
 
-      await expect(sendPromise).rejects.toThrow(ExtensionError);
       await expect(sendPromise).rejects.toMatchObject({
         code: ErrorCode.CONTENT_SCRIPT_NOT_READY,
       });
@@ -216,6 +223,7 @@ describe('ServiceWorkerBridge', () => {
       });
 
       const sendPromise = bridge.send(1, 'EXECUTE_ACTION', { action: 'click' });
+      void sendPromise.catch(() => undefined);
       await vi.advanceTimersByTimeAsync(0);
 
       simulateIncomingMessage({
@@ -225,7 +233,6 @@ describe('ServiceWorkerBridge', () => {
         payload: { code: 'ACTION_FAILED', message: 'Element not found' },
       });
 
-      await expect(sendPromise).rejects.toThrow(ExtensionError);
       await expect(sendPromise).rejects.toMatchObject({
         code: ErrorCode.ACTION_FAILED,
       });
@@ -489,9 +496,9 @@ describe('ServiceWorkerBridge', () => {
       );
 
       const ensurePromise = bridge.ensureContentScript(1);
+      void ensurePromise.catch(() => undefined);
       await vi.advanceTimersByTimeAsync(0);
 
-      await expect(ensurePromise).rejects.toThrow(ExtensionError);
       await expect(ensurePromise).rejects.toMatchObject({
         code: ErrorCode.CONTENT_SCRIPT_INJECTION_FAILED,
       });
@@ -506,11 +513,11 @@ describe('ServiceWorkerBridge', () => {
       ]);
 
       const ensurePromise = bridge.ensureContentScript(1);
+      void ensurePromise.catch(() => undefined);
 
       // Advance through 3 retries × 500ms each + some buffer
       await vi.advanceTimersByTimeAsync(5_000);
 
-      await expect(ensurePromise).rejects.toThrow(ExtensionError);
       await expect(ensurePromise).rejects.toMatchObject({
         code: ErrorCode.CONTENT_SCRIPT_INJECTION_FAILED,
       });

@@ -160,10 +160,10 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-22` Context builder
 - [x] `C-23` Orchestrator action queue
 - [x] `C-24` Error recovery pipeline
-- [ ] `C-25b` Content script tests
-- [ ] `C-25c` Browser controller tests
-- [ ] `C-25d` Session/orchestrator tests
-- [ ] `C-25e` SW-CS integration tests
+- [x] `C-25b` Content script tests
+- [x] `C-25c` Browser controller tests
+- [x] `C-25d` Session/orchestrator tests
+- [x] `C-25e` SW-CS integration tests
 - [ ] `C-26` Phase-2 security review
 - [ ] `C-26a` Prompt injection battery (50+)
 - [ ] `C-26b` XSS content script review
