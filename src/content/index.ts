@@ -14,6 +14,7 @@
 import { ContentScriptBridge } from '@core/bridge';
 import { Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
+import { DOMInspector } from './dom/inspector';
 import { executeInteractionAction } from './actions/interaction';
 import { executeInputAction } from './actions/input';
 import { executeScrollAction } from './actions/scroll';
@@ -23,9 +24,6 @@ import type {
   ActionResultPayload,
   PageContextPayload,
   HighlightPayload,
-  InteractiveElement,
-  FormInfo,
-  PageContext,
 } from '@shared/types';
 
 // ============================================================================
@@ -51,25 +49,6 @@ if (window.__FLUX_AGENT_CS_INITIALIZED__) {
 // Constants
 // ============================================================================
 
-const INTERACTIVE_SELECTORS = [
-  'button',
-  'a',
-  'input',
-  'select',
-  'textarea',
-  '[role="button"]',
-  '[role="link"]',
-  '[role="checkbox"]',
-  '[role="radio"]',
-  '[role="tab"]',
-  '[role="menuitem"]',
-  '[contenteditable="true"]',
-].join(', ');
-
-const MAX_INTERACTIVE_ELEMENTS = 200;
-const MAX_LINKS = 100;
-const TEXT_TRUNCATE_SHORT = 100;
-const TEXT_TRUNCATE_LONG = 200;
 const MUTATION_DEBOUNCE_MS = 500;
 const HIGHLIGHT_Z_INDEX = '2147483647';
 const DEFAULT_HIGHLIGHT_COLOR = '#FF6B35';
@@ -83,6 +62,7 @@ export class ContentScriptManager {
   private readonly bridge: ContentScriptBridge;
   private readonly logger: Logger;
   private readonly selectorEngine: SelectorEngine;
+  private readonly domInspector: DOMInspector;
   private mutationObserver: MutationObserver | null = null;
   private highlightOverlays: HTMLElement[] = [];
 
@@ -97,6 +77,7 @@ export class ContentScriptManager {
     this.bridge = new ContentScriptBridge();
     this.logger = new Logger('ContentScript');
     this.selectorEngine = new SelectorEngine();
+    this.domInspector = new DOMInspector(this.logger);
   }
 
   // --------------------------------------------------------------------------
@@ -240,154 +221,7 @@ export class ContentScriptManager {
 
   private async handleGetPageContext(): Promise<PageContextPayload> {
     this.logger.debug('GET_PAGE_CONTEXT received');
-
-    const context: PageContext = {
-      url: location.href,
-      title: document.title,
-      interactiveElements: this.gatherInteractiveElements(),
-      headings: this.gatherHeadings(),
-      links: this.gatherLinks(),
-      forms: this.gatherForms(),
-      viewport: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        scrollX: window.scrollX,
-        scrollY: window.scrollY,
-        scrollHeight: document.documentElement.scrollHeight,
-      },
-    };
-
-    return { context };
-  }
-
-  private gatherInteractiveElements(): InteractiveElement[] {
-    const elements: InteractiveElement[] = [];
-    try {
-      const nodes = document.querySelectorAll(INTERACTIVE_SELECTORS);
-      let index = 0;
-      for (const node of nodes) {
-        if (index >= MAX_INTERACTIVE_ELEMENTS) break;
-
-        const el = node as HTMLElement;
-        const rect = el.getBoundingClientRect();
-
-        elements.push({
-          index,
-          tag: el.tagName.toLowerCase(),
-          type: (el as HTMLInputElement).type || undefined,
-          role: el.getAttribute('role') || undefined,
-          text: truncate((el.innerText || '').trim(), TEXT_TRUNCATE_SHORT),
-          placeholder: (el as HTMLInputElement).placeholder || undefined,
-          ariaLabel: el.getAttribute('aria-label') || undefined,
-          isVisible: this.isElementVisible(el),
-          isEnabled: !(el as HTMLInputElement | HTMLButtonElement).disabled,
-          boundingBox: {
-            x: rect.x,
-            y: rect.y,
-            width: rect.width,
-            height: rect.height,
-          },
-        });
-        index++;
-      }
-    } catch (error) {
-      this.logger.warn('Failed to gather interactive elements', error);
-    }
-    return elements;
-  }
-
-  private gatherHeadings(): { level: number; text: string }[] {
-    const headings: { level: number; text: string }[] = [];
-    try {
-      const nodes = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
-      for (const node of nodes) {
-        const el = node as HTMLElement;
-        const level = parseInt(el.tagName.charAt(1), 10);
-        headings.push({
-          level,
-          text: truncate((el.innerText || '').trim(), TEXT_TRUNCATE_LONG),
-        });
-      }
-    } catch (error) {
-      this.logger.warn('Failed to gather headings', error);
-    }
-    return headings;
-  }
-
-  private gatherLinks(): { text: string; href: string }[] {
-    const links: { text: string; href: string }[] = [];
-    try {
-      const nodes = document.querySelectorAll('a[href]');
-      let count = 0;
-      for (const node of nodes) {
-        if (count >= MAX_LINKS) break;
-        const anchor = node as HTMLAnchorElement;
-        links.push({
-          text: truncate((anchor.innerText || '').trim(), TEXT_TRUNCATE_SHORT),
-          href: anchor.href,
-        });
-        count++;
-      }
-    } catch (error) {
-      this.logger.warn('Failed to gather links', error);
-    }
-    return links;
-  }
-
-  private gatherForms(): FormInfo[] {
-    const forms: FormInfo[] = [];
-    try {
-      const formNodes = document.querySelectorAll('form');
-      for (const formEl of formNodes) {
-        const form = formEl as HTMLFormElement;
-        const fields: FormInfo['fields'] = [];
-
-        const inputs = form.querySelectorAll('input, select, textarea');
-        for (const inputNode of inputs) {
-          const input = inputNode as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
-          const name = input.name || input.id || '';
-          const type =
-            input.tagName.toLowerCase() === 'select'
-              ? 'select'
-              : input.tagName.toLowerCase() === 'textarea'
-                ? 'textarea'
-                : (input as HTMLInputElement).type || 'text';
-
-          // Resolve label: associated <label>, then aria-label
-          let label: string | undefined;
-          if (input.id) {
-            const labelEl = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
-            if (labelEl) {
-              label = (labelEl as HTMLElement).innerText?.trim();
-            }
-          }
-          if (!label) {
-            label = input.getAttribute('aria-label') || undefined;
-          }
-
-          // Don't leak password values
-          const isPassword = type === 'password';
-          const value = isPassword ? undefined : input.value || undefined;
-
-          fields.push({
-            name,
-            type,
-            label,
-            required: input.required,
-            value,
-          });
-        }
-
-        forms.push({
-          action: form.action || '',
-          method: (form.method || 'get').toUpperCase(),
-          fields,
-        });
-      }
-    } catch (error) {
-      this.logger.warn('Failed to gather forms', error);
-    }
-    return forms;
+    return { context: this.domInspector.buildPageContext() };
   }
 
   // --------------------------------------------------------------------------
@@ -490,38 +324,6 @@ export class ContentScriptManager {
   }
 
   // --------------------------------------------------------------------------
-  // Visibility Check
-  // --------------------------------------------------------------------------
-
-  /**
-   * Determine whether an element is visually rendered on the page.
-   * Checks: offsetParent (non-fixed), computed display/visibility/opacity,
-   * and bounding box dimensions.
-   */
-  private isElementVisible(el: Element): boolean {
-    try {
-      const htmlEl = el as HTMLElement;
-
-      // offsetParent is null for hidden elements, except for fixed-position
-      const computedStyle = window.getComputedStyle(htmlEl);
-      if (computedStyle.position !== 'fixed' && htmlEl.offsetParent === null) {
-        return false;
-      }
-
-      if (computedStyle.display === 'none') return false;
-      if (computedStyle.visibility === 'hidden') return false;
-      if (parseFloat(computedStyle.opacity) <= 0) return false;
-
-      const rect = htmlEl.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return false;
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // --------------------------------------------------------------------------
   // MutationObserver
   // --------------------------------------------------------------------------
 
@@ -610,14 +412,6 @@ export class ContentScriptManager {
 // ============================================================================
 // Utility functions (module-private — no global scope pollution)
 // ============================================================================
-
-/**
- * Truncate a string to a maximum length, appending an ellipsis if truncated.
- */
-function truncate(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-  return text.slice(0, maxLength - 1) + '\u2026';
-}
 
 /**
  * Convert a hex colour string to an rgba() string.

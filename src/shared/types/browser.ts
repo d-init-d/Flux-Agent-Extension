@@ -43,6 +43,7 @@ export interface BrowserControllerOptions {
 export interface PageContext {
   url: string;
   title: string;
+  summary?: string;
 
   // Simplified DOM representation
   interactiveElements: InteractiveElement[];

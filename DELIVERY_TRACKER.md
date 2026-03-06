@@ -151,10 +151,10 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-16c` Checkbox/radio handler
 - [x] `C-17` Scroll actions
 - [x] `C-18` Extract/screenshot actions
-- [~] `C-19` DOM inspector baseline
-- [~] `C-19a` Visible-element extraction tuning
-- [~] `C-19b` Interactive-element detection tuning
-- [~] `C-19c` Page summary quality tuning
+- [x] `C-19` DOM inspector baseline
+- [x] `C-19a` Visible-element extraction tuning
+- [x] `C-19b` Interactive-element detection tuning
+- [x] `C-19c` Page summary quality tuning
 - [ ] `C-20` Auto-wait engine
 - [ ] `C-21` Session manager
 - [ ] `C-22` Context builder
