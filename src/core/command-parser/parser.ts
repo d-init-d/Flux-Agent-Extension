@@ -3,6 +3,7 @@ import type { Action, ParsedResponse } from '@shared/types';
 import { generateId } from '@shared/utils';
 import type { ICommandParser, ParserConfig, ValidationResult } from './interfaces';
 import { actionSchema, validateActionSchema } from './schemas';
+import { sanitizeCommandAction } from './sanitizer';
 
 const CODE_BLOCK_REGEX = /```(?:json)?\s*([\s\S]*?)```/gi;
 
@@ -19,8 +20,6 @@ interface JsonCandidate {
   score: number;
 }
 
-const ALLOWED_URL_PROTOCOLS = new Set(['http:', 'https:']);
-const HAS_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 
 export class CommandParser implements ICommandParser {
   private readonly config: ParserConfig;
@@ -42,8 +41,6 @@ export class CommandParser implements ICommandParser {
     const safeActions: Action[] = [];
 
     for (const rawAction of normalized.actions) {
-      this.enforceEvaluatePolicy(rawAction);
-
       const schemaResult = actionSchema.safeParse(rawAction);
       if (!schemaResult.success) {
         if (this.config.strictMode) {
@@ -63,8 +60,7 @@ export class CommandParser implements ICommandParser {
         continue;
       }
 
-      let action = schemaResult.data as unknown as Action;
-      action = this.enforceNavigationPolicy(action);
+      const action = schemaResult.data as unknown as Action;
       safeActions.push(this.sanitize(action));
     }
 
@@ -78,8 +74,18 @@ export class CommandParser implements ICommandParser {
     const schemaResult = validateActionSchema(action);
     const errors = schemaResult.errors ? [...schemaResult.errors] : [];
 
-    if (!this.config.allowEvaluate && action.type === 'evaluate') {
-      errors.push('Evaluate action is disabled by parser config');
+    if (errors.length === 0) {
+      try {
+        sanitizeCommandAction(action, this.config);
+      } catch (error) {
+        if (ExtensionError.isExtensionError(error)) {
+          errors.push(error.message);
+        } else if (error instanceof Error) {
+          errors.push(error.message);
+        } else {
+          errors.push('Action failed security validation');
+        }
+      }
     }
 
     return {
@@ -89,75 +95,7 @@ export class CommandParser implements ICommandParser {
   }
 
   sanitize(action: Action): Action {
-    const cloned = structuredClone(action);
-
-    if ('description' in cloned && typeof cloned.description === 'string') {
-      cloned.description = cloned.description.trim();
-    }
-
-    if (cloned.type === 'navigate') {
-      cloned.url = cloned.url.trim();
-    }
-
-    if (cloned.type === 'newTab' && typeof cloned.url === 'string') {
-      cloned.url = cloned.url.trim();
-    }
-
-    return cloned;
-  }
-
-  private enforceEvaluatePolicy(action: Action): void {
-    if (!this.config.allowEvaluate && action.type === 'evaluate') {
-      throw new ExtensionError(
-        ErrorCode.ACTION_BLOCKED,
-        'Evaluate action is disabled by parser config',
-        true,
-      );
-    }
-  }
-
-  private enforceNavigationPolicy(action: Action): Action {
-    if (action.type === 'navigate') {
-      return {
-        ...action,
-        url: this.normalizeAndValidateUrl(action.url),
-      };
-    }
-
-    if (action.type === 'newTab' && typeof action.url === 'string') {
-      return {
-        ...action,
-        url: this.normalizeAndValidateUrl(action.url),
-      };
-    }
-
-    return action;
-  }
-
-  private normalizeAndValidateUrl(rawUrl: string): string {
-    const trimmed = rawUrl.trim();
-    const candidate = HAS_SCHEME_REGEX.test(trimmed) ? trimmed : `https://${trimmed}`;
-
-    let parsed: URL;
-    try {
-      parsed = new URL(candidate);
-    } catch {
-      throw new ExtensionError(
-        ErrorCode.ACTION_INVALID,
-        `Invalid URL provided: ${trimmed}`,
-        true,
-      );
-    }
-
-    if (!ALLOWED_URL_PROTOCOLS.has(parsed.protocol)) {
-      throw new ExtensionError(
-        ErrorCode.ACTION_BLOCKED,
-        `Blocked URL protocol: ${parsed.protocol}`,
-        true,
-      );
-    }
-
-    return candidate;
+    return sanitizeCommandAction(action, this.config);
   }
 
   private extractBestPayload(input: string): unknown {

@@ -124,10 +124,10 @@ Status summary: AI client done, command parser started, execution engine largely
 
 - [x] `C-08` Command parser JSON extraction
 - [x] `C-09` Zod schemas for all action types
-- [~] `C-10` Command sanitizer (partial shared primitives exist, parser integration pending)
-- [ ] `C-10a` URL validation in parser pipeline
-- [ ] `C-10b` Selector sanitization in parser pipeline
-- [ ] `C-10c` Sensitivity classification wiring
+- [x] `C-10` Command sanitizer (partial shared primitives exist, parser integration pending)
+- [x] `C-10a` URL validation in parser pipeline
+- [x] `C-10b` Selector sanitization in parser pipeline
+- [x] `C-10c` Sensitivity classification wiring
 - [ ] `C-11` Tab manager
 - [ ] `C-12` Scripting adapter
 - [ ] `C-13` Debugger adapter
@@ -349,7 +349,7 @@ Status summary: Minimal prep only, ship tasks pending.
 
 - [ ] `T-01` Close current `C-08` by commit and push.
 - [x] `T-02` Implement `C-09` (Zod schemas + parser integration + tests).
-- [ ] `T-03` Implement `C-10` (security sanitization pipeline + tests).
+- [x] `T-03` Implement `C-10` (security sanitization pipeline + tests).
 - [ ] `T-04` Address bridge unhandled rejection failures in full test run.
 - [ ] `T-05` Fix lint gate (ESLint flat config).
 - [ ] `T-06` Raise coverage branch gate to roadmap target.

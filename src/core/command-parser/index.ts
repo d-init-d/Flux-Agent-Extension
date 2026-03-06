@@ -9,3 +9,5 @@ export {
   elementSelectorSchema,
   validateActionSchema,
 } from './schemas';
+
+export { sanitizeCommandAction } from './sanitizer';

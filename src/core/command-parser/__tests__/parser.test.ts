@@ -163,6 +163,50 @@ describe('CommandParser', () => {
     expect(result.errors?.[0]).toContain('selector must include at least one selector strategy');
   });
 
+  it('validate() rejects blocked URL protocols', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+    const result = parser.validate({
+      id: 'a-url-1',
+      type: 'navigate',
+      url: 'javascript:alert(1)',
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors?.[0]).toContain('Blocked scheme');
+  });
+
+  it('validate() enforces allowedDomains policy', () => {
+    const parser = new CommandParser({
+      allowEvaluate: true,
+      allowedDomains: ['internal.test'],
+    });
+
+    const result = parser.validate({
+      id: 'a-url-2',
+      type: 'navigate',
+      url: 'https://example.com',
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors?.[0]).toContain('Domain is not in allowed list');
+  });
+
+  it('validate() enforces blockedSelectors policy', () => {
+    const parser = new CommandParser({
+      allowEvaluate: true,
+      blockedSelectors: ['delete account'],
+    });
+
+    const result = parser.validate({
+      id: 'a-sel-1',
+      type: 'click',
+      selector: { text: 'Delete account' },
+    } as unknown as Action);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors?.[0]).toContain('Selector blocked by parser configuration');
+  });
+
   it('blocks non-http URL protocols for navigate actions', () => {
     const parser = new CommandParser({ allowEvaluate: true });
 
@@ -194,6 +238,51 @@ describe('CommandParser', () => {
 
     const action = result.actions[0] as unknown as Record<string, unknown>;
     expect(action.injected).toBeUndefined();
+  });
+
+  it('rejects unsafe selector content during parser sanitization', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+
+    try {
+      parser.parse(
+        JSON.stringify({
+          actions: [{ type: 'click', selector: { css: 'div[url(javascript:alert(1))]' } }],
+        }),
+      );
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_INVALID);
+    }
+  });
+
+  it('rejects unsafe evaluate script during parser sanitization', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+
+    try {
+      parser.parse(
+        JSON.stringify({
+          actions: [{ type: 'evaluate', script: 'fetch(\"https://evil.test\")' }],
+        }),
+      );
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_BLOCKED);
+    }
+  });
+
+  it('blocks action when classifier marks it as blocked', () => {
+    const parser = new CommandParser({ allowEvaluate: true });
+
+    try {
+      parser.parse(
+        JSON.stringify({
+          actions: [{ type: 'click', selector: { text: 'chrome://extensions' } }],
+        }),
+      );
+      throw new Error('Expected parse to throw');
+    } catch (error) {
+      expect((error as ExtensionError).code).toBe(ErrorCode.ACTION_BLOCKED);
+    }
   });
 
   it('sanitize() trims description and navigate URL', () => {
