@@ -1,0 +1,150 @@
+import { ErrorCode, ExtensionError } from '@shared/errors';
+
+import { DebuggerAdapter } from '../debugger-adapter';
+
+type DebuggerOnDetachMock = {
+  dispatch: (source: chrome.debugger.Debuggee, reason: string) => void;
+};
+
+describe('DebuggerAdapter', () => {
+  let adapter: DebuggerAdapter;
+
+  beforeEach(() => {
+    adapter = new DebuggerAdapter();
+  });
+
+  it('attaches idempotently and tracks attachment state', async () => {
+    await adapter.attach(1);
+    await adapter.attach(1);
+
+    expect(adapter.isAttached(1)).toBe(true);
+    expect(chrome.tabs.get).toHaveBeenCalledWith(1);
+    expect(chrome.debugger.attach).toHaveBeenCalledTimes(1);
+    expect(chrome.debugger.attach).toHaveBeenCalledWith({ tabId: 1 }, '1.3');
+  });
+
+  it('detaches idempotently and clears attachment state', async () => {
+    await adapter.attach(1);
+
+    await adapter.detach(1);
+    await adapter.detach(1);
+
+    expect(adapter.isAttached(1)).toBe(false);
+    expect(chrome.debugger.detach).toHaveBeenCalledTimes(1);
+    expect(chrome.debugger.detach).toHaveBeenCalledWith({ tabId: 1 });
+  });
+
+  it('sends command successfully after attaching', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({ nodeId: 88 });
+
+    const result = await adapter.sendCommand(1, 'DOM.querySelector', {
+      nodeId: 1,
+      selector: '#submit',
+    });
+
+    expect(result).toEqual({ nodeId: 88 });
+    expect(chrome.debugger.attach).toHaveBeenCalledWith({ tabId: 1 }, '1.3');
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 1 },
+      'DOM.querySelector',
+      { nodeId: 1, selector: '#submit' },
+    );
+  });
+
+  it('handles detach event and updates attached state', async () => {
+    await adapter.attach(1);
+
+    const onDetach = chrome.debugger.onDetach as unknown as DebuggerOnDetachMock;
+    onDetach.dispatch({ tabId: 1 }, 'target_closed');
+
+    expect(adapter.isAttached(1)).toBe(false);
+  });
+
+  it('captures screenshot using CDP wrapper', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({ data: 'base64-image' });
+
+    const image = await adapter.captureScreenshot(1, { format: 'png' });
+
+    expect(image).toBe('base64-image');
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 1 },
+      'Page.captureScreenshot',
+      { format: 'png' },
+    );
+  });
+
+  it('evaluates expression using Runtime.evaluate wrapper', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({
+      result: { type: 'string', value: 'ok' },
+    });
+
+    const response = await adapter.evaluate(1, 'document.title', {
+      returnByValue: true,
+      awaitPromise: true,
+    });
+
+    expect(response).toEqual({ result: { type: 'string', value: 'ok' } });
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 1 },
+      'Runtime.evaluate',
+      {
+        expression: 'document.title',
+        returnByValue: true,
+        awaitPromise: true,
+      },
+    );
+  });
+
+  it('provides DOM helper wrappers', async () => {
+    const sendSpy = vi.spyOn(chrome.debugger, 'sendCommand');
+    sendSpy
+      .mockResolvedValueOnce({ root: { nodeId: 1 } })
+      .mockResolvedValueOnce({ nodeId: 12 });
+
+    const documentNode = await adapter.getDocument(1, -1, true);
+    const queryResult = await adapter.querySelector(1, 1, '.cta');
+
+    expect(documentNode).toEqual({ root: { nodeId: 1 } });
+    expect(queryResult).toEqual({ nodeId: 12 });
+    expect(sendSpy).toHaveBeenNthCalledWith(1, { tabId: 1 }, 'DOM.getDocument', {
+      depth: -1,
+      pierce: true,
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(2, { tabId: 1 }, 'DOM.querySelector', {
+      nodeId: 1,
+      selector: '.cta',
+    });
+  });
+
+  it('maps missing tab to TAB_NOT_FOUND on attach', async () => {
+    await expect(adapter.attach(9_999)).rejects.toMatchObject({
+      code: ErrorCode.TAB_NOT_FOUND,
+    } satisfies Partial<ExtensionError>);
+  });
+
+  it('maps permission errors to TAB_PERMISSION_DENIED', async () => {
+    vi.spyOn(chrome.debugger, 'attach').mockRejectedValueOnce(new Error('Permission denied'));
+
+    await expect(adapter.attach(1)).rejects.toMatchObject({
+      code: ErrorCode.TAB_PERMISSION_DENIED,
+    } satisfies Partial<ExtensionError>);
+  });
+
+  it('maps closed target failures to TAB_CLOSED', async () => {
+    await adapter.attach(1);
+    vi.spyOn(chrome.debugger, 'sendCommand').mockRejectedValueOnce(new Error('Target closed'));
+
+    await expect(adapter.sendCommand(1, 'Runtime.evaluate', { expression: '1+1' })).rejects.toMatchObject({
+      code: ErrorCode.TAB_CLOSED,
+    } satisfies Partial<ExtensionError>);
+  });
+
+  it('maps unknown debugger failures to ACTION_FAILED', async () => {
+    await adapter.attach(1);
+    vi.spyOn(chrome.debugger, 'sendCommand').mockRejectedValueOnce(new Error('Something unexpected happened'));
+
+    await expect(adapter.sendCommand(1, 'Runtime.evaluate', { expression: '2+2' })).rejects.toMatchObject({
+      code: ErrorCode.ACTION_FAILED,
+    } satisfies Partial<ExtensionError>);
+  });
+});

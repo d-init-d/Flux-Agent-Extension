@@ -130,12 +130,12 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-10c` Sensitivity classification wiring
 - [x] `C-11` Tab manager
 - [x] `C-12` Scripting adapter
-- [ ] `C-13` Debugger adapter
-- [ ] `C-13a` CDP mouse events
-- [ ] `C-13b` CDP key events
-- [ ] `C-13c` CDP screenshot
-- [ ] `C-13d` CDP runtime evaluate
-- [ ] `C-13e` CDP DOM commands
+- [x] `C-13` Debugger adapter
+- [x] `C-13a` CDP mouse events
+- [x] `C-13b` CDP key events
+- [x] `C-13c` CDP screenshot
+- [x] `C-13d` CDP runtime evaluate
+- [x] `C-13e` CDP DOM commands
 
 ### Sprint 2.3
 
