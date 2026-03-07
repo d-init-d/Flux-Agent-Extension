@@ -20,7 +20,7 @@ interface ThemeContextValue {
   /** The actually applied theme after resolving "system" */
   resolvedTheme: ResolvedTheme;
   /** Switch to a different mode */
-  setMode: (mode: ThemeMode) => void;
+  setMode: (mode: ThemeMode, options?: { persist?: boolean }) => void;
   /** Toggle between light and dark (ignoring system) */
   toggle: () => void;
 }
@@ -117,12 +117,14 @@ const ThemeProvider: React.FC<ThemeProviderProps> = ({
   // -----------------------------------------------------------------------
   // Persist preference
   // -----------------------------------------------------------------------
-  const setMode = useCallback((newMode: ThemeMode) => {
+  const setMode = useCallback((newMode: ThemeMode, options?: { persist?: boolean }) => {
     setModeState(newMode);
-    try {
-      localStorage.setItem(STORAGE_KEY, newMode);
-    } catch {
-      // Ignore storage errors
+    if (options?.persist !== false) {
+      try {
+        localStorage.setItem(STORAGE_KEY, newMode);
+      } catch {
+        // Ignore storage errors
+      }
     }
   }, []);
 

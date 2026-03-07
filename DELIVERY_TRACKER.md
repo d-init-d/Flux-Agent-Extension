@@ -212,7 +212,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 
 - [x] `U-07` Provider settings baseline
 - [x] `U-08` Permission toggles
-- [ ] `U-09` Appearance settings
+- [x] `U-09` Appearance settings
 - [ ] `U-10` Onboarding flow
 - [ ] `U-10a` Welcome
 - [ ] `U-10b` Connect provider

@@ -3,6 +3,15 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../App';
 import { renderWithProviders, readStorage, seedStorage } from '../../test/helpers';
+import { ThemeProvider } from '../../ui/theme';
+
+function renderOptionsApp() {
+  return renderWithProviders(
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>,
+  );
+}
 
 describe('Options App', () => {
   it('loads stored provider settings and masked key metadata', async () => {
@@ -35,7 +44,7 @@ describe('Options App', () => {
       'session',
     );
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
     expect(screen.getByLabelText('Provider')).toHaveValue('claude');
@@ -48,7 +57,7 @@ describe('Options App', () => {
   it('saves provider configuration and keeps only masked key metadata', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
     await user.selectOptions(screen.getByLabelText('Provider'), 'openrouter');
@@ -87,7 +96,7 @@ describe('Options App', () => {
       }),
     );
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
     await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
@@ -101,7 +110,7 @@ describe('Options App', () => {
   it('blocks insecure endpoint validation for custom providers', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
     await user.selectOptions(screen.getByLabelText('Provider'), 'custom');
@@ -115,7 +124,7 @@ describe('Options App', () => {
   it('blocks saving insecure custom endpoints', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
     await user.selectOptions(screen.getByLabelText('Provider'), 'custom');
@@ -146,7 +155,7 @@ describe('Options App', () => {
       },
     });
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     expect(await screen.findByDisplayValue('http://legacy.example.com/v1')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /test connection/i }));
@@ -167,7 +176,7 @@ describe('Options App', () => {
       },
     });
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     expect(await screen.findByRole('heading', { name: /permission toggles/i })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
@@ -179,7 +188,7 @@ describe('Options App', () => {
   it('saves permission toggles to extension settings', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /permission toggles/i });
 
@@ -207,7 +216,7 @@ describe('Options App', () => {
   it('toggles a permission when the card body is clicked', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /permission toggles/i });
     await user.click(screen.getByText(/share screenshots with ai/i));
@@ -215,10 +224,118 @@ describe('Options App', () => {
     expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('loads appearance settings from stored preferences', async () => {
+    await seedStorage({
+      settings: {
+        defaultProvider: 'openai',
+        theme: 'dark',
+        language: 'vi',
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /appearance settings/i });
+    expect(screen.getByLabelText('Language')).toHaveValue('vi');
+    expect(screen.getByRole('radio', { name: /use dark theme/i })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('saves appearance settings to extension settings', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /appearance settings/i });
+    await user.click(screen.getByRole('radio', { name: /use dark theme/i }));
+    await user.selectOptions(screen.getByLabelText('Language'), 'vi');
+    expect(localStorage.getItem('flux-agent-theme')).toBe('system');
+    await user.click(screen.getByRole('button', { name: /save appearance/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('settings')).resolves.toEqual(
+        expect.objectContaining({
+          theme: 'dark',
+          language: 'vi',
+          defaultProvider: 'openai',
+        }),
+      );
+    });
+
+    expect(await screen.findByText(/appearance settings saved/i)).toBeInTheDocument();
+  });
+
+  it('does not persist unsaved appearance changes when saving permissions', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /appearance settings/i });
+    await user.click(screen.getByRole('radio', { name: /use dark theme/i }));
+    await user.selectOptions(screen.getByLabelText('Language'), 'vi');
+    await user.click(screen.getByRole('switch', { name: /share screenshots with ai/i }));
+    await user.click(screen.getByRole('button', { name: /save permissions/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('settings')).resolves.toEqual(
+        expect.objectContaining({
+          theme: 'system',
+          language: 'auto',
+          includeScreenshotsInContext: true,
+        }),
+      );
+    });
+  });
+
+  it('does not persist unsaved provider changes when saving appearance settings', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'openrouter');
+    await user.click(screen.getByRole('radio', { name: /use dark theme/i }));
+    await user.selectOptions(screen.getByLabelText('Language'), 'vi');
+    await user.click(screen.getByRole('button', { name: /save appearance/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('settings')).resolves.toEqual(
+        expect.objectContaining({
+          defaultProvider: 'openai',
+          theme: 'dark',
+          language: 'vi',
+        }),
+      );
+    });
+
+    await expect(readStorage('activeProvider')).resolves.toBeUndefined();
+  });
+
+  it('does not persist unsaved permission changes when saving appearance settings', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /appearance settings/i });
+    await user.click(screen.getByRole('switch', { name: /share screenshots with ai/i }));
+    await user.click(screen.getByRole('radio', { name: /use dark theme/i }));
+    await user.selectOptions(screen.getByLabelText('Language'), 'vi');
+    await user.click(screen.getByRole('button', { name: /save appearance/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('settings')).resolves.toEqual(
+        expect.objectContaining({
+          includeScreenshotsInContext: false,
+          theme: 'dark',
+          language: 'vi',
+        }),
+      );
+    });
+  });
+
   it('supports keyboard toggling from the permission card control', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /permission toggles/i });
 
@@ -232,7 +349,7 @@ describe('Options App', () => {
   it('blocks saving custom scripts until the warning is acknowledged', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /permission toggles/i });
     await user.click(screen.getByRole('switch', { name: /allow custom scripts/i }));
@@ -245,7 +362,7 @@ describe('Options App', () => {
   it('does not persist unsaved permission toggles when saving provider settings', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
     await user.click(screen.getByRole('switch', { name: /share screenshots with ai/i }));
@@ -266,7 +383,7 @@ describe('Options App', () => {
   it('does not persist unsaved provider changes when saving permissions', async () => {
     const user = userEvent.setup();
 
-    renderWithProviders(<App />);
+    renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
     await user.selectOptions(screen.getByLabelText('Provider'), 'openrouter');

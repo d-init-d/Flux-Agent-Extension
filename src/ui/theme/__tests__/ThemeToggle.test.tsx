@@ -58,4 +58,23 @@ describe('ThemeToggle', () => {
     );
     expect(localStorage.getItem('flux-agent-theme')).toBe('system');
   });
+
+  it('can change the preview without persisting immediately', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider defaultMode="light">
+        <ThemeToggle persistOnSelect={false} />
+      </ThemeProvider>,
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Use dark theme' }));
+
+    expect(screen.getByRole('radio', { name: 'Use dark theme' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(localStorage.getItem('flux-agent-theme')).toBeNull();
+  });
 });

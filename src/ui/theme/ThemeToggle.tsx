@@ -11,6 +11,8 @@ type ThemeOption = {
 
 interface ThemeToggleProps {
   className?: string;
+  onModeChange?: (mode: ThemeOption['mode']) => void;
+  persistOnSelect?: boolean;
 }
 
 const THEME_OPTIONS: ThemeOption[] = [
@@ -19,7 +21,7 @@ const THEME_OPTIONS: ThemeOption[] = [
   { mode: 'system', label: 'System', icon: LaptopMinimal },
 ];
 
-export function ThemeToggle({ className = '' }: ThemeToggleProps) {
+export function ThemeToggle({ className = '', onModeChange, persistOnSelect = true }: ThemeToggleProps) {
   const { mode, resolvedTheme, setMode } = useTheme();
   const groupLabelId = useId();
 
@@ -46,9 +48,12 @@ export function ThemeToggle({ className = '' }: ThemeToggleProps) {
               type="button"
               role="radio"
               aria-checked={isSelected}
-              aria-label={`Use ${option.label.toLowerCase()} theme`}
-              title={stateLabel}
-              onClick={() => setMode(option.mode)}
+               aria-label={`Use ${option.label.toLowerCase()} theme`}
+               title={stateLabel}
+               onClick={() => {
+                 setMode(option.mode, { persist: persistOnSelect });
+                 onModeChange?.(option.mode);
+               }}
               className={[
                 'flex min-h-9 min-w-0 items-center gap-1.5 rounded-xl px-3 text-xs font-medium tracking-tight transition-all duration-150',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-border-focus))] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--color-bg-primary))]',

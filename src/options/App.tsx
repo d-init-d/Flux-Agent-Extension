@@ -12,6 +12,7 @@ import { ClaudeProvider, GeminiProvider, OllamaProvider, OpenAIProvider, OpenRou
 import type { AIModelConfig, AIProviderType, ExtensionSettings, ProviderConfig } from '@shared/types';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Switch } from '@ui/components';
 import type { BadgeVariant } from '@ui/components';
+import { ThemeToggle, useTheme } from '@ui/theme';
 
 type SaveState = 'idle' | 'success' | 'error';
 type ValidationState = 'idle' | 'success' | 'error';
@@ -423,9 +424,11 @@ async function validateProviderConnection(
 }
 
 export function App() {
+  const { setMode } = useTheme();
   const [isReady, setIsReady] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
+  const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<AIProviderType>(DEFAULT_PROVIDER);
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfigMap>(() =>
@@ -438,6 +441,8 @@ export function App() {
   const [saveMessage, setSaveMessage] = useState('');
   const [permissionSaveState, setPermissionSaveState] = useState<SaveState>('idle');
   const [permissionMessage, setPermissionMessage] = useState('');
+  const [appearanceSaveState, setAppearanceSaveState] = useState<SaveState>('idle');
+  const [appearanceMessage, setAppearanceMessage] = useState('');
   const [validationState, setValidationState] = useState<ValidationState>('idle');
   const [validationMessage, setValidationMessage] = useState('');
   const [customScriptsConfirmed, setCustomScriptsConfirmed] = useState(false);
@@ -477,6 +482,7 @@ export function App() {
       setSettings(normalizedSettings);
       setSavedSettings(normalizedSettings);
       setCustomScriptsConfirmed(normalizedSettings.allowCustomScripts);
+      setMode(normalizedSettings.theme, { persist: false });
       setApiKeyMetadata(normalizeMetadata(localState[STORAGE_KEYS.apiKeyMetadata]));
       setIsReady(true);
     }
@@ -619,6 +625,27 @@ export function App() {
     setPermissionSaveState('idle');
   }
 
+  function handleThemeChange(theme: ExtensionSettings['theme']): void {
+    setSettings((current) => ({
+      ...current,
+      theme,
+    }));
+    setAppearanceSaveState('idle');
+  }
+
+  function handleLanguageChange(event: React.ChangeEvent<HTMLSelectElement>): void {
+    const nextLanguage = event.target.value;
+    if (nextLanguage !== 'en' && nextLanguage !== 'vi' && nextLanguage !== 'auto') {
+      return;
+    }
+
+    setSettings((current) => ({
+      ...current,
+      language: nextLanguage,
+    }));
+    setAppearanceSaveState('idle');
+  }
+
   async function handleSavePermissions(): Promise<void> {
     setIsSavingPermissions(true);
     setPermissionSaveState('idle');
@@ -640,6 +667,12 @@ export function App() {
         [STORAGE_KEYS.settings]: nextSettings,
       });
 
+      setMode(nextSettings.theme);
+      try {
+        localStorage.setItem('flux-agent-theme', nextSettings.theme);
+      } catch {
+        // Ignore storage errors in restricted contexts.
+      }
       setSavedSettings(nextSettings);
       setSettings((current) => ({
         ...current,
@@ -652,6 +685,37 @@ export function App() {
       setPermissionMessage('Failed to save permission toggles.');
     } finally {
       setIsSavingPermissions(false);
+    }
+  }
+
+  async function handleSaveAppearance(): Promise<void> {
+    setIsSavingAppearance(true);
+    setAppearanceSaveState('idle');
+
+    try {
+      const nextSettings: ExtensionSettings = {
+        ...savedSettings,
+        theme: settings.theme,
+        language: settings.language,
+      };
+
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.settings]: nextSettings,
+      });
+
+      setSavedSettings(nextSettings);
+      setSettings((current) => ({
+        ...current,
+        theme: nextSettings.theme,
+        language: nextSettings.language,
+      }));
+      setAppearanceSaveState('success');
+      setAppearanceMessage('Appearance settings saved. Theme and language will stay consistent across Flux surfaces.');
+    } catch {
+      setAppearanceSaveState('error');
+      setAppearanceMessage('Failed to save appearance settings.');
+    } finally {
+      setIsSavingAppearance(false);
     }
   }
 
@@ -716,6 +780,13 @@ export function App() {
         : 'border-border bg-surface-primary text-content-secondary';
 
   const enabledPermissionCount = PERMISSION_DEFINITIONS.filter((permission) => settings[permission.key]).length;
+
+  const appearanceTone =
+    appearanceSaveState === 'success'
+      ? 'border-success-500/30 bg-success-50 text-success-700'
+      : appearanceSaveState === 'error'
+        ? 'border-error-500/30 bg-error-50 text-error-700'
+        : 'border-border bg-surface-primary text-content-secondary';
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgb(var(--color-primary-500)/0.14),_transparent_28%),linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_rgb(var(--color-bg-primary))_26%)] px-4 py-6 sm:px-6 lg:px-8">
@@ -1006,6 +1077,67 @@ export function App() {
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="overflow-hidden border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
+              <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
+                <CardTitle as="h2">Appearance settings</CardTitle>
+                <CardDescription>
+                  Set the visual theme and preferred language for Flux surfaces that already read shared settings.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-6 pt-6">
+                <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+                  <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+                    <div>
+                      <p className="text-sm font-semibold text-content-primary">Theme mode</p>
+                      <p className="mt-1 text-sm leading-6 text-content-secondary">
+                        Choose whether Flux follows your system preference or stays pinned to a specific look.
+                      </p>
+                    </div>
+                    <ThemeToggle className="w-full" onModeChange={handleThemeChange} persistOnSelect={false} />
+                  </div>
+
+                  <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+                    <Select
+                      id="language-select"
+                      label="Language"
+                      value={settings.language}
+                      onChange={handleLanguageChange}
+                      options={[
+                        { value: 'auto', label: 'Auto detect' },
+                        { value: 'en', label: 'English' },
+                        { value: 'vi', label: 'Vietnamese' },
+                      ]}
+                      helperText="Auto keeps the interface ready for the current workflow context until localization expands further."
+                      className="bg-surface-elevated"
+                    />
+
+                    <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
+                      Current profile: <span className="font-semibold text-content-primary">{settings.theme}</span> theme, <span className="font-semibold text-content-primary">{settings.language}</span> language.
+                    </div>
+                  </div>
+                </section>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className={`rounded-2xl border px-4 py-3 text-sm ${appearanceTone}`}>
+                    {appearanceMessage || 'Adjust theme or language, then save the appearance profile.'}
+                  </div>
+
+                  <Button
+                    type="button"
+                    loading={isSavingAppearance}
+                    onClick={() => {
+                      void handleSaveAppearance();
+                    }}
+                    iconLeft={<Sparkles />}
+                    disabled={!isReady}
+                  >
+                    Save appearance
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="space-y-6">
@@ -1043,16 +1175,16 @@ export function App() {
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
                     <Sparkles className="h-4 w-4 text-primary-600" />
-                    U-09 appearance settings
+                    U-10 onboarding flow
                   </div>
-                  <p className="mt-1">Theme and language controls can hook into the same settings state without another storage rewrite.</p>
+                  <p className="mt-1">The onboarding screens can now reuse provider setup, permissions, and appearance defaults from this page.</p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
                     <LaptopMinimal className="h-4 w-4 text-primary-600" />
-                    U-10 onboarding flow
+                    U-11 highlight overlay
                   </div>
-                  <p className="mt-1">The onboarding screens can now reuse provider setup and permission copy from this page.</p>
+                  <p className="mt-1">Visual targeting overlays can inherit the same theme profile for a more consistent feedback layer.</p>
                 </div>
               </CardContent>
             </Card>
