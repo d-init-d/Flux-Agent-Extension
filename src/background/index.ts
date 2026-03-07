@@ -12,6 +12,7 @@
 
 import { ServiceWorkerBridge } from '@core/bridge';
 import { registerKeyboardShortcutHandlers } from './keyboard-shortcuts';
+import { UISessionRuntime } from './ui-session-runtime';
 import { Logger } from '@shared/utils';
 import type {
   TabState,
@@ -33,6 +34,7 @@ const KEEP_ALIVE_INTERVAL_MS = 25_000;
 const DEFAULT_SETTINGS = {
   language: 'auto' as const,
   theme: 'system' as const,
+  defaultProvider: 'openai' as const,
   debugMode: false,
   streamResponses: true,
   includeScreenshotsInContext: false,
@@ -283,6 +285,7 @@ export class ServiceWorkerManager {
   private readonly bridge: ServiceWorkerBridge;
   private readonly logger: Logger;
   private readonly keepAlive: KeepAliveManager;
+  private readonly uiSessionRuntime: UISessionRuntime;
   private readonly tabStates: Map<number, TabState> = new Map();
   private readonly extensionMessageReplayCache = new Map<string, number>();
   private keyboardShortcutsCleanup: (() => void) | null = null;
@@ -294,6 +297,10 @@ export class ServiceWorkerManager {
     this.logger = new Logger('FluxSW', 'debug');
     this.bridge = new ServiceWorkerBridge();
     this.keepAlive = new KeepAliveManager(this.logger);
+    this.uiSessionRuntime = new UISessionRuntime({
+      bridge: this.bridge,
+      logger: this.logger,
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -724,29 +731,24 @@ export class ServiceWorkerManager {
       channel: extMsg.channel,
     });
 
-    if (extMsg.type === 'ACTION_ABORT' || extMsg.type === 'SESSION_ABORT') {
-      this.logger.info(`Abort message acknowledged: ${extMsg.type}`, {
-        id: extMsg.id,
-        channel: extMsg.channel,
+    this.uiSessionRuntime
+      .handleMessage(extMsg)
+      .then((response) => {
+        sendResponse(response satisfies ExtensionResponse);
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : 'Unknown runtime error';
+        this.logger.error(`Failed to handle extension message ${extMsg.type}`, error);
+        sendResponse({
+          success: false,
+          error: {
+            code: 'RUNTIME_MESSAGE_FAILED',
+            message,
+          },
+        } satisfies ExtensionResponse);
       });
 
-      sendResponse({ success: true } satisfies ExtensionResponse);
-      return false;
-    }
-
-    // Stub handler — all types return NOT_IMPLEMENTED until Sprint 2.x
-    const response: ExtensionResponse = {
-      success: false,
-      error: {
-        code: 'NOT_IMPLEMENTED',
-        message: `Handler for "${extMsg.type}" is not yet implemented`,
-      },
-    };
-
-    sendResponse(response);
-
-    // Return false — response was sent synchronously
-    return false;
+    return true;
   }
 
   /**

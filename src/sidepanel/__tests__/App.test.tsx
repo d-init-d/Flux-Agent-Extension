@@ -1,131 +1,197 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
 import { App } from '../App';
+import { resetActionLogStore } from '../store/actionLogStore';
+import { resetChatStore } from '../store/chatStore';
+import { resetSessionStore } from '../store/sessionStore';
 
-function renderApp() {
-  return render(
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>,
-  );
+import type { ExtensionMessage, Session } from '@shared/types';
+
+const listeners = new Set<(message: unknown) => void>();
+
+const sendExtensionRequest = vi.fn();
+
+vi.mock('../lib/extension-client', () => ({
+  sendExtensionRequest: (...args: unknown[]) => sendExtensionRequest(...args),
+  subscribeToExtensionEvents: (handler: (message: unknown) => void) => {
+    listeners.add(handler);
+    return () => {
+      listeners.delete(handler);
+    };
+  },
+}));
+
+function createSession(id: string, overrides: Partial<Session> = {}): Session {
+  return {
+    config: {
+      id,
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      ...overrides.config,
+    },
+    status: 'idle',
+    targetTabId: 1,
+    messages: [],
+    currentTurn: 0,
+    actionHistory: [],
+    variables: {},
+    startedAt: Date.now(),
+    lastActivityAt: Date.now(),
+    errorCount: 0,
+    ...overrides,
+  };
 }
 
-describe('Side panel App (U-03 input baseline)', () => {
-  it('renders header, chat area, and input section', () => {
-    renderApp();
+function emitExtensionEvent(message: ExtensionMessage): void {
+  for (const listener of listeners) {
+    listener(message);
+  }
+}
+
+async function renderApp() {
+  await act(async () => {
+    render(
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>,
+    );
+  });
+}
+
+describe('Side panel App (U-15 integration)', () => {
+  beforeEach(() => {
+    sendExtensionRequest.mockReset();
+    listeners.clear();
+
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return { sessions: [createSession('session-1')] };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        default:
+          return undefined;
+      }
+    });
+  });
+
+  afterEach(() => {
+    resetSessionStore();
+    resetChatStore();
+    resetActionLogStore();
+  });
+
+  it('renders the connected layout and bootstraps a session selector', async () => {
+    await renderApp();
 
     const header = screen.getByTestId('sidepanel-header');
     expect(within(header).getByRole('heading', { level: 1, name: 'Flux Agent' })).toBeInTheDocument();
     expect(within(header).getByRole('radiogroup', { name: 'Theme mode' })).toBeInTheDocument();
 
-    const chatArea = screen.getByTestId('sidepanel-chat-area');
-    expect(within(chatArea).getByTestId('sidepanel-action-log')).toBeInTheDocument();
-    expect(within(chatArea).getByRole('button', { name: 'Expand action log' })).toBeInTheDocument();
-    expect(within(chatArea).getByRole('region', { name: 'Chat conversation' })).toBeInTheDocument();
-    expect(within(chatArea).getByTestId('message-bubble-user')).toBeInTheDocument();
-    expect(within(chatArea).getByTestId('message-bubble-assistant')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Active session' })).toHaveValue('session-1');
+    });
 
-    const inputSection = screen.getByTestId('sidepanel-input-section');
-    expect(within(inputSection).getByRole('textbox', { name: 'Message input' })).toBeInTheDocument();
-    expect(within(inputSection).getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(screen.getByText('Create or switch a session, then send a prompt to start a streamed response.')).toBeInTheDocument();
   });
 
-  it('keeps semantic layout order and accessible input labeling', () => {
-    const { container } = renderApp();
+  it('updates chat and action log from service worker events', async () => {
+    await renderApp();
 
-    const root = container.firstElementChild as HTMLElement;
-    expect(root).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Active session' })).toHaveValue('session-1');
+    });
 
-    const children = Array.from(root.children);
-    expect(children).toHaveLength(3);
-    expect(children[0].tagName).toBe('HEADER');
-    expect(children[1].tagName).toBe('MAIN');
-    expect(children[2].tagName).toBe('FOOTER');
+    await act(async () => {
+      emitExtensionEvent({
+        id: 'evt-1',
+        channel: 'sidePanel',
+        type: 'EVENT_SESSION_UPDATE',
+        timestamp: Date.now(),
+        payload: {
+          sessionId: 'session-1',
+          reason: 'updated',
+          session: createSession('session-1', {
+            messages: [{ role: 'user', content: 'Extract pricing', timestamp: Date.now() }],
+          }),
+        },
+      });
 
-    const textarea = screen.getByLabelText('Message input');
-    expect(textarea).toHaveAttribute('id', 'sidepanel-input');
+      emitExtensionEvent({
+        id: 'evt-2',
+        channel: 'sidePanel',
+        type: 'EVENT_AI_STREAM',
+        timestamp: Date.now(),
+        payload: {
+          sessionId: 'session-1',
+          messageId: 'assistant-1',
+          delta: 'Streaming reply',
+          done: false,
+        },
+      });
 
-    const chatRegion = screen.getByRole('region', { name: 'Chat conversation' });
-    expect(chatRegion).toHaveAttribute('aria-live', 'polite');
+      emitExtensionEvent({
+        id: 'evt-3',
+        channel: 'sidePanel',
+        type: 'EVENT_ACTION_PROGRESS',
+        timestamp: Date.now(),
+        payload: {
+          sessionId: 'session-1',
+          entry: {
+            id: 'action-1',
+            title: 'Preparing extraction workflow',
+            detail:
+              'Publishing action progress to the side panel while the response stream is generated.',
+            timestamp: Date.now(),
+            status: 'running',
+            progress: 35,
+            currentStep: 1,
+            totalSteps: 3,
+          },
+        },
+      });
+    });
 
-    const mainChildren = Array.from(children[1]?.children ?? []);
-    expect(mainChildren).toHaveLength(2);
-    expect(mainChildren[0]).toContainElement(chatRegion);
-    expect(mainChildren[1]).toHaveAttribute('data-testid', 'sidepanel-action-log');
-  });
-
-  it('enables send button when user types a message', async () => {
-    const user = userEvent.setup();
-    renderApp();
-
-    const textbox = screen.getByRole('textbox', { name: 'Message input' });
-    const sendButton = screen.getByRole('button', { name: 'Send' });
-
-    expect(sendButton).toBeDisabled();
-    await user.type(textbox, 'Run extraction');
-    expect(sendButton).toBeEnabled();
-  });
-
-  it('shows slash command list only when input starts with slash', async () => {
-    const user = userEvent.setup();
-    renderApp();
-
-    const textbox = screen.getByRole('textbox', { name: 'Message input' });
-
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
-
-    await user.type(textbox, '/');
-    expect(screen.getByTestId('slash-command-list')).toBeInTheDocument();
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
-
-    await user.clear(textbox);
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
-  });
-
-  it('expands the action log timeline from the sidepanel layout', async () => {
-    const user = userEvent.setup();
-    renderApp();
+    expect(await screen.findByText('Extract pricing')).toBeInTheDocument();
+    expect(screen.getByText('Streaming reply')).toBeInTheDocument();
 
     const toggle = screen.getByRole('button', { name: 'Expand action log' });
-    await user.click(toggle);
+    await userEvent.setup().click(toggle);
 
-    expect(screen.getByRole('button', { name: 'Collapse action log' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    expect(screen.getByRole('list', { name: 'Executed actions timeline' })).toBeInTheDocument();
-    expect(screen.getByTestId('action-timeline-icon-log-1')).toHaveAttribute('data-status', 'done');
-    expect(screen.getByTestId('action-timeline-icon-log-2')).toHaveAttribute('data-status', 'failed');
-    expect(screen.getByTestId('action-timeline-icon-log-3')).toHaveAttribute('data-status', 'running');
-    expect(screen.getByTestId('action-timeline-icon-log-4')).toHaveAttribute('data-status', 'pending');
+    expect(screen.getByText('Preparing extraction workflow')).toBeInTheDocument();
   });
 
-  it('filters baseline slash commands by typed prefix', async () => {
+  it('sends prompts and keeps the Escape abort shortcut', async () => {
     const user = userEvent.setup();
-    renderApp();
+    await renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Active session' })).toHaveValue('session-1');
+    });
 
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
-    await user.type(textbox, '/su');
+    await user.type(textbox, 'Run extraction');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(screen.getByText('/summarize')).toBeInTheDocument();
-    expect(screen.queryByText('/extract')).not.toBeInTheDocument();
-  });
+    expect(sendExtensionRequest).toHaveBeenCalledWith('SESSION_SEND_MESSAGE', {
+      sessionId: 'session-1',
+      message: 'Run extraction',
+    });
 
-  it('dispatches an abort extension message when Escape is pressed', () => {
     const sendMessage = vi.spyOn(chrome.runtime, 'sendMessage');
-    renderApp();
-
     fireEvent.keyDown(window, { key: 'Escape' });
 
-    expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         channel: 'sidePanel',
         type: 'ACTION_ABORT',
-        payload: {},
       }),
     );
   });

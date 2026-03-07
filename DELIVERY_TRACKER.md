@@ -185,7 +185,7 @@ Phase-2 execution order locked:
 
 ## PHASE 3 - UI & Integration
 
-Status summary: UI foundation exists; feature UI and end-to-end integration mostly pending.
+Status summary: UI foundation and sidepanel/service-worker store wiring are in place; remaining work is accessibility, UI security, and end-to-end coverage.
 
 ### Sprint 3.1
 
@@ -203,10 +203,10 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-05` Action timeline states
 - [x] `U-06` Popup baseline
 - [x] `U-13` Theme toggle infra
-- [ ] `U-15` UI stores to SW integration
-- [ ] `U-15a` Session store
-- [ ] `U-15b` Chat streaming store
-- [ ] `U-15c` Action log store
+- [x] `U-15` UI stores to SW integration
+- [x] `U-15a` Session store
+- [x] `U-15b` Chat streaming store
+- [x] `U-15c` Action log store
 
 ### Sprint 3.2
 
@@ -221,7 +221,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-11` Highlight overlay baseline
 - [x] `U-12` Action status overlay
 - [x] `U-14` Keyboard shortcuts
-- [ ] `U-15d` Overlay bridge wiring
+- [x] `U-15d` Overlay bridge wiring
 - [ ] `U-16` Full E2E pipeline
 - [ ] `U-16a` Navigation E2E
 - [ ] `U-16b` Form-filling E2E

@@ -1,4 +1,4 @@
-import type { Action } from './actions';
+import type { Action, ElementSelector } from './actions';
 import type { ActionResult, PageContext } from './browser';
 import type { SessionConfig, Session } from './session';
 import type { ContextBuilderOptions } from '../../core/session/interfaces';
@@ -88,6 +88,43 @@ export interface SessionCreateResponse {
   session: Session;
 }
 
+export type SessionUpdateReason = 'created' | 'updated' | 'deleted';
+
+export interface SessionUpdateEventPayload {
+  sessionId: string;
+  session: Session | null;
+  reason: SessionUpdateReason;
+}
+
+export type ActionLogEventStatus = 'pending' | 'running' | 'done' | 'failed';
+
+export interface ActionLogEventEntry {
+  id: string;
+  actionId?: string;
+  title: string;
+  detail: string;
+  timestamp: number;
+  status: ActionLogEventStatus;
+  progress: number;
+  currentStep: number;
+  totalSteps: number;
+  selector?: ElementSelector;
+  errorCode?: string;
+}
+
+export interface ActionProgressEventPayload {
+  sessionId: string;
+  entry: ActionLogEventEntry;
+}
+
+export interface AIStreamEventPayload {
+  sessionId: string;
+  messageId: string;
+  delta: string;
+  done: boolean;
+  error?: string;
+}
+
 export interface SessionStartRequest {
   sessionId: string;
   prompt?: string;
@@ -148,9 +185,9 @@ export interface RequestPayloadMap {
   API_KEY_VALIDATE: { provider: string; apiKey: string };
   CONTEXT_GET: ContextGetRequest;
   CONTEXT_UPDATE: { tabId: number };
-  EVENT_SESSION_UPDATE: { sessionId: string };
-  EVENT_ACTION_PROGRESS: { actionId: string; progress: number };
-  EVENT_AI_STREAM: { sessionId: string; chunk: string };
+  EVENT_SESSION_UPDATE: SessionUpdateEventPayload;
+  EVENT_ACTION_PROGRESS: ActionProgressEventPayload;
+  EVENT_AI_STREAM: AIStreamEventPayload;
   EVENT_ERROR: { code: string; message: string };
 }
 

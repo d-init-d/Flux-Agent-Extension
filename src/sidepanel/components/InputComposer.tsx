@@ -10,6 +10,7 @@ interface SlashCommand {
 interface InputComposerProps {
   onSend?: (value: string) => void;
   commands?: SlashCommand[];
+  disabled?: boolean;
 }
 
 const DEFAULT_COMMANDS: SlashCommand[] = [
@@ -46,14 +47,14 @@ function resizeTextarea(textarea: HTMLTextAreaElement): void {
   textarea.style.overflowY = textarea.scrollHeight > INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
 }
 
-export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComposerProps) {
+export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = false }: InputComposerProps) {
   const [inputValue, setInputValue] = useState('');
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isSlashMode = inputValue.startsWith('/');
   const normalizedValue = inputValue.trim();
-  const canSend = normalizedValue.length > 0;
+  const canSend = normalizedValue.length > 0 && !disabled;
 
   const filteredCommands = useMemo(() => {
     if (!isSlashMode) {
@@ -214,9 +215,10 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS }: InputComp
           name="sidepanel-input"
           rows={2}
           value={inputValue}
+          disabled={disabled}
           onChange={handleInputChange}
           onKeyDown={handleInputKeyDown}
-          placeholder="Type a message or command..."
+          placeholder={disabled ? 'Wait for the current response to finish...' : 'Type a message or command...'}
           aria-autocomplete="list"
           aria-keyshortcuts="Control+Enter Meta+Enter"
           aria-controls={isSlashMode ? 'sidepanel-command-list' : undefined}

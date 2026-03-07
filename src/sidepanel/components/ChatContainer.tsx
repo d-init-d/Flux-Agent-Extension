@@ -35,15 +35,14 @@ export function ChatContainer({ messages = [] }: ChatContainerProps) {
               </svg>
             </div>
 
-            <h2 className="text-lg font-semibold tracking-tight text-[rgb(var(--color-text-primary))]">
-              Start a conversation
-            </h2>
-            <p className="mt-2 text-sm leading-snug text-[rgb(var(--color-text-secondary))]">
-              This panel is ready for U-01 layout. Message rendering and command parsing will
-              be added in the next tasks.
-            </p>
+             <h2 className="text-lg font-semibold tracking-tight text-[rgb(var(--color-text-primary))]">
+               Start a conversation
+             </h2>
+             <p className="mt-2 text-sm leading-snug text-[rgb(var(--color-text-secondary))]">
+                Create or switch a session, then send a prompt to start a streamed response.
+              </p>
+            </div>
           </div>
-        </div>
       </section>
     );
   }
