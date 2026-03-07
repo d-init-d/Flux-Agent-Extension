@@ -11,6 +11,7 @@
  */
 
 import { ServiceWorkerBridge } from '@core/bridge';
+import { registerKeyboardShortcutHandlers } from './keyboard-shortcuts';
 import { Logger } from '@shared/utils';
 import type {
   TabState,
@@ -284,6 +285,7 @@ export class ServiceWorkerManager {
   private readonly keepAlive: KeepAliveManager;
   private readonly tabStates: Map<number, TabState> = new Map();
   private readonly extensionMessageReplayCache = new Map<string, number>();
+  private keyboardShortcutsCleanup: (() => void) | null = null;
 
   /** Unsubscribe functions returned by `bridge.onEvent()`. */
   private readonly bridgeUnsubscribers: Array<() => void> = [];
@@ -323,6 +325,9 @@ export class ServiceWorkerManager {
   destroy(): void {
     this.keepAlive.stop();
 
+    this.keyboardShortcutsCleanup?.();
+    this.keyboardShortcutsCleanup = null;
+
     for (const unsub of this.bridgeUnsubscribers) {
       try {
         unsub();
@@ -344,6 +349,8 @@ export class ServiceWorkerManager {
   // --------------------------------------------------------------------------
 
   private registerChromeListeners(): void {
+    this.keyboardShortcutsCleanup = registerKeyboardShortcutHandlers(this.logger);
+
     // -- runtime.onInstalled ------------------------------------------------
     chrome.runtime.onInstalled.addListener((details) => {
       try {
@@ -716,6 +723,16 @@ export class ServiceWorkerManager {
       id: extMsg.id,
       channel: extMsg.channel,
     });
+
+    if (extMsg.type === 'ACTION_ABORT' || extMsg.type === 'SESSION_ABORT') {
+      this.logger.info(`Abort message acknowledged: ${extMsg.type}`, {
+        id: extMsg.id,
+        channel: extMsg.channel,
+      });
+
+      sendResponse({ success: true } satisfies ExtensionResponse);
+      return false;
+    }
 
     // Stub handler — all types return NOT_IMPLEMENTED until Sprint 2.x
     const response: ExtensionResponse = {

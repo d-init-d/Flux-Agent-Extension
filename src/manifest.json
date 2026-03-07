@@ -20,6 +20,15 @@
     "service_worker": "src/background/index.ts",
     "type": "module"
   },
+  "commands": {
+    "open-side-panel": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Y",
+        "mac": "Command+Shift+Y"
+      },
+      "description": "Open the Flux Agent side panel"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],

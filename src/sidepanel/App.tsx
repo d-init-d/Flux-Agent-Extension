@@ -1,9 +1,12 @@
 import { ActionLogPanel, MOCK_ACTION_LOG } from './components/ActionLogPanel';
 import { ChatContainer, MOCK_CONVERSATION } from './components/ChatContainer';
 import { InputComposer } from './components/InputComposer';
+import { useEscapeToStopShortcut } from './keyboard-shortcuts';
 import { ThemeToggle } from '@/ui/theme';
 
 export function App() {
+  useEscapeToStopShortcut();
+
   return (
     <div className="flex h-screen min-h-0 flex-col bg-[rgb(var(--color-bg-primary))] text-[rgb(var(--color-text-primary))]">
       <header

@@ -220,7 +220,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-10d` Ready/tips
 - [x] `U-11` Highlight overlay baseline
 - [x] `U-12` Action status overlay
-- [ ] `U-14` Keyboard shortcuts
+- [x] `U-14` Keyboard shortcuts
 - [ ] `U-15d` Overlay bridge wiring
 - [ ] `U-16` Full E2E pipeline
 - [ ] `U-16a` Navigation E2E

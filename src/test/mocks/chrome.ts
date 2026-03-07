@@ -506,6 +506,16 @@ function createMockRuntime() {
 }
 
 // ============================================================================
+// chrome.commands
+// ============================================================================
+
+function createMockCommands() {
+  return {
+    onCommand: createMockEvent<(command: string) => void>(),
+  };
+}
+
+// ============================================================================
 // chrome.sidePanel
 // ============================================================================
 
@@ -869,6 +879,7 @@ export function createChromeMock() {
     tabs: createMockTabs(),
     scripting: createMockScripting(),
     runtime: createMockRuntime(),
+    commands: createMockCommands(),
     sidePanel: createMockSidePanel(),
     debugger: createMockDebugger(),
     cookies: createMockCookies(),

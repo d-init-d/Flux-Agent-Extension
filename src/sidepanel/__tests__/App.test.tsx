@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
+import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
 import { App } from '../App';
 
@@ -111,5 +112,21 @@ describe('Side panel App (U-03 input baseline)', () => {
 
     expect(screen.getByText('/summarize')).toBeInTheDocument();
     expect(screen.queryByText('/extract')).not.toBeInTheDocument();
+  });
+
+  it('dispatches an abort extension message when Escape is pressed', () => {
+    const sendMessage = vi.spyOn(chrome.runtime, 'sendMessage');
+    renderApp();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'sidePanel',
+        type: 'ACTION_ABORT',
+        payload: {},
+      }),
+    );
   });
 });
