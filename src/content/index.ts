@@ -21,6 +21,7 @@ import { executeInputAction } from './actions/input';
 import { executeScrollAction } from './actions/scroll';
 import { executeExtractAction } from './actions/extract';
 import { executeWaitAction } from './actions/wait';
+import { ActionStatusOverlay } from './action-status-overlay';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -73,12 +74,15 @@ export class ContentScriptManager {
   private readonly selectorEngine: SelectorEngine;
   private readonly domInspector: DOMInspector;
   private readonly autoWaitEngine: AutoWaitEngine;
+  private readonly actionStatusOverlay: ActionStatusOverlay;
   private mutationObserver: MutationObserver | null = null;
   private activeHighlights: ActiveHighlight[] = [];
   private highlightAnimationFrame: number | null = null;
   private readonly boundHighlightReposition = () => {
     this.updateHighlightPositions();
   };
+  private latestActionRunId = 0;
+  private isDestroyed = false;
 
   private mutationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMutationAdded = 0;
@@ -93,6 +97,7 @@ export class ContentScriptManager {
     this.selectorEngine = new SelectorEngine();
     this.domInspector = new DOMInspector(this.logger);
     this.autoWaitEngine = new AutoWaitEngine(this.selectorEngine);
+    this.actionStatusOverlay = new ActionStatusOverlay();
   }
 
   // --------------------------------------------------------------------------
@@ -107,6 +112,7 @@ export class ContentScriptManager {
    * 4. Set up beforeunload handler
    */
   initialize(): void {
+    this.isDestroyed = false;
     this.registerCommandHandlers();
     this.bridge.initialize();
     this.setupMutationObserver();
@@ -119,6 +125,8 @@ export class ContentScriptManager {
    * clear highlights, destroy bridge.
    */
   destroy(): void {
+    this.isDestroyed = true;
+
     if (this.mutationDebounceTimer !== null) {
       clearTimeout(this.mutationDebounceTimer);
       this.mutationDebounceTimer = null;
@@ -137,6 +145,7 @@ export class ContentScriptManager {
 
     // Clean up highlight overlays from the DOM
     this.removeAllHighlights();
+    this.actionStatusOverlay.destroy();
 
     // Remove beforeunload listener
     if (this.unloadHandler !== null) {
@@ -194,6 +203,37 @@ export class ContentScriptManager {
     const { action } = payload;
     this.logger.debug('EXECUTE_ACTION received', { actionType: action.type });
 
+    const actionRunId = ++this.latestActionRunId;
+    const showFloatingBar = await this.shouldShowFloatingBar();
+
+    if (showFloatingBar && !this.isDestroyed) {
+      this.actionStatusOverlay.showRunning(action);
+    } else if (!showFloatingBar) {
+      this.actionStatusOverlay.destroy();
+    }
+
+    try {
+      const result = await this.executeAction(action);
+
+      if (this.shouldUpdateActionOverlay(actionRunId, showFloatingBar)) {
+        this.actionStatusOverlay.showResult(action, result);
+      }
+
+      return result;
+    } catch (error) {
+      if (this.shouldUpdateActionOverlay(actionRunId, showFloatingBar)) {
+        this.actionStatusOverlay.showError(action, error);
+      }
+
+      throw error;
+    }
+  }
+
+  private shouldUpdateActionOverlay(actionRunId: number, showFloatingBar: boolean): boolean {
+    return showFloatingBar && !this.isDestroyed && this.latestActionRunId === actionRunId;
+  }
+
+  private async executeAction(action: ExecuteActionPayload['action']): Promise<ActionResultPayload> {
     switch (action.type) {
       case 'click':
       case 'doubleClick':
@@ -235,6 +275,24 @@ export class ContentScriptManager {
       },
       duration: 0,
     };
+  }
+
+  private async shouldShowFloatingBar(): Promise<boolean> {
+    if (typeof chrome === 'undefined' || !chrome.storage?.local?.get) {
+      return true;
+    }
+
+    try {
+      const stored = await chrome.storage.local.get({
+        settings: { showFloatingBar: true },
+      });
+
+      const settings = stored.settings as { showFloatingBar?: boolean } | undefined;
+      return settings?.showFloatingBar !== false;
+    } catch (error) {
+      this.logger.warn('Failed to read floating bar setting, defaulting to enabled', error);
+      return true;
+    }
   }
 
   // --------------------------------------------------------------------------

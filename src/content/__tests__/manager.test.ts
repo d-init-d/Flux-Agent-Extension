@@ -92,6 +92,9 @@ describe('ContentScriptManager command routing', () => {
 
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+    vi.spyOn(chrome.storage.local, 'get').mockResolvedValue({
+      settings: { showFloatingBar: true },
+    });
   });
 
   afterEach(() => {
@@ -153,6 +156,278 @@ describe('ContentScriptManager command routing', () => {
 
     manager.destroy();
     expect(bridgeDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a floating action status card during execution and removes it after success', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    let resolveAction: ((value: unknown) => void) | null = null;
+    executeInteractionAction.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAction = resolve;
+        }),
+    );
+
+    manager.initialize();
+
+    const executeHandler = handlers.get('EXECUTE_ACTION');
+    expect(executeHandler).toBeDefined();
+
+    const action = {
+      id: 'a-running',
+      type: 'click',
+      selector: { css: '#submit-button' },
+      description: 'Submit checkout form',
+    };
+
+    const resultPromise = executeHandler?.({ action, context: { variables: {} } }) as Promise<unknown>;
+
+    await vi.waitFor(() => {
+      const overlay = document.querySelector('[data-flux-action-status="true"]') as HTMLElement | null;
+      expect(overlay).not.toBeNull();
+      expect(overlay?.textContent).toContain('Running');
+      expect(overlay?.textContent).toContain('Submit checkout form');
+      expect(overlay?.textContent).toContain('#submit-button');
+      expect(overlay?.style.pointerEvents).toBe('none');
+    });
+
+    resolveAction?.({ actionId: 'a-running', success: true, duration: 20 });
+    await resultPromise;
+
+    const overlayAfterSuccess = document.querySelector(
+      '[data-flux-action-status="true"]',
+    ) as HTMLElement | null;
+    const styleNode = document.getElementById('flux-action-status-styles');
+
+    expect(overlayAfterSuccess?.textContent).toContain('Success');
+    expect(overlayAfterSuccess?.textContent).toContain('Click');
+    expect(styleNode).not.toBeNull();
+
+    vi.advanceTimersByTime(1400);
+
+    expect(document.querySelector('[data-flux-action-status="true"]')).toBeNull();
+    expect(document.getElementById('flux-action-status-styles')).toBeNull();
+
+    manager.destroy();
+  });
+
+  it('shows failure state details and respects disabled floating bar setting', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    executeInputAction.mockResolvedValue({
+      actionId: 'a-fail',
+      success: false,
+      duration: 12,
+      error: { code: 'ELEMENT_NOT_FOUND', message: 'Input field not found' },
+    });
+
+    manager.initialize();
+
+    const executeHandler = handlers.get('EXECUTE_ACTION');
+    expect(executeHandler).toBeDefined();
+
+    await executeHandler?.({
+      action: {
+        id: 'a-fail',
+        type: 'fill',
+        selector: { css: '#email' },
+        value: 'user@example.com',
+      },
+      context: { variables: {} },
+    });
+
+    const failureOverlay = document.querySelector(
+      '[data-flux-action-status="true"]',
+    ) as HTMLElement | null;
+
+    expect(failureOverlay?.textContent).toContain('Failed');
+    expect(failureOverlay?.textContent).toContain('Fill field');
+    expect(failureOverlay?.textContent).toContain('Input field not found');
+    expect(failureOverlay?.textContent).toContain('Value: user@example.com');
+
+    vi.advanceTimersByTime(2600);
+    expect(document.querySelector('[data-flux-action-status="true"]')).toBeNull();
+
+    vi.mocked(chrome.storage.local.get).mockResolvedValueOnce({
+      settings: { showFloatingBar: false },
+    });
+
+    await executeHandler?.({
+      action: {
+        id: 'a-disabled',
+        type: 'click',
+        selector: { css: '#disabled-case' },
+      },
+      context: { variables: {} },
+    });
+
+    expect(document.querySelector('[data-flux-action-status="true"]')).toBeNull();
+    expect(document.getElementById('flux-action-status-styles')).toBeNull();
+
+    manager.destroy();
+  });
+
+  it('does not recreate the action overlay after destroy while an action is still pending', async () => {
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    let resolveAction: ((value: unknown) => void) | null = null;
+    executeInteractionAction.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAction = resolve;
+        }),
+    );
+
+    manager.initialize();
+
+    const executeHandler = handlers.get('EXECUTE_ACTION');
+    expect(executeHandler).toBeDefined();
+
+    const resultPromise = executeHandler?.({
+      action: {
+        id: 'a-destroy-pending',
+        type: 'click',
+        selector: { css: '#destroy-case' },
+      },
+      context: { variables: {} },
+    }) as Promise<unknown>;
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-flux-action-status="true"]')).not.toBeNull();
+    });
+
+    manager.destroy();
+
+    expect(document.querySelector('[data-flux-action-status="true"]')).toBeNull();
+    expect(document.getElementById('flux-action-status-styles')).toBeNull();
+
+    resolveAction?.({ actionId: 'a-destroy-pending', success: true, duration: 8 });
+    await resultPromise;
+
+    expect(document.querySelector('[data-flux-action-status="true"]')).toBeNull();
+    expect(document.getElementById('flux-action-status-styles')).toBeNull();
+  });
+
+  it('keeps the latest running action visible when older actions finish later', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    const resolvers = new Map<string, (value: unknown) => void>();
+    executeInteractionAction.mockImplementation(
+      (action: { id: string }) =>
+        new Promise((resolve) => {
+          resolvers.set(action.id, resolve);
+        }),
+    );
+
+    manager.initialize();
+
+    const executeHandler = handlers.get('EXECUTE_ACTION');
+    expect(executeHandler).toBeDefined();
+
+    const firstAction = {
+      id: 'a-first',
+      type: 'click',
+      selector: { css: '#first' },
+      description: 'First running action',
+    };
+    const secondAction = {
+      id: 'a-second',
+      type: 'click',
+      selector: { css: '#second' },
+      description: 'Second running action',
+    };
+
+    const firstPromise = executeHandler?.({ action: firstAction, context: { variables: {} } }) as Promise<unknown>;
+    await vi.waitFor(() => {
+      const overlay = document.querySelector('[data-flux-action-status="true"]');
+      expect(overlay?.textContent).toContain('First running action');
+      expect(overlay?.textContent).toContain('Running');
+    });
+
+    const secondPromise = executeHandler?.({ action: secondAction, context: { variables: {} } }) as Promise<unknown>;
+    await vi.waitFor(() => {
+      const overlay = document.querySelector('[data-flux-action-status="true"]');
+      expect(overlay?.textContent).toContain('Second running action');
+      expect(overlay?.textContent).toContain('Running');
+    });
+
+    resolvers.get(firstAction.id)?.({ actionId: firstAction.id, success: true, duration: 9 });
+    await firstPromise;
+
+    const overlayAfterFirstCompletion = document.querySelector(
+      '[data-flux-action-status="true"]',
+    ) as HTMLElement | null;
+    expect(overlayAfterFirstCompletion?.textContent).toContain('Second running action');
+    expect(overlayAfterFirstCompletion?.textContent).toContain('Running');
+
+    resolvers.get(secondAction.id)?.({ actionId: secondAction.id, success: true, duration: 11 });
+    await secondPromise;
+
+    const overlayAfterSecondCompletion = document.querySelector(
+      '[data-flux-action-status="true"]',
+    ) as HTMLElement | null;
+    expect(overlayAfterSecondCompletion?.textContent).toContain('Second running action');
+    expect(overlayAfterSecondCompletion?.textContent).toContain('Success');
+
+    vi.advanceTimersByTime(1400);
+    expect(document.querySelector('[data-flux-action-status="true"]')).toBeNull();
+
+    manager.destroy();
   });
 
   it('creates a pulsing highlight overlay and repositions it on resize events', async () => {
