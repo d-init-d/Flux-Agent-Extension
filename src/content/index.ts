@@ -55,6 +55,13 @@ const MUTATION_DEBOUNCE_MS = 500;
 const HIGHLIGHT_Z_INDEX = '2147483647';
 const DEFAULT_HIGHLIGHT_COLOR = '#FF6B35';
 const HIGHLIGHT_DATA_ATTR = 'data-flux-highlight';
+const HIGHLIGHT_STYLE_ID = 'flux-highlight-styles';
+
+interface ActiveHighlight {
+  element: HTMLElement;
+  overlay: HTMLElement;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+}
 
 // ============================================================================
 // ContentScriptManager
@@ -67,7 +74,11 @@ export class ContentScriptManager {
   private readonly domInspector: DOMInspector;
   private readonly autoWaitEngine: AutoWaitEngine;
   private mutationObserver: MutationObserver | null = null;
-  private highlightOverlays: HTMLElement[] = [];
+  private activeHighlights: ActiveHighlight[] = [];
+  private highlightAnimationFrame: number | null = null;
+  private readonly boundHighlightReposition = () => {
+    this.updateHighlightPositions();
+  };
 
   private mutationDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingMutationAdded = 0;
@@ -251,34 +262,35 @@ export class ContentScriptManager {
     }
 
     try {
-      const rect = element.getBoundingClientRect();
       const color = payload.color || DEFAULT_HIGHLIGHT_COLOR;
-      const rgbaBackground = hexToRgba(color, 0.1);
+      const target = element as HTMLElement;
+
+      this.ensureHighlightStyles();
 
       const overlay = document.createElement('div');
       overlay.setAttribute(HIGHLIGHT_DATA_ATTR, 'true');
-      overlay.style.cssText = [
-        'position: absolute',
-        `top: ${rect.top + window.scrollY}px`,
-        `left: ${rect.left + window.scrollX}px`,
-        `width: ${rect.width}px`,
-        `height: ${rect.height}px`,
-        `border: 2px solid ${color}`,
-        `background: ${rgbaBackground}`,
-        `z-index: ${HIGHLIGHT_Z_INDEX}`,
-        'pointer-events: none',
-        'box-sizing: border-box',
-        'border-radius: 2px',
-        'transition: opacity 0.2s ease-out',
-      ].join('; ');
+      overlay.className = 'flux-highlight-overlay';
+      overlay.style.setProperty('--flux-highlight-color', color);
+      overlay.style.setProperty('--flux-highlight-color-soft', hexToRgba(color, 0.16));
+      overlay.style.setProperty('--flux-highlight-color-glow', hexToRgba(color, 0.28));
+      overlay.style.zIndex = HIGHLIGHT_Z_INDEX;
+      overlay.style.pointerEvents = 'none';
 
       document.body.appendChild(overlay);
-      this.highlightOverlays.push(overlay);
 
-      // Auto-remove after duration
+      const activeHighlight: ActiveHighlight = {
+        element: target,
+        overlay,
+        timeoutId: null,
+      };
+
+      this.activeHighlights.push(activeHighlight);
+      this.updateSingleHighlightPosition(activeHighlight);
+      this.startHighlightTracking();
+
       if (payload.duration && payload.duration > 0) {
-        setTimeout(() => {
-          this.removeSingleHighlight(overlay);
+        activeHighlight.timeoutId = window.setTimeout(() => {
+          this.removeSingleHighlight(activeHighlight.overlay);
         }, payload.duration);
       }
 
@@ -306,7 +318,12 @@ export class ContentScriptManager {
   private removeAllHighlights(): number {
     let count = 0;
     try {
-      // Remove everything with the data attribute (catches any stale refs too)
+      for (const highlight of this.activeHighlights) {
+        if (highlight.timeoutId !== null) {
+          clearTimeout(highlight.timeoutId);
+        }
+      }
+
       const existing = document.querySelectorAll(`[${HIGHLIGHT_DATA_ATTR}="true"]`);
       for (const el of existing) {
         el.remove();
@@ -315,7 +332,9 @@ export class ContentScriptManager {
     } catch (error) {
       this.logger.warn('Failed to clear highlights from DOM', error);
     }
-    this.highlightOverlays = [];
+    this.activeHighlights = [];
+    this.stopHighlightTracking();
+    this.removeHighlightStyles();
     return count;
   }
 
@@ -323,15 +342,130 @@ export class ContentScriptManager {
    * Remove a single overlay from the DOM and the tracking array.
    */
   private removeSingleHighlight(overlay: HTMLElement): void {
+    const highlight = this.activeHighlights.find((entry) => entry.overlay === overlay);
+
+    if (highlight && highlight.timeoutId !== null) {
+      clearTimeout(highlight.timeoutId);
+    }
+
     try {
       overlay.remove();
     } catch {
-      // Element may already be removed
     }
-    const idx = this.highlightOverlays.indexOf(overlay);
+
+    const idx = this.activeHighlights.findIndex((entry) => entry.overlay === overlay);
     if (idx !== -1) {
-      this.highlightOverlays.splice(idx, 1);
+      this.activeHighlights.splice(idx, 1);
     }
+
+    if (this.activeHighlights.length === 0) {
+      this.stopHighlightTracking();
+      this.removeHighlightStyles();
+    }
+  }
+
+  private ensureHighlightStyles(): void {
+    if (document.getElementById(HIGHLIGHT_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = HIGHLIGHT_STYLE_ID;
+    style.textContent = `
+      @keyframes flux-highlight-pulse {
+        0% {
+          opacity: 0.72;
+          box-shadow: 0 0 0 0 var(--flux-highlight-color-soft);
+          transform: scale(0.995);
+        }
+        70% {
+          opacity: 1;
+          box-shadow: 0 0 0 8px rgba(255, 255, 255, 0);
+          transform: scale(1.005);
+        }
+        100% {
+          opacity: 0.88;
+          box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+          transform: scale(1);
+        }
+      }
+
+      .flux-highlight-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        box-sizing: border-box;
+        border: 2px solid var(--flux-highlight-color);
+        border-radius: 8px;
+        background: transparent;
+          box-shadow:
+            0 0 0 3px var(--flux-highlight-color-soft),
+            0 12px 32px var(--flux-highlight-color-glow);
+        animation: flux-highlight-pulse 1.35s ease-in-out infinite;
+        will-change: transform, width, height, top, left, opacity;
+      }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  private removeHighlightStyles(): void {
+    document.getElementById(HIGHLIGHT_STYLE_ID)?.remove();
+  }
+
+  private startHighlightTracking(): void {
+    if (this.highlightAnimationFrame !== null) {
+      return;
+    }
+
+    window.addEventListener('scroll', this.boundHighlightReposition, true);
+    window.addEventListener('resize', this.boundHighlightReposition);
+
+    const tick = () => {
+      if (this.activeHighlights.length === 0) {
+        this.highlightAnimationFrame = null;
+        return;
+      }
+
+      this.updateHighlightPositions();
+      this.highlightAnimationFrame = window.requestAnimationFrame(tick);
+    };
+
+    this.highlightAnimationFrame = window.requestAnimationFrame(tick);
+  }
+
+  private stopHighlightTracking(): void {
+    if (this.highlightAnimationFrame !== null) {
+      window.cancelAnimationFrame(this.highlightAnimationFrame);
+      this.highlightAnimationFrame = null;
+    }
+
+    window.removeEventListener('scroll', this.boundHighlightReposition, true);
+    window.removeEventListener('resize', this.boundHighlightReposition);
+  }
+
+  private updateHighlightPositions(): void {
+    for (const highlight of [...this.activeHighlights]) {
+      this.updateSingleHighlightPosition(highlight);
+    }
+  }
+
+  private updateSingleHighlightPosition(highlight: ActiveHighlight): void {
+    if (!highlight.element.isConnected) {
+      this.removeSingleHighlight(highlight.overlay);
+      return;
+    }
+
+    const rect = highlight.element.getBoundingClientRect();
+    const visible = rect.width > 0 && rect.height > 0;
+
+    highlight.overlay.style.opacity = visible ? '1' : '0';
+    highlight.overlay.style.top = `${rect.top}px`;
+    highlight.overlay.style.left = `${rect.left}px`;
+    highlight.overlay.style.width = `${rect.width}px`;
+    highlight.overlay.style.height = `${rect.height}px`;
   }
 
   // --------------------------------------------------------------------------

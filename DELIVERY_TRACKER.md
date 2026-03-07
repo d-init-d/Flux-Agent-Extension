@@ -218,7 +218,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-10b` Connect provider
 - [x] `U-10c` Permission explanation
 - [x] `U-10d` Ready/tips
-- [~] `U-11` Highlight overlay baseline
+- [x] `U-11` Highlight overlay baseline
 - [ ] `U-12` Action status overlay
 - [ ] `U-14` Keyboard shortcuts
 - [ ] `U-15d` Overlay bridge wiring
