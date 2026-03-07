@@ -210,7 +210,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 
 ### Sprint 3.2
 
-- [~] `U-07` Provider settings baseline
+- [x] `U-07` Provider settings baseline
 - [ ] `U-08` Permission toggles
 - [ ] `U-09` Appearance settings
 - [ ] `U-10` Onboarding flow
