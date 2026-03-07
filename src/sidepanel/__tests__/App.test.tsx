@@ -1,14 +1,24 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { ThemeProvider } from '../../ui/theme';
 import { App } from '../App';
+
+function renderApp() {
+  return render(
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>,
+  );
+}
 
 describe('Side panel App (U-03 input baseline)', () => {
   it('renders header, chat area, and input section', () => {
-    render(<App />);
+    renderApp();
 
     const header = screen.getByTestId('sidepanel-header');
     expect(within(header).getByRole('heading', { level: 1, name: 'Flux Agent' })).toBeInTheDocument();
+    expect(within(header).getByRole('radiogroup', { name: 'Theme mode' })).toBeInTheDocument();
 
     const chatArea = screen.getByTestId('sidepanel-chat-area');
     expect(within(chatArea).getByTestId('sidepanel-action-log')).toBeInTheDocument();
@@ -23,7 +33,7 @@ describe('Side panel App (U-03 input baseline)', () => {
   });
 
   it('keeps semantic layout order and accessible input labeling', () => {
-    const { container } = render(<App />);
+    const { container } = renderApp();
 
     const root = container.firstElementChild as HTMLElement;
     expect(root).toBeTruthy();
@@ -48,7 +58,7 @@ describe('Side panel App (U-03 input baseline)', () => {
 
   it('enables send button when user types a message', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
     const sendButton = screen.getByRole('button', { name: 'Send' });
@@ -60,7 +70,7 @@ describe('Side panel App (U-03 input baseline)', () => {
 
   it('shows slash command list only when input starts with slash', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
 
@@ -76,7 +86,7 @@ describe('Side panel App (U-03 input baseline)', () => {
 
   it('expands the action log timeline from the sidepanel layout', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     const toggle = screen.getByRole('button', { name: 'Expand action log' });
     await user.click(toggle);
@@ -94,7 +104,7 @@ describe('Side panel App (U-03 input baseline)', () => {
 
   it('filters baseline slash commands by typed prefix', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    renderApp();
 
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
     await user.type(textbox, '/su');

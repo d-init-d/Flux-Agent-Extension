@@ -1,6 +1,7 @@
 import { ActionLogPanel, MOCK_ACTION_LOG } from './components/ActionLogPanel';
 import { ChatContainer, MOCK_CONVERSATION } from './components/ChatContainer';
 import { InputComposer } from './components/InputComposer';
+import { ThemeToggle } from '@/ui/theme';
 
 export function App() {
   return (
@@ -17,9 +18,12 @@ export function App() {
             </p>
           </div>
 
-          <span className="inline-flex h-7 items-center rounded-full border border-[rgb(var(--color-border-default))] px-3 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
-            Ready
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-7 items-center rounded-full border border-[rgb(var(--color-border-default))] px-3 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
+              Ready
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

@@ -202,7 +202,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-04` Collapsible action log
 - [x] `U-05` Action timeline states
 - [x] `U-06` Popup baseline
-- [~] `U-13` Theme toggle infra (needs product wiring)
+- [x] `U-13` Theme toggle infra
 - [ ] `U-15` UI stores to SW integration
 - [ ] `U-15a` Session store
 - [ ] `U-15b` Chat streaming store

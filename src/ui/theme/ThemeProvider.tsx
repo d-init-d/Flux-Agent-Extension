@@ -32,6 +32,14 @@ interface ThemeContextValue {
 const STORAGE_KEY = 'flux-agent-theme';
 const THEME_ATTRIBUTE = 'data-theme';
 
+function getSystemTheme(): ResolvedTheme {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return 'light';
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -75,11 +83,14 @@ const ThemeProvider: React.FC<ThemeProviderProps> = ({
   // Detect system preference
   // -----------------------------------------------------------------------
   const [systemPreference, setSystemPreference] = useState<ResolvedTheme>(() => {
-    if (typeof window === 'undefined') return 'light';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return getSystemTheme();
   });
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
     const handler = (e: MediaQueryListEvent) => {

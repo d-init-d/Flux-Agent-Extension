@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/ui/components';
+import { ThemeToggle } from '@/ui/theme';
 
 interface PageInfo {
   title: string;
@@ -160,9 +161,12 @@ export function App() {
             </p>
           </div>
 
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] shadow-sm">
-            <Bolt className="h-5 w-5 text-[rgb(var(--color-primary-600))]" aria-hidden="true" />
-          </span>
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] shadow-sm">
+              <Bolt className="h-5 w-5 text-[rgb(var(--color-primary-600))]" aria-hidden="true" />
+            </span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
