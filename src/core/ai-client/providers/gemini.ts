@@ -3,7 +3,8 @@
  * @description Google Gemini provider implementation using raw fetch() — no SDK.
  *
  * Connects to the Gemini `streamGenerateContent` endpoint with `alt=sse`
- * for server-sent event streaming. API key is passed as a URL query parameter.
+ * for server-sent event streaming. API key is sent via `x-goog-api-key`
+ * header to avoid leaking secrets into URLs.
  *
  * Supports:
  *   - Multi-turn conversation (user / model roles)
@@ -106,11 +107,10 @@ export class GeminiProvider extends BaseProvider {
   }
 
   // ── Abstract hook: buildHeaders ─────────────────────────────────────────
-  // Gemini uses API key in URL, not in headers.
-
   protected buildHeaders(): Record<string, string> {
     return {
       'Content-Type': 'application/json',
+      'x-goog-api-key': this.getApiKey(),
     };
   }
 
@@ -119,9 +119,7 @@ export class GeminiProvider extends BaseProvider {
   protected getEndpoint(): string {
     const baseUrl = this.getBaseUrl(GEMINI_BASE_URL);
     const model = this.getModel();
-    const apiKey = this.getApiKey();
-
-    return `${baseUrl}/${GEMINI_API_VERSION}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    return `${baseUrl}/${GEMINI_API_VERSION}/models/${model}:streamGenerateContent?alt=sse`;
   }
 
   // ── Abstract hook: buildRequestBody ─────────────────────────────────────
@@ -351,10 +349,13 @@ export class GeminiProvider extends BaseProvider {
 
   async validateApiKey(apiKey: string): Promise<boolean> {
     try {
-      const url = `${GEMINI_BASE_URL}/${GEMINI_API_VERSION}/models?key=${apiKey}`;
+      const url = `${GEMINI_BASE_URL}/${GEMINI_API_VERSION}/models`;
       const response = await fetch(url, {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
       });
       return response.ok;
     } catch {

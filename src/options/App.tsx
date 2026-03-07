@@ -457,9 +457,36 @@ export function App() {
   const onboardingStateRef = useRef<OnboardingState>(createDefaultOnboardingState());
   const suppressOnboardingAutoOpenRef = useRef(false);
 
+  function clearApiKeyInputValue(): void {
+    if (apiKeyInputRef.current) {
+      apiKeyInputRef.current.value = '';
+    }
+  }
+
   useEffect(() => {
     onboardingStateRef.current = onboardingState;
   }, [onboardingState]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      clearApiKeyInputValue();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        clearApiKeyInputValue();
+      }
+    };
+
+    window.addEventListener('pagehide', handlePageHide);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearApiKeyInputValue();
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -692,7 +719,7 @@ export function App() {
     setValidationState('idle');
 
     if (apiKeyInputRef.current) {
-      apiKeyInputRef.current.value = '';
+      clearApiKeyInputValue();
     }
   }
 
@@ -764,13 +791,11 @@ export function App() {
           : 'Provider settings saved. Re-enter a key later when encrypted persistence is wired.',
       );
 
-      if (apiKeyInputRef.current) {
-        apiKeyInputRef.current.value = '';
-      }
     } catch {
       setSaveState('error');
       setSaveMessage('Failed to save provider settings.');
     } finally {
+      clearApiKeyInputValue();
       setIsSaving(false);
     }
   }
@@ -914,23 +939,23 @@ export function App() {
       return;
     }
 
-    if (selectedDefinition.supportsEndpoint) {
-      const endpoint = selectedConfig.customEndpoint?.trim() ?? '';
-      if (!isAllowedEndpoint(selectedProvider, endpoint)) {
-        setValidationState('error');
-        setValidationMessage(
-          selectedProvider === 'ollama'
-            ? 'Use an http://localhost or http://127.0.0.1 Ollama endpoint.'
-            : 'Use a valid https:// endpoint before testing this provider.',
-        );
-        return;
-      }
-    }
-
-    setIsTesting(true);
-    setValidationState('idle');
-
     try {
+      if (selectedDefinition.supportsEndpoint) {
+        const endpoint = selectedConfig.customEndpoint?.trim() ?? '';
+        if (!isAllowedEndpoint(selectedProvider, endpoint)) {
+          setValidationState('error');
+          setValidationMessage(
+            selectedProvider === 'ollama'
+              ? 'Use an http://localhost or http://127.0.0.1 Ollama endpoint.'
+              : 'Use a valid https:// endpoint before testing this provider.',
+          );
+          return;
+        }
+      }
+
+      setIsTesting(true);
+      setValidationState('idle');
+
       const isValid = await validateProviderConnection(selectedProvider, selectedConfig, rawApiKey);
       setValidationState(isValid ? 'success' : 'error');
       setValidationMessage(
@@ -1046,6 +1071,8 @@ export function App() {
               placeholder="Paste a provider key when needed"
               helperText="This field is not persisted. Save stores only masked metadata, and test clears the field after validation."
               autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
               spellCheck={false}
               onCopy={(event) => event.preventDefault()}
             />

@@ -185,7 +185,7 @@ Phase-2 execution order locked:
 
 ## PHASE 3 - UI & Integration
 
-Status summary: UI foundation, sidepanel/service-worker store wiring, and accessibility hardening are in place; remaining work is UI security and end-to-end coverage.
+Status summary: UI foundation, sidepanel/service-worker store wiring, accessibility hardening, and UI security fixes are in place; remaining work is end-to-end coverage.
 
 ### Sprint 3.1
 
@@ -228,9 +228,9 @@ Status summary: UI foundation, sidepanel/service-worker store wiring, and access
 - [ ] `U-16c` Click E2E
 - [ ] `U-16d` Error recovery E2E
 - [x] `U-17` Accessibility audit/fixes
-- [ ] `U-18` UI security audit
-- [ ] `U-18a` API key input security
-- [ ] `U-18b` Markdown rendering security
+- [x] `U-18` UI security audit
+- [x] `U-18a` API key input security
+- [x] `U-18b` Markdown rendering security
 
 UI-first order:
 

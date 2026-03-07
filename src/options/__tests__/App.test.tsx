@@ -119,6 +119,85 @@ describe('Options App', () => {
     expect(screen.getByLabelText('API key')).toHaveValue('');
   });
 
+  it('validates Gemini without putting the raw key in the request URL', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ models: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'gemini');
+    await user.type(screen.getByLabelText('API key'), 'gemini-secret-key');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findByText(/gemini responded successfully/i)).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://generativelanguage.googleapis.com/v1beta/models',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ 'x-goog-api-key': 'gemini-secret-key' }),
+      }),
+    );
+    expect(fetchSpy.mock.calls[0]?.[0]).not.toContain('gemini-secret-key');
+    expect(screen.getByLabelText('API key')).toHaveValue('');
+  });
+
+  it('clears raw API key input after a blocked test connection attempt', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.clear(screen.getByLabelText('Base URL override'));
+    await user.type(screen.getByLabelText('Base URL override'), 'http://example.com/v1');
+
+    const apiKeyInput = screen.getByLabelText('API key');
+    await user.type(apiKeyInput, 'sk-openai-should-clear');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findByText(/use a valid https:\/\//i)).toBeInTheDocument();
+    expect(apiKeyInput).toHaveValue('');
+  });
+
+  it('clears raw API key input on pagehide', async () => {
+    const user = userEvent.setup();
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+
+    const apiKeyInput = screen.getByLabelText('API key');
+    await user.type(apiKeyInput, 'sk-ephemeral-secret');
+    expect(apiKeyInput).toHaveValue('sk-ephemeral-secret');
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide'));
+    expect(apiKeyInput).toHaveValue('');
+  });
+
+  it('clears raw API key input after a blocked save attempt', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'openai');
+
+    const endpointInput = screen.getByLabelText('Base URL override');
+    await user.clear(endpointInput);
+    await user.type(endpointInput, 'http://example.com/v1');
+
+    const apiKeyInput = screen.getByLabelText('API key');
+    await user.type(apiKeyInput, 'sk-should-clear');
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+
+    expect(await screen.findByText(/save blocked: remote provider endpoints must use https/i)).toBeInTheDocument();
+    expect(apiKeyInput).toHaveValue('');
+  });
+
   it('blocks insecure endpoint validation for custom providers', async () => {
     const user = userEvent.setup();
 

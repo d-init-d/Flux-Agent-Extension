@@ -4,6 +4,10 @@ import { isValid } from 'date-fns';
 import { marked } from 'marked';
 import { Badge, Button, type ButtonVariant } from '@/ui/components';
 
+const SAFE_MARKDOWN_TAGS = ['a', 'blockquote', 'br', 'code', 'em', 'li', 'ol', 'p', 'pre', 'strong', 'ul'];
+const SAFE_MARKDOWN_ATTRS = ['href', 'title'];
+const SAFE_HREF_PATTERN = /^(?:https?:|mailto:|#|\/(?!\/))/i;
+
 type MessageVariant = 'user' | 'assistant' | 'action' | 'error';
 type ActionStepStatus = 'pending' | 'running' | 'completed' | 'failed';
 type ActionBubbleStatus = 'running' | 'completed' | 'failed';
@@ -85,9 +89,30 @@ function renderMarkdown(markdown: string): string {
     gfm: true,
   });
 
-  return DOMPurify.sanitize(parsed, {
-    USE_PROFILES: { html: true },
+  const sanitized = DOMPurify.sanitize(parsed, {
+    ALLOWED_TAGS: SAFE_MARKDOWN_TAGS,
+    ALLOWED_ATTR: SAFE_MARKDOWN_ATTRS,
+    FORBID_TAGS: ['embed', 'form', 'iframe', 'img', 'input', 'math', 'object', 'style', 'svg', 'video'],
+    FORBID_ATTR: ['srcset'],
+    ALLOW_DATA_ATTR: false,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[#/])/i,
   });
+
+  const template = document.createElement('template');
+  template.innerHTML = sanitized;
+
+  for (const anchor of template.content.querySelectorAll('a')) {
+    const href = anchor.getAttribute('href')?.trim() ?? '';
+
+    if (!SAFE_HREF_PATTERN.test(href)) {
+      anchor.removeAttribute('href');
+    } else {
+      anchor.setAttribute('rel', 'noopener noreferrer nofollow');
+      anchor.setAttribute('target', '_blank');
+    }
+  }
+
+  return template.innerHTML;
 }
 
 function getActionStepBadgeVariant(status: ActionStepStatus): 'default' | 'info' | 'success' | 'error' {

@@ -55,7 +55,7 @@ describe('GeminiProvider', () => {
     temperature: 0.3,
   };
 
-  it('uses API key in URL and builds systemInstruction, role mapping, inlineData, and tools', async () => {
+  it('uses header auth and builds systemInstruction, role mapping, inlineData, and tools', async () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
@@ -115,9 +115,12 @@ describe('GeminiProvider', () => {
     const calledUrl = String(fetchMock.mock.calls[0][0]);
     expect(calledUrl).toContain('/v1beta/models/gemini-2.0-flash:streamGenerateContent');
     expect(calledUrl).toContain('alt=sse');
-    expect(calledUrl).toContain('key=gemini-key');
+    expect(calledUrl).not.toContain('key=gemini-key');
 
     const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(requestInit.headers).toEqual(
+      expect.objectContaining({ 'x-goog-api-key': 'gemini-key' }),
+    );
     const body = JSON.parse(String(requestInit.body)) as {
       systemInstruction: { parts: Array<{ text: string }> };
       contents: Array<{ role: string; parts: Array<Record<string, unknown>> }>;
@@ -210,8 +213,11 @@ describe('GeminiProvider', () => {
     vi.stubGlobal('fetch', okMock);
     await expect(provider.validateApiKey('k1')).resolves.toBe(true);
     expect(okMock).toHaveBeenCalledWith(
-      'https://generativelanguage.googleapis.com/v1beta/models?key=k1',
-      expect.objectContaining({ method: 'GET' }),
+      'https://generativelanguage.googleapis.com/v1beta/models',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({ 'x-goog-api-key': 'k1' }),
+      }),
     );
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));

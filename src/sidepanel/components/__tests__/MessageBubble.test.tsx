@@ -40,6 +40,56 @@ describe('MessageBubble', () => {
     expect(onExtract).toHaveBeenCalledTimes(1);
   });
 
+  it('sanitizes javascript links and keeps safe markdown links hardened', () => {
+    const message: MessageBubbleProps = {
+      id: 'assistant-safe-1',
+      variant: 'assistant',
+      timestamp: '2026-03-06T09:41:04.000Z',
+      markdown: '[Unsafe](javascript:alert(1)) [Safe](https://example.com)',
+    };
+
+    render(<MessageBubble {...message} />);
+
+    const unsafeLink = screen.getByText('Unsafe').closest('a');
+    expect(unsafeLink).not.toHaveAttribute('href');
+
+    const safeLink = screen.getByText('Safe').closest('a');
+    expect(safeLink).toHaveAttribute('href', 'https://example.com');
+    expect(safeLink).toHaveAttribute('rel', 'noopener noreferrer nofollow');
+    expect(safeLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('blocks protocol-relative links from assistant markdown', () => {
+    const message: MessageBubbleProps = {
+      id: 'assistant-safe-3',
+      variant: 'assistant',
+      timestamp: '2026-03-06T09:41:04.000Z',
+      markdown: '[Sneaky](//evil.example)',
+    };
+
+    render(<MessageBubble {...message} />);
+
+    const sneakyLink = screen.getByText('Sneaky').closest('a');
+    expect(sneakyLink).not.toHaveAttribute('href');
+  });
+
+  it('strips embedded html and preserves safe markdown formatting', () => {
+    const message: MessageBubbleProps = {
+      id: 'assistant-safe-2',
+      variant: 'assistant',
+      timestamp: '2026-03-06T09:41:04.000Z',
+      markdown: '<script>alert(1)</script><img src="https://evil.example/x.png" onerror="alert(1)" /><iframe src="https://evil.example"></iframe><svg onload="alert(1)"><circle /></svg>**Still safe**',
+    };
+
+    const { container } = render(<MessageBubble {...message} />);
+
+    expect(container.querySelector('script')).toBeNull();
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('iframe')).toBeNull();
+    expect(container.querySelector('svg')).toBeNull();
+    expect(container).toHaveTextContent('Still safe');
+  });
+
   it('renders action progress details and allows cancellation while running', async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
