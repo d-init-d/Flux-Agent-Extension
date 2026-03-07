@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { MouseEvent, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
   KeyRound,
@@ -802,6 +802,15 @@ export function App() {
     setPermissionSaveState('idle');
   }
 
+  function handlePermissionCardClick(event: MouseEvent<HTMLDivElement>, key: PermissionSettingKey): void {
+    const target = event.target;
+    if (target instanceof HTMLElement && target.closest('[role="switch"]')) {
+      return;
+    }
+
+    handlePermissionToggle(key, !settings[key]);
+  }
+
   function handleThemeChange(theme: ExtensionSettings['theme']): void {
     setSettings((current) => ({
       ...current,
@@ -1223,30 +1232,37 @@ export function App() {
                 </div>
 
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {PERMISSION_DEFINITIONS.map((permission) => (
-                    <div
-                      key={permission.key}
-                      className="flex min-h-11 items-start justify-between gap-4 rounded-[22px] border border-border bg-surface-primary px-4 py-4 transition-colors duration-fast hover:border-primary-300 hover:bg-primary-50/40"
-                    >
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 flex-col items-start space-y-2 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2"
-                        onClick={() => handlePermissionToggle(permission.key, !settings[permission.key])}
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-content-primary">{permission.title}</p>
-                          <Badge variant={permission.tone}>{permission.badge}</Badge>
-                        </div>
-                        <p className="text-sm leading-6 text-content-secondary">{permission.description}</p>
-                      </button>
+                  {PERMISSION_DEFINITIONS.map((permission) => {
+                    const titleId = `${permission.key}-title`;
+                    const descriptionId = `${permission.key}-description`;
 
-                      <Switch
-                        checked={settings[permission.key]}
-                        onCheckedChange={(checked) => handlePermissionToggle(permission.key, checked)}
-                        aria-label={permission.title}
-                      />
-                    </div>
-                  ))}
+                    return (
+                      <div
+                        key={permission.key}
+                        className="flex min-h-11 cursor-pointer items-start justify-between gap-4 rounded-[22px] border border-border bg-surface-primary px-4 py-4 transition-colors duration-fast hover:border-primary-300 hover:bg-primary-50/40"
+                        onClick={(event) => handlePermissionCardClick(event, permission.key)}
+                      >
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p id={titleId} className="text-sm font-semibold text-content-primary">
+                              {permission.title}
+                            </p>
+                            <Badge variant={permission.tone}>{permission.badge}</Badge>
+                          </div>
+                          <p id={descriptionId} className="text-sm leading-6 text-content-secondary">
+                            {permission.description}
+                          </p>
+                        </div>
+
+                        <Switch
+                          checked={settings[permission.key]}
+                          onCheckedChange={(checked) => handlePermissionToggle(permission.key, checked)}
+                          aria-labelledby={titleId}
+                          aria-describedby={descriptionId}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {settings.allowCustomScripts ? (

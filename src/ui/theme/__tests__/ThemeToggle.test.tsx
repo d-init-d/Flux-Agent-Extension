@@ -59,6 +59,39 @@ describe('ThemeToggle', () => {
     expect(localStorage.getItem('flux-agent-theme')).toBe('system');
   });
 
+  it('uses roving tab index and arrow keys to move between theme choices', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider defaultMode="system">
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+
+    const lightRadio = screen.getByRole('radio', { name: 'Use light theme' });
+    const darkRadio = screen.getByRole('radio', { name: 'Use dark theme' });
+    const systemRadio = screen.getByRole('radio', { name: 'Use system theme' });
+
+    expect(lightRadio).toHaveAttribute('tabindex', '-1');
+    expect(darkRadio).toHaveAttribute('tabindex', '-1');
+    expect(systemRadio).toHaveAttribute('tabindex', '0');
+
+    systemRadio.focus();
+    await user.keyboard('{ArrowRight}');
+
+    expect(lightRadio).toHaveFocus();
+    expect(lightRadio).toHaveAttribute('aria-checked', 'true');
+    expect(lightRadio).toHaveAttribute('tabindex', '0');
+    expect(systemRadio).toHaveAttribute('tabindex', '-1');
+    expect(localStorage.getItem('flux-agent-theme')).toBe('light');
+
+    await user.keyboard('{ArrowLeft}');
+
+    expect(systemRadio).toHaveFocus();
+    expect(systemRadio).toHaveAttribute('aria-checked', 'true');
+    expect(localStorage.getItem('flux-agent-theme')).toBe('system');
+  });
+
   it('can change the preview without persisting immediately', async () => {
     const user = userEvent.setup();
 

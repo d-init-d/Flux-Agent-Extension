@@ -51,6 +51,9 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
   const [inputValue, setInputValue] = useState('');
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const commandListId = 'sidepanel-command-list';
+  const commandLabelId = 'sidepanel-command-label';
+  const commandHintId = 'sidepanel-command-hint';
 
   const isSlashMode = inputValue.startsWith('/');
   const normalizedValue = inputValue.trim();
@@ -68,6 +71,11 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
 
     return commands.filter((item) => item.command.slice(1).toLowerCase().startsWith(query));
   }, [commands, inputValue, isSlashMode]);
+
+  const activeOptionId =
+    isSlashMode && filteredCommands.length > 0
+      ? `sidepanel-command-option-${filteredCommands[activeCommandIndex]?.id}`
+      : undefined;
 
   useEffect(() => {
     if (!isSlashMode || filteredCommands.length === 0) {
@@ -172,11 +180,25 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
           className="mb-2 overflow-hidden rounded-xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary))]"
           data-testid="slash-command-list"
         >
-          <div className="border-b border-[rgb(var(--color-border-default))] px-3 py-2 text-xs font-medium tracking-tight text-[rgb(var(--color-text-secondary))]">
+          <div
+            id={commandLabelId}
+            className="border-b border-[rgb(var(--color-border-default))] px-3 py-2 text-xs font-medium tracking-tight text-[rgb(var(--color-text-secondary))]"
+          >
             Commands
           </div>
 
-          <ul id="sidepanel-command-list" role="listbox" className="max-h-44 overflow-y-auto py-1">
+          <p id={commandHintId} className="sr-only" aria-live="polite">
+            {filteredCommands.length > 0
+              ? `${filteredCommands.length} command suggestions available. Use arrow keys to review and Enter or Tab to apply.`
+              : 'No command suggestions available.'}
+          </p>
+
+          <ul
+            id={commandListId}
+            role="listbox"
+            aria-labelledby={commandLabelId}
+            className="max-h-44 overflow-y-auto py-1"
+          >
             {filteredCommands.length > 0 ? (
               filteredCommands.map((item, index) => (
                 <li
@@ -220,13 +242,11 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
           onKeyDown={handleInputKeyDown}
           placeholder={disabled ? 'Wait for the current response to finish...' : 'Type a message or command...'}
           aria-autocomplete="list"
+          aria-haspopup={isSlashMode ? 'listbox' : undefined}
           aria-keyshortcuts="Control+Enter Meta+Enter"
-          aria-controls={isSlashMode ? 'sidepanel-command-list' : undefined}
-          aria-activedescendant={
-            isSlashMode && filteredCommands.length > 0
-              ? `sidepanel-command-option-${filteredCommands[activeCommandIndex]?.id}`
-              : undefined
-          }
+          aria-controls={isSlashMode ? commandListId : undefined}
+          aria-describedby={isSlashMode ? commandHintId : undefined}
+          aria-activedescendant={activeOptionId}
           aria-expanded={isSlashMode}
           className="min-h-11 w-full resize-none rounded-xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] placeholder:text-[rgb(var(--color-text-tertiary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-border-focus))]"
         />

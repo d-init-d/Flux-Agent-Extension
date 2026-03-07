@@ -71,7 +71,7 @@
   /* -- Text Colors -- */
   --color-text-primary: 15 23 42;         /* #0F172A */
   --color-text-secondary: 71 85 105;      /* #475569 */
-  --color-text-tertiary: 148 163 184;     /* #94A3B8 */
+  --color-text-tertiary: 100 116 139;     /* #64748B */
   --color-text-inverse: 255 255 255;      /* #FFFFFF */
   --color-text-link: 37 99 235;           /* #2563EB */
 
@@ -165,7 +165,7 @@
   /* -- Text Colors -- */
   --color-text-primary: 241 245 249;      /* #F1F5F9 */
   --color-text-secondary: 148 163 184;    /* #94A3B8 */
-  --color-text-tertiary: 100 116 139;     /* #64748B */
+  --color-text-tertiary: 148 163 184;     /* #94A3B8 */
   --color-text-inverse: 15 23 42;         /* #0F172A */
   --color-text-link: 96 165 250;          /* #60A5FA */
 

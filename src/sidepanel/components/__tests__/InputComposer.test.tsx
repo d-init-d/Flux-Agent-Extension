@@ -66,16 +66,22 @@ describe('InputComposer', () => {
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
     await user.type(textbox, '/');
 
+    expect(textbox).toHaveAttribute('aria-controls', 'sidepanel-command-list');
+    expect(textbox).toHaveAttribute('aria-expanded', 'true');
+    expect(textbox).toHaveAttribute('aria-describedby', 'sidepanel-command-hint');
+
     const screenshotOption = screen.getByRole('option', { name: /\/screenshot/i });
     const extractOption = screen.getByRole('option', { name: /\/extract/i });
 
     expect(screenshotOption).toHaveAttribute('aria-selected', 'true');
     expect(extractOption).toHaveAttribute('aria-selected', 'false');
+    expect(textbox).toHaveAttribute('aria-activedescendant', 'sidepanel-command-option-screenshot');
 
     await user.keyboard('{ArrowDown}');
 
     expect(screenshotOption).toHaveAttribute('aria-selected', 'false');
     expect(extractOption).toHaveAttribute('aria-selected', 'true');
+    expect(textbox).toHaveAttribute('aria-activedescendant', 'sidepanel-command-option-extract');
 
     await user.keyboard('{Enter}');
     expect(textbox).toHaveValue('/extract ');
@@ -115,6 +121,22 @@ describe('InputComposer', () => {
     await user.click(screen.getByRole('option', { name: /\/screenshot/i }));
 
     expect(textbox).toHaveValue('/screenshot ');
+  });
+
+  it('clears listbox relationships when slash mode closes', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/');
+    await user.clear(textbox);
+    await user.type(textbox, 'hello');
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(textbox).not.toHaveAttribute('aria-controls');
+    expect(textbox).not.toHaveAttribute('aria-describedby');
+    expect(textbox).not.toHaveAttribute('aria-activedescendant');
+    expect(textbox).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('sends message on Ctrl+Enter without inserting a newline', async () => {

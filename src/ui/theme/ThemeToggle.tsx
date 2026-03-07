@@ -1,6 +1,6 @@
 import { LaptopMinimal, Moon, SunMedium } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
-import { useId } from 'react';
+import { KeyboardEvent, useId, useRef } from 'react';
 import { useTheme } from './ThemeProvider';
 
 type ThemeOption = {
@@ -24,6 +24,32 @@ const THEME_OPTIONS: ThemeOption[] = [
 export function ThemeToggle({ className = '', onModeChange, persistOnSelect = true }: ThemeToggleProps) {
   const { mode, resolvedTheme, setMode } = useTheme();
   const groupLabelId = useId();
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const activeIndex = THEME_OPTIONS.findIndex((option) => option.mode === mode);
+
+  const selectMode = (nextMode: ThemeOption['mode']) => {
+    setMode(nextMode, { persist: persistOnSelect });
+    onModeChange?.(nextMode);
+  };
+
+  const handleOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+    const horizontalStep = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    const verticalStep = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0;
+    const step = horizontalStep || verticalStep;
+
+    if (step === 0) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const nextIndex = (currentIndex + step + THEME_OPTIONS.length) % THEME_OPTIONS.length;
+    const nextOption = THEME_OPTIONS[nextIndex];
+
+    selectMode(nextOption.mode);
+    optionRefs.current[nextIndex]?.focus();
+  };
 
   return (
     <div className={className}>
@@ -45,15 +71,19 @@ export function ThemeToggle({ className = '', onModeChange, persistOnSelect = tr
           return (
             <button
               key={option.mode}
+              ref={(element) => {
+                optionRefs.current[THEME_OPTIONS.findIndex((item) => item.mode === option.mode)] = element;
+              }}
               type="button"
               role="radio"
+              tabIndex={isSelected ? 0 : -1}
               aria-checked={isSelected}
-               aria-label={`Use ${option.label.toLowerCase()} theme`}
-               title={stateLabel}
-               onClick={() => {
-                 setMode(option.mode, { persist: persistOnSelect });
-                 onModeChange?.(option.mode);
-               }}
+              aria-label={`Use ${option.label.toLowerCase()} theme`}
+              title={stateLabel}
+              onKeyDown={(event) => handleOptionKeyDown(event, activeIndex === -1 ? 0 : activeIndex)}
+              onClick={() => {
+                selectMode(option.mode);
+              }}
               className={[
                 'flex min-h-9 min-w-0 items-center gap-1.5 rounded-xl px-3 text-xs font-medium tracking-tight transition-all duration-150',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgb(var(--color-border-focus))] focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--color-bg-primary))]',

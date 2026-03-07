@@ -236,6 +236,16 @@ describe('Options App', () => {
     expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
   });
 
+  it('exposes a single keyboard focus stop for each permission toggle', async () => {
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /permission toggles/i });
+
+    const screenshotToggle = screen.getByRole('switch', { name: /share screenshots with ai/i });
+    expect(screen.queryByRole('button', { name: /share screenshots with ai context/i })).not.toBeInTheDocument();
+    expect(screenshotToggle).toHaveAccessibleDescription(/attach page captures as additional context/i);
+  });
+
   it('loads appearance settings from stored preferences', async () => {
     await seedStorage({
       settings: {
@@ -344,15 +354,15 @@ describe('Options App', () => {
     });
   });
 
-  it('supports keyboard toggling from the permission card control', async () => {
+  it('supports keyboard toggling from the permission switch', async () => {
     const user = userEvent.setup();
 
     renderOptionsApp();
 
     await screen.findByRole('heading', { name: /permission toggles/i });
 
-    const cardButton = screen.getByRole('button', { name: /share screenshots with ai context/i });
-    cardButton.focus();
+    const permissionSwitch = screen.getByRole('switch', { name: /share screenshots with ai/i });
+    permissionSwitch.focus();
     await user.keyboard('{Enter}');
 
     expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
