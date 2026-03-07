@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/ui/components';
+import { normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@/shared/storage/onboarding';
 import { ThemeToggle } from '@/ui/theme';
 
 interface PageInfo {
@@ -127,9 +128,25 @@ async function getActiveTabPageInfo(): Promise<PageInfo> {
 
 export function App() {
   const [pageInfo, setPageInfo] = useState<PageInfo>(DEFAULT_PAGE_INFO);
+  const [isOnboardingLocked, setIsOnboardingLocked] = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     let isActive = true;
+
+    function applyOnboardingState(rawValue: unknown): void {
+      const onboardingState = normalizeOnboardingState(rawValue);
+      setNeedsOnboarding(!onboardingState.completed);
+      setIsOnboardingLocked(false);
+    }
+
+    function handleStorageChange(changes: Record<string, chrome.storage.StorageChange>, areaName: string): void {
+      if (!isActive || areaName !== 'local' || !(ONBOARDING_STORAGE_KEY in changes)) {
+        return;
+      }
+
+      applyOnboardingState(changes[ONBOARDING_STORAGE_KEY]?.newValue);
+    }
 
     void getActiveTabPageInfo().then((nextPageInfo) => {
       if (isActive) {
@@ -137,10 +154,59 @@ export function App() {
       }
     });
 
+    void chrome.storage.local
+      .get(ONBOARDING_STORAGE_KEY)
+      .then((storageState) => {
+        if (!isActive) {
+          return;
+        }
+
+        applyOnboardingState(storageState[ONBOARDING_STORAGE_KEY]);
+      })
+      .catch(() => {
+        if (isActive) {
+          setNeedsOnboarding(true);
+          setIsOnboardingLocked(false);
+        }
+      });
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+
     return () => {
       isActive = false;
+      chrome.storage.onChanged.removeListener(handleStorageChange);
     };
   }, []);
+
+  async function handleFinishSetup(): Promise<void> {
+    if (typeof chrome === 'undefined' || !chrome.runtime?.openOptionsPage) {
+      return;
+    }
+
+    try {
+      const storageState = await chrome.storage.local.get(ONBOARDING_STORAGE_KEY);
+      const onboardingState = normalizeOnboardingState(storageState[ONBOARDING_STORAGE_KEY]);
+
+      await chrome.storage.local.set({
+        [ONBOARDING_STORAGE_KEY]: {
+          ...onboardingState,
+          completed: false,
+          resumeRequestedAt: Date.now(),
+        },
+      });
+    } catch {
+      await chrome.storage.local.set({
+        [ONBOARDING_STORAGE_KEY]: {
+          ...normalizeOnboardingState(undefined),
+          resumeRequestedAt: Date.now(),
+        },
+      });
+    }
+
+    await chrome.runtime.openOptionsPage();
+  }
+
+  const quickActionsDisabled = isOnboardingLocked || needsOnboarding;
 
   return (
     <div
@@ -216,6 +282,30 @@ export function App() {
         </Card>
 
         <section aria-labelledby="popup-quick-actions-heading" className="min-h-0 flex-1">
+          {needsOnboarding ? (
+            <Card variant="elevated" className="mb-3 border border-[rgb(var(--color-primary-200))] bg-[linear-gradient(135deg,rgb(var(--color-primary-50))_0%,rgb(var(--color-bg-primary))_100%)]">
+              <CardContent className="flex items-start justify-between gap-3 px-4 py-4">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-primary-700))]">
+                    Guided setup
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-[rgb(var(--color-text-primary))]">
+                    Open guided setup before your first live workflow.
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                    Review the welcome steps, verify a provider connection, and confirm the capability boundaries in options.
+                  </p>
+                </div>
+
+                <Button type="button" className="shrink-0" onClick={() => {
+                  void handleFinishSetup();
+                }}>
+                  Open guided setup
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 id="popup-quick-actions-heading" className="text-sm font-semibold tracking-tight">
               Quick actions
@@ -233,6 +323,7 @@ export function App() {
                   type="button"
                   variant="secondary"
                   size="lg"
+                  disabled={quickActionsDisabled}
                   className="group flex h-full min-h-28 flex-col items-start justify-start rounded-2xl border border-[rgb(var(--color-border-default))] px-3 py-3 text-left shadow-sm"
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgb(var(--color-primary-50))] text-[rgb(var(--color-primary-700))] transition-transform duration-150 group-hover:-translate-y-0.5">
@@ -248,6 +339,12 @@ export function App() {
               );
             })}
           </div>
+
+          {quickActionsDisabled ? (
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              Quick actions stay in preview mode until guided setup is complete.
+            </p>
+          ) : null}
         </section>
       </main>
 
@@ -255,12 +352,14 @@ export function App() {
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-tight">
-              {pageInfo.isFallback ? 'Preview mode' : 'Live tab context'}
+              {quickActionsDisabled ? 'Guided setup required' : pageInfo.isFallback ? 'Preview mode' : 'Live tab context'}
             </p>
             <p className="truncate text-xs text-[rgb(var(--color-text-secondary))]">
-              {pageInfo.isFallback
-                ? 'Quick actions stay available while the popup waits for tab access.'
-                : 'Popup is synced to the active tab for the next automation step.'}
+              {quickActionsDisabled
+                ? 'Finish guided setup to unlock quick actions for the current tab.'
+                : pageInfo.isFallback
+                  ? 'Quick actions stay available while the popup waits for tab access.'
+                  : 'Popup is synced to the active tab. Key-based providers still require a fresh API key entry until secure persistence ships.'}
             </p>
           </div>
 

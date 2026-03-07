@@ -1,7 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
+import { createDefaultOnboardingState } from '../../shared/storage/onboarding';
+import { readStorage, seedStorage } from '../../test/helpers';
 import { App } from '../App';
 
 type TabsMockApi = typeof chrome.tabs & {
@@ -42,6 +44,17 @@ function renderApp() {
 }
 
 describe('Popup App (U-06 quick actions + page info)', () => {
+  beforeEach(async () => {
+    await seedStorage({
+      onboarding: {
+        version: 1,
+        completed: true,
+        lastStep: 3,
+        completedAt: Date.UTC(2026, 2, 7, 10, 0),
+      },
+    });
+  });
+
   it('renders a popup-sized layout with live current page details', async () => {
     getTabsMock()._setTabs([
       createMockTab({
@@ -120,5 +133,95 @@ describe('Popup App (U-06 quick actions + page info)', () => {
 
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(localStorage.getItem('flux-agent-theme')).toBe('dark');
+  });
+
+  it('shows an open guided setup CTA when onboarding is incomplete', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderApp();
+
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+
+    const cta = await screen.findByRole('button', { name: /open guided setup/i });
+    expect(screen.getByText('Guided setup')).toBeInTheDocument();
+    expect(screen.getByText(/quick actions stay in preview mode/i)).toBeInTheDocument();
+
+    await user.click(cta);
+
+    await waitFor(() => {
+      expect(chrome.runtime.openOptionsPage).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(readStorage('onboarding')).resolves.toEqual(
+      expect.objectContaining({
+        completed: false,
+        resumeRequestedAt: expect.any(Number),
+      }),
+    );
+  });
+
+  it('defaults to guided setup when onboarding state is missing', async () => {
+    await chrome.storage.local.remove('onboarding');
+
+    renderApp();
+
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+
+    expect(await screen.findByRole('button', { name: /open guided setup/i })).toBeInTheDocument();
+  });
+
+  it('defaults to guided setup when onboarding state loading fails', async () => {
+    vi.spyOn(chrome.storage.local, 'get').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    renderApp();
+
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+
+    expect(await screen.findByRole('button', { name: /open guided setup/i })).toBeInTheDocument();
+  });
+
+  it('unlocks quick actions when onboarding is already completed', async () => {
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /summarize page/i })).toBeEnabled();
+    });
+
+    expect(screen.queryByRole('button', { name: /open guided setup/i })).not.toBeInTheDocument();
+  });
+
+  it('reacts to onboarding storage changes while the popup stays open', async () => {
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /summarize page/i })).toBeEnabled();
+    });
+
+    await act(async () => {
+      await seedStorage({
+        onboarding: createDefaultOnboardingState(),
+      });
+      (chrome.storage.onChanged as typeof chrome.storage.onChanged & { dispatch: (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void }).dispatch(
+        {
+          onboarding: {
+            oldValue: {
+              version: 1,
+              completed: true,
+              lastStep: 3,
+              completedAt: Date.UTC(2026, 2, 7, 10, 0),
+            },
+            newValue: createDefaultOnboardingState(),
+          },
+        },
+        'local',
+      );
+    });
+
+    expect(await screen.findByRole('button', { name: /open guided setup/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
   });
 });

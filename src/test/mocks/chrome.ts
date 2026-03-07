@@ -469,6 +469,10 @@ function createMockRuntime() {
       }),
     ),
 
+    openOptionsPage: vi.fn((): Promise<void> => {
+      return Promise.resolve();
+    }),
+
     connect: vi.fn(
       (
         connectInfo?: chrome.runtime.ConnectInfo,

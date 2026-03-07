@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createDefaultOnboardingState } from '../../shared/storage/onboarding';
 import { App } from '../App';
 import { renderWithProviders, readStorage, seedStorage } from '../../test/helpers';
 import { ThemeProvider } from '../../ui/theme';
@@ -14,6 +15,17 @@ function renderOptionsApp() {
 }
 
 describe('Options App', () => {
+  beforeEach(async () => {
+    await seedStorage({
+      onboarding: {
+        version: 1,
+        completed: true,
+        lastStep: 3,
+        completedAt: Date.UTC(2026, 2, 7, 10, 0),
+      },
+    });
+  });
+
   it('loads stored provider settings and masked key metadata', async () => {
     await seedStorage({
       activeProvider: 'claude',
@@ -400,5 +412,336 @@ describe('Options App', () => {
     });
 
     await expect(readStorage('activeProvider')).resolves.toBeUndefined();
+  });
+
+  it('shows the onboarding gate when setup is incomplete and supports resuming after skip', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-step-welcome')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /skip for now/i }));
+
+    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /resume onboarding/i }));
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+  });
+
+  it('restores the saved onboarding step on first load', async () => {
+    await seedStorage({
+      onboarding: {
+        version: 1,
+        completed: false,
+        lastStep: 2,
+        providerReady: false,
+      },
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
+  });
+
+  it('resumes onboarding from the persisted step after skip', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: {
+        version: 1,
+        completed: false,
+        lastStep: 2,
+        providerReady: false,
+      },
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /skip for now/i }));
+    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /resume onboarding/i }));
+
+    expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
+  });
+
+  it('persists onboarding completion and returns to the dashboard', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+    expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+    expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /finish setup/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('onboarding')).resolves.toEqual(
+        expect.objectContaining({
+          version: 1,
+          completed: true,
+          lastStep: 3,
+          completedAt: expect.any(Number),
+        }),
+      );
+    });
+
+    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /restart onboarding/i })).toBeInTheDocument();
+  });
+
+  it('keeps onboarding completion locked when a key-based provider is only saved without validation', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+    expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByText(/almost ready for the full flux workspace/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+  });
+
+  it('keeps onboarding completion locked when a key-based provider is only validated without saving', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+    expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByText(/almost ready for the full flux workspace/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+  });
+
+  it('locks onboarding navigation while provider validation is in progress', async () => {
+    const user = userEvent.setup();
+    let resolveValidation: ((value: Response) => void) | undefined;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveValidation = resolve;
+        }),
+    );
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /back/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /skip for now/i })).toBeDisabled();
+
+    resolveValidation?.(
+      new Response(JSON.stringify({ data: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();
+  });
+
+  it('re-locks onboarding when a validated provider config is edited', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: {
+        version: 1,
+        completed: false,
+        lastStep: 3,
+        providerReady: true,
+        configuredProvider: 'openai',
+        validatedProvider: 'openai',
+      },
+      providerKeyMetadata: {
+        openai: {
+          maskedValue: '••••••••••••',
+          updatedAt: Date.UTC(2026, 2, 7, 12, 0),
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    const modelInput = screen.getByLabelText('Model');
+    await user.clear(modelInput);
+    await user.type(modelInput, 'gpt-4.1-mini');
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByText(/almost ready for the full flux workspace/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+    await expect(readStorage('onboarding')).resolves.toEqual(
+      expect.objectContaining({
+        completed: false,
+        configuredProvider: undefined,
+        validatedProvider: undefined,
+      }),
+    );
+  });
+
+  it('does not unlock onboarding when switching to a different key-based provider with stale saved metadata', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: {
+        version: 1,
+        completed: false,
+        lastStep: 3,
+        providerReady: true,
+        configuredProvider: 'openai',
+        validatedProvider: 'openai',
+      },
+      providerKeyMetadata: {
+        claude: {
+          maskedValue: '••••••••••••',
+          updatedAt: Date.UTC(2026, 2, 7, 12, 0),
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    await user.click(screen.getByRole('button', { name: /back/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Provider'), 'claude');
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByText(/almost ready for the full flux workspace/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+  });
+
+  it('keeps onboarding completion locked for legacy invalid custom endpoint state', async () => {
+    await seedStorage({
+      activeProvider: 'custom',
+      providers: {
+        custom: {
+          enabled: true,
+          model: 'custom-model',
+          maxTokens: 4096,
+          temperature: 0.3,
+          customEndpoint: 'http://legacy.example.com/v1',
+        },
+      },
+      settings: {
+        defaultProvider: 'custom',
+      },
+      onboarding: {
+        version: 1,
+        completed: false,
+        lastStep: 3,
+        configuredProvider: 'custom',
+      },
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByText(/almost ready for the full flux workspace/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
   });
 });

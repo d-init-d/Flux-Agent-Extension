@@ -213,11 +213,11 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 - [x] `U-07` Provider settings baseline
 - [x] `U-08` Permission toggles
 - [x] `U-09` Appearance settings
-- [ ] `U-10` Onboarding flow
-- [ ] `U-10a` Welcome
-- [ ] `U-10b` Connect provider
-- [ ] `U-10c` Permission explanation
-- [ ] `U-10d` Ready/tips
+- [x] `U-10` Onboarding flow
+- [x] `U-10a` Welcome
+- [x] `U-10b` Connect provider
+- [x] `U-10c` Permission explanation
+- [x] `U-10d` Ready/tips
 - [~] `U-11` Highlight overlay baseline
 - [ ] `U-12` Action status overlay
 - [ ] `U-14` Keyboard shortcuts

@@ -79,6 +79,7 @@ export type {
 export type {
   StorageSchema,
   ExtensionSettings,
+  OnboardingState,
   ProviderConfig,
   UsageStats,
 } from './storage';

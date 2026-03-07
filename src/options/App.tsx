@@ -9,10 +9,12 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { ClaudeProvider, GeminiProvider, OllamaProvider, OpenAIProvider, OpenRouterProvider } from '@core/ai-client';
-import type { AIModelConfig, AIProviderType, ExtensionSettings, ProviderConfig } from '@shared/types';
+import { createDefaultOnboardingState, normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@shared/storage/onboarding';
+import type { AIModelConfig, AIProviderType, ExtensionSettings, OnboardingState, ProviderConfig } from '@shared/types';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Switch } from '@ui/components';
 import type { BadgeVariant } from '@ui/components';
 import { ThemeToggle, useTheme } from '@ui/theme';
+import { OnboardingFlow } from './onboarding';
 
 type SaveState = 'idle' | 'success' | 'error';
 type ValidationState = 'idle' | 'success' | 'error';
@@ -135,6 +137,7 @@ const STORAGE_KEYS = {
   providerConfigs: 'providers',
   settings: 'settings',
   apiKeyMetadata: 'providerKeyMetadata',
+  onboarding: ONBOARDING_STORAGE_KEY,
   legacySessionApiKeys: 'providerSessionApiKeys',
 } as const;
 
@@ -434,6 +437,10 @@ export function App() {
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfigMap>(() =>
     createDefaultProviderConfigs(),
   );
+  const [onboardingState, setOnboardingState] = useState<OnboardingState>(() => createDefaultOnboardingState());
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [isCompletingOnboarding, setIsCompletingOnboarding] = useState(false);
   const [settings, setSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
   const [savedSettings, setSavedSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
   const [apiKeyMetadata, setApiKeyMetadata] = useState<ProviderMetadataMap>({});
@@ -447,6 +454,12 @@ export function App() {
   const [validationMessage, setValidationMessage] = useState('');
   const [customScriptsConfirmed, setCustomScriptsConfirmed] = useState(false);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
+  const onboardingStateRef = useRef<OnboardingState>(createDefaultOnboardingState());
+  const suppressOnboardingAutoOpenRef = useRef(false);
+
+  useEffect(() => {
+    onboardingStateRef.current = onboardingState;
+  }, [onboardingState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -457,6 +470,7 @@ export function App() {
         STORAGE_KEYS.providerConfigs,
         STORAGE_KEYS.settings,
         STORAGE_KEYS.apiKeyMetadata,
+        STORAGE_KEYS.onboarding,
       ]);
       await chrome.storage.session.remove(STORAGE_KEYS.legacySessionApiKeys);
 
@@ -476,9 +490,14 @@ export function App() {
           : DEFAULT_PROVIDER;
 
       const normalizedSettings = normalizeSettings(localState[STORAGE_KEYS.settings]);
+      const normalizedOnboarding = normalizeOnboardingState(localState[STORAGE_KEYS.onboarding]);
 
       setSelectedProvider(activeProvider);
       setProviderConfigs(normalizeProviderConfigs(localState[STORAGE_KEYS.providerConfigs]));
+      setOnboardingState(normalizedOnboarding);
+      onboardingStateRef.current = normalizedOnboarding;
+      setOnboardingStep(normalizedOnboarding.lastStep);
+      setShowOnboarding(!normalizedOnboarding.completed);
       setSettings(normalizedSettings);
       setSavedSettings(normalizedSettings);
       setCustomScriptsConfirmed(normalizedSettings.allowCustomScripts);
@@ -500,11 +519,156 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    function handleStorageChange(changes: Record<string, chrome.storage.StorageChange>, areaName: string): void {
+      if (areaName !== 'local' || !(STORAGE_KEYS.onboarding in changes)) {
+        return;
+      }
+
+      const nextState = normalizeOnboardingState(changes[STORAGE_KEYS.onboarding]?.newValue);
+      onboardingStateRef.current = nextState;
+      setOnboardingState(nextState);
+      setOnboardingStep(nextState.lastStep);
+      if (suppressOnboardingAutoOpenRef.current) {
+        suppressOnboardingAutoOpenRef.current = false;
+        setShowOnboarding(false);
+        return;
+      }
+
+      setShowOnboarding(!nextState.completed);
+    }
+
+    chrome.storage.onChanged.addListener(handleStorageChange);
+    return () => {
+      chrome.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
+
   const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
   const selectedConfig = providerConfigs[selectedProvider];
   const savedMetadata = apiKeyMetadata[selectedProvider];
+  const shouldShowOnboarding = isReady && showOnboarding;
+
+  async function persistOnboardingState(nextState: OnboardingState): Promise<void> {
+    onboardingStateRef.current = nextState;
+    await chrome.storage.local.set({
+      [STORAGE_KEYS.onboarding]: nextState,
+    });
+    setOnboardingState(nextState);
+  }
+
+  function handleOnboardingStepChange(step: number): void {
+    const nextStep = Math.max(0, step);
+    setOnboardingStep(nextStep);
+
+    const currentOnboarding = onboardingStateRef.current;
+
+    if (currentOnboarding.completed) {
+      return;
+    }
+
+    void persistOnboardingState({
+      ...currentOnboarding,
+      lastStep: nextStep,
+    });
+  }
+
+  function handleOnboardingSkip(): void {
+    setShowOnboarding(false);
+  }
+
+  function isProviderReadyForOnboarding(): boolean {
+    if (selectedDefinition.requiresApiKey) {
+      return onboardingState.configuredProvider === selectedProvider && onboardingState.validatedProvider === selectedProvider;
+    }
+
+    if (selectedDefinition.supportsEndpoint) {
+      return (
+        onboardingState.configuredProvider === selectedProvider
+        && isAllowedEndpoint(selectedProvider, selectedConfig.customEndpoint?.trim() ?? '')
+      );
+    }
+
+    return onboardingState.configuredProvider === selectedProvider;
+  }
+
+  async function handleOnboardingComplete(): Promise<void> {
+    setIsCompletingOnboarding(true);
+
+    try {
+      if (!isProviderReadyForOnboarding()) {
+        setOnboardingStep(1);
+        setSaveState('error');
+        setSaveMessage('Complete the provider setup step before finishing onboarding. Save the provider and validate the connection first.');
+        return;
+      }
+
+      const nextState: OnboardingState = {
+        ...onboardingState,
+        completed: true,
+        lastStep: 3,
+        providerReady: true,
+        completedAt: Date.now(),
+        resumeRequestedAt: undefined,
+      };
+
+      await persistOnboardingState(nextState);
+      setOnboardingStep(3);
+      setShowOnboarding(false);
+    } finally {
+      setIsCompletingOnboarding(false);
+    }
+  }
+
+  function handleOpenOnboarding(): void {
+    if (onboardingState.completed) {
+      const nextState = createDefaultOnboardingState();
+      setOnboardingStep(0);
+      setShowOnboarding(true);
+      void persistOnboardingState(nextState);
+      return;
+    }
+
+    setOnboardingStep(onboardingState.lastStep);
+    setShowOnboarding(true);
+    void persistOnboardingState({
+      ...onboardingState,
+      resumeRequestedAt: Date.now(),
+    });
+  }
 
   function updateProviderConfig(patch: Partial<ProviderConfig>): void {
+    const currentOnboarding = onboardingStateRef.current;
+    if (
+      currentOnboarding.configuredProvider === selectedProvider
+      || currentOnboarding.validatedProvider === selectedProvider
+      || currentOnboarding.providerReady
+    ) {
+      const nextOnboarding: OnboardingState = {
+        ...currentOnboarding,
+        completed: false,
+        completedAt: undefined,
+        lastStep: 1,
+        providerReady: false,
+        configuredProvider:
+          currentOnboarding.configuredProvider === selectedProvider
+            ? undefined
+            : currentOnboarding.configuredProvider,
+        validatedProvider:
+          currentOnboarding.validatedProvider === selectedProvider
+            ? undefined
+            : currentOnboarding.validatedProvider,
+      };
+      onboardingStateRef.current = nextOnboarding;
+      setOnboardingState(nextOnboarding);
+      if (!showOnboarding) {
+        suppressOnboardingAutoOpenRef.current = true;
+      }
+      void chrome.storage.local.set({
+        [STORAGE_KEYS.onboarding]: nextOnboarding,
+      });
+    }
+
     setProviderConfigs((current) => ({
       ...current,
       [selectedProvider]: {
@@ -558,6 +722,7 @@ export function App() {
 
       const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
       const nextMetadata: ProviderMetadataMap = { ...apiKeyMetadata };
+      const currentOnboarding = onboardingStateRef.current;
 
       if (rawApiKey) {
         nextMetadata[selectedProvider] = {
@@ -566,11 +731,23 @@ export function App() {
         };
       }
 
+      const nextOnboardingState: OnboardingState = {
+        ...currentOnboarding,
+        configuredProvider: selectedProvider,
+        providerReady: selectedDefinition.requiresApiKey ? false : true,
+        validatedProvider:
+          selectedDefinition.requiresApiKey || currentOnboarding.validatedProvider !== selectedProvider
+            ? undefined
+            : currentOnboarding.validatedProvider,
+      };
+      onboardingStateRef.current = nextOnboardingState;
+
       await chrome.storage.local.set({
         [STORAGE_KEYS.activeProvider]: selectedProvider,
         [STORAGE_KEYS.providerConfigs]: providerConfigs,
         [STORAGE_KEYS.settings]: nextSettings,
         [STORAGE_KEYS.apiKeyMetadata]: nextMetadata,
+        [STORAGE_KEYS.onboarding]: nextOnboardingState,
       });
       await chrome.storage.session.remove(STORAGE_KEYS.legacySessionApiKeys);
 
@@ -752,6 +929,15 @@ export function App() {
           ? `${selectedDefinition.label} responded successfully.`
           : `${selectedDefinition.label} could not be validated with the current settings.`,
       );
+
+      if (isValid) {
+        const currentOnboarding = onboardingStateRef.current;
+        await persistOnboardingState({
+          ...currentOnboarding,
+          providerReady: true,
+          validatedProvider: selectedProvider,
+        });
+      }
     } catch {
       setValidationState('error');
       setValidationMessage('Connection test failed unexpectedly.');
@@ -787,6 +973,151 @@ export function App() {
       : appearanceSaveState === 'error'
         ? 'border-error-500/30 bg-error-50 text-error-700'
         : 'border-border bg-surface-primary text-content-secondary';
+
+  const providerSetupPanel = (
+    <section className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
+      <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+        <div>
+          <Select
+            id="provider-select"
+            label="Provider"
+            value={selectedProvider}
+            onChange={handleProviderChange}
+            options={PROVIDER_DEFINITIONS.map((provider) => ({
+              value: provider.type,
+              label: provider.label,
+            }))}
+            helperText={selectedDefinition.tagline}
+            className="bg-surface-elevated"
+          />
+        </div>
+
+        <div className={`rounded-2xl border bg-gradient-to-br ${selectedDefinition.accent} border-border px-4 py-4`}>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
+            Recommended default
+          </p>
+          <p className="mt-2 text-lg font-semibold tracking-tight text-content-primary">
+            {selectedDefinition.defaultModel}
+          </p>
+          <p className="mt-2 text-sm leading-6 text-content-secondary">
+            Keep this as the starting point unless your account requires a different model id.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+        <Input
+          label="Model"
+          value={selectedConfig.model}
+          onChange={(event) => updateProviderConfig({ model: event.target.value })}
+          placeholder={selectedDefinition.defaultModel}
+          helperText="Use the exact model id your provider expects."
+        />
+
+        {selectedDefinition.supportsEndpoint ? (
+          <Input
+            label={selectedDefinition.endpointLabel}
+            value={selectedConfig.customEndpoint ?? ''}
+            onChange={(event) => updateProviderConfig({ customEndpoint: event.target.value })}
+            placeholder={selectedDefinition.endpointPlaceholder}
+            helperText={
+              selectedProvider === 'ollama'
+                ? 'Only loopback URLs are allowed for local runtime testing.'
+                : 'Remote custom endpoints must use HTTPS.'
+            }
+          />
+        ) : null}
+
+        {selectedDefinition.requiresApiKey ? (
+          <div className="space-y-3">
+            <Input
+              ref={apiKeyInputRef}
+              label="API key"
+              type="password"
+              placeholder="Paste a provider key when needed"
+              helperText="This field is not persisted. Save stores only masked metadata, and test clears the field after validation."
+              autoComplete="off"
+              spellCheck={false}
+              onCopy={(event) => event.preventDefault()}
+            />
+
+            {savedMetadata ? (
+              <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
+                  <KeyRound className="h-4 w-4 text-primary-600" />
+                  Saved key metadata
+                </div>
+                <p className="mt-2 text-sm text-content-secondary">
+                  {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
+                </p>
+                <p className="mt-1 text-xs text-content-tertiary">
+                  Re-enter the raw key whenever you want to test until encrypted key persistence is wired.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
+            {selectedProvider === 'ollama'
+              ? 'Ollama skips API keys. Use the test button to verify the loopback runtime is reachable.'
+              : 'Custom provider baseline currently validates the endpoint only. Secret persistence stays disabled until secure encryption flow is connected.'}
+          </div>
+        )}
+
+        <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
+          {validationMessage || saveMessage || 'Save changes, then test the selected provider configuration.'}
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Button
+            type="button"
+            variant="secondary"
+            loading={isTesting}
+            onClick={() => {
+              void handleTestConnection();
+            }}
+            iconLeft={<RotateCw />}
+            disabled={!isReady}
+          >
+            Test connection
+          </Button>
+          <Button
+            type="button"
+            loading={isSaving}
+            onClick={() => {
+              void handleSave();
+            }}
+            iconLeft={<ShieldCheck />}
+            disabled={!isReady}
+          >
+            Save provider
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+
+  if (shouldShowOnboarding) {
+    return (
+      <OnboardingFlow
+        currentStep={onboardingStep}
+        selectedProviderLabel={selectedDefinition.label}
+        enabledPermissionCount={enabledPermissionCount}
+        theme={settings.theme}
+        language={settings.language}
+        providerSetupPanel={providerSetupPanel}
+        onStepChange={handleOnboardingStepChange}
+        onSkip={handleOnboardingSkip}
+        onComplete={() => {
+          void handleOnboardingComplete();
+        }}
+        providerRequiresApiKey={selectedDefinition.requiresApiKey}
+        canComplete={isProviderReadyForOnboarding()}
+        isBusy={isSaving || isTesting || isCompletingOnboarding}
+        isCompleting={isCompletingOnboarding}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgb(var(--color-primary-500)/0.14),_transparent_28%),linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_rgb(var(--color-bg-primary))_26%)] px-4 py-6 sm:px-6 lg:px-8">
@@ -851,126 +1182,7 @@ export function App() {
               </CardHeader>
 
               <CardContent className="space-y-6 pt-6">
-                <section className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
-                  <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
-                    <div>
-                      <Select
-                        id="provider-select"
-                        label="Provider"
-                        value={selectedProvider}
-                        onChange={handleProviderChange}
-                        options={PROVIDER_DEFINITIONS.map((provider) => ({
-                          value: provider.type,
-                          label: provider.label,
-                        }))}
-                        helperText={selectedDefinition.tagline}
-                        className="bg-surface-elevated"
-                      />
-                    </div>
-
-                    <div className={`rounded-2xl border bg-gradient-to-br ${selectedDefinition.accent} border-border px-4 py-4`}>
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
-                        Recommended default
-                      </p>
-                      <p className="mt-2 text-lg font-semibold tracking-tight text-content-primary">
-                        {selectedDefinition.defaultModel}
-                      </p>
-                      <p className="mt-2 text-sm leading-6 text-content-secondary">
-                        Keep this as the starting point unless your account requires a different model id.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
-                    <Input
-                      label="Model"
-                      value={selectedConfig.model}
-                      onChange={(event) => updateProviderConfig({ model: event.target.value })}
-                      placeholder={selectedDefinition.defaultModel}
-                      helperText="Use the exact model id your provider expects."
-                    />
-
-                    {selectedDefinition.supportsEndpoint ? (
-                      <Input
-                        label={selectedDefinition.endpointLabel}
-                        value={selectedConfig.customEndpoint ?? ''}
-                        onChange={(event) => updateProviderConfig({ customEndpoint: event.target.value })}
-                        placeholder={selectedDefinition.endpointPlaceholder}
-                        helperText={
-                          selectedProvider === 'ollama'
-                            ? 'Only loopback URLs are allowed for local runtime testing.'
-                            : 'Remote custom endpoints must use HTTPS.'
-                        }
-                      />
-                    ) : null}
-
-                    {selectedDefinition.requiresApiKey ? (
-                      <div className="space-y-3">
-                        <Input
-                          ref={apiKeyInputRef}
-                          label="API key"
-                          type="password"
-                          placeholder="Paste a provider key when needed"
-                          helperText="This field is not persisted. Save stores only masked metadata, and test clears the field after validation."
-                          autoComplete="off"
-                          spellCheck={false}
-                          onCopy={(event) => event.preventDefault()}
-                        />
-
-                        {savedMetadata ? (
-                          <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
-                            <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
-                              <KeyRound className="h-4 w-4 text-primary-600" />
-                              Saved key metadata
-                            </div>
-                            <p className="mt-2 text-sm text-content-secondary">
-                              {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
-                            </p>
-                            <p className="mt-1 text-xs text-content-tertiary">
-                              Re-enter the raw key whenever you want to test until encrypted key persistence is wired.
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-dashed border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
-                        {selectedProvider === 'ollama'
-                          ? 'Ollama skips API keys. Use the test button to verify the loopback runtime is reachable.'
-                          : 'Custom provider baseline currently validates the endpoint only. Secret persistence stays disabled until secure encryption flow is connected.'}
-                      </div>
-                    )}
-
-                    <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
-                      {validationMessage || saveMessage || 'Save changes, then test the selected provider configuration.'}
-                    </div>
-
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        loading={isTesting}
-                        onClick={() => {
-                          void handleTestConnection();
-                        }}
-                        iconLeft={<RotateCw />}
-                        disabled={!isReady}
-                      >
-                        Test connection
-                      </Button>
-                      <Button
-                        type="button"
-                        loading={isSaving}
-                        onClick={() => {
-                          void handleSave();
-                        }}
-                        iconLeft={<ShieldCheck />}
-                        disabled={!isReady}
-                      >
-                        Save provider
-                      </Button>
-                    </div>
-                  </div>
-                </section>
+                {providerSetupPanel}
               </CardContent>
             </Card>
 
@@ -1147,6 +1359,21 @@ export function App() {
                 <CardDescription>Immediate capabilities available from the current options baseline.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
+                <div className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
+                  <div>
+                    <p className="font-medium text-content-primary">
+                      {onboardingState.completed ? 'Onboarding completed' : 'Onboarding available'}
+                    </p>
+                    <p className="mt-1 text-sm text-content-secondary">
+                      {onboardingState.completed
+                        ? 'Rerun the guided setup whenever you want to revisit the welcome flow and first-run tips.'
+                        : `Continue the guided setup from step ${onboardingState.lastStep + 1} before tuning the full dashboard.`}
+                    </p>
+                  </div>
+                  <Button type="button" variant="secondary" onClick={handleOpenOnboarding}>
+                    {onboardingState.completed ? 'Restart onboarding' : 'Resume onboarding'}
+                  </Button>
+                </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <ServerCog className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>Provider selection persists through `chrome.storage.local` with a real dropdown control.</p>
@@ -1174,17 +1401,17 @@ export function App() {
               <CardContent className="space-y-3 text-sm text-content-secondary">
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
-                    <Sparkles className="h-4 w-4 text-primary-600" />
-                    U-10 onboarding flow
-                  </div>
-                  <p className="mt-1">The onboarding screens can now reuse provider setup, permissions, and appearance defaults from this page.</p>
-                </div>
-                <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
-                  <div className="flex items-center gap-2 font-medium text-content-primary">
                     <LaptopMinimal className="h-4 w-4 text-primary-600" />
                     U-11 highlight overlay
                   </div>
                   <p className="mt-1">Visual targeting overlays can inherit the same theme profile for a more consistent feedback layer.</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
+                  <div className="flex items-center gap-2 font-medium text-content-primary">
+                    <Sparkles className="h-4 w-4 text-primary-600" />
+                    U-12 action status overlay
+                  </div>
+                  <p className="mt-1">Transient run feedback can mirror the permission and theme decisions already stored in shared settings.</p>
                 </div>
               </CardContent>
             </Card>

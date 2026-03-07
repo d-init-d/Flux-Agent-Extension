@@ -8,6 +8,9 @@ export interface StorageSchema {
   // Settings
   settings: ExtensionSettings;
 
+  // Onboarding
+  onboarding: OnboardingState;
+
   // AI Provider configurations
   providers: Record<AIProviderType, ProviderConfig>;
 
@@ -67,6 +70,17 @@ export interface ExtensionSettings {
   // Debug
   debugMode: boolean;
   logNetworkRequests: boolean;
+}
+
+export interface OnboardingState {
+  version: number;
+  completed: boolean;
+  lastStep: number;
+  completedAt?: number;
+  providerReady?: boolean;
+  configuredProvider?: AIProviderType;
+  validatedProvider?: AIProviderType;
+  resumeRequestedAt?: number;
 }
 
 /**
