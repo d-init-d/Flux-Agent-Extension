@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-06
+> Last updated: 2026-03-07
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
 
@@ -211,7 +211,7 @@ Status summary: UI foundation exists; feature UI and end-to-end integration most
 ### Sprint 3.2
 
 - [x] `U-07` Provider settings baseline
-- [ ] `U-08` Permission toggles
+- [x] `U-08` Permission toggles
 - [ ] `U-09` Appearance settings
 - [ ] `U-10` Onboarding flow
 - [ ] `U-10a` Welcome

@@ -10,7 +10,8 @@ import {
 } from 'lucide-react';
 import { ClaudeProvider, GeminiProvider, OllamaProvider, OpenAIProvider, OpenRouterProvider } from '@core/ai-client';
 import type { AIModelConfig, AIProviderType, ExtensionSettings, ProviderConfig } from '@shared/types';
-import { Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select } from '@ui/components';
+import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Switch } from '@ui/components';
+import type { BadgeVariant } from '@ui/components';
 
 type SaveState = 'idle' | 'success' | 'error';
 type ValidationState = 'idle' | 'success' | 'error';
@@ -30,6 +31,22 @@ interface ProviderDefinition {
 interface ApiKeyMetadata {
   maskedValue: string;
   updatedAt: number;
+}
+
+type PermissionSettingKey =
+  | 'includeScreenshotsInContext'
+  | 'screenshotOnError'
+  | 'allowCustomScripts'
+  | 'showFloatingBar'
+  | 'highlightElements'
+  | 'soundNotifications';
+
+interface PermissionDefinition {
+  key: PermissionSettingKey;
+  title: string;
+  description: string;
+  badge: string;
+  tone: BadgeVariant;
 }
 
 type ProviderConfigMap = Record<AIProviderType, ProviderConfig>;
@@ -122,6 +139,51 @@ const STORAGE_KEYS = {
 
 const DEFAULT_PROVIDER: AIProviderType = 'openai';
 const GENERIC_MASK = '••••••••••••';
+
+const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
+  {
+    key: 'includeScreenshotsInContext',
+    title: 'Share screenshots with AI',
+    description: 'Attach page captures as additional context when the model needs visual detail.',
+    badge: 'Context',
+    tone: 'warning',
+  },
+  {
+    key: 'screenshotOnError',
+    title: 'Capture screenshots on failures',
+    description: 'Save visual clues after broken runs so troubleshooting stays faster.',
+    badge: 'Recovery',
+    tone: 'info',
+  },
+  {
+    key: 'allowCustomScripts',
+    title: 'Allow custom scripts',
+    description: 'Unlock advanced script execution. Keep this off unless the workflow source is trusted.',
+    badge: 'High risk',
+    tone: 'error',
+  },
+  {
+    key: 'showFloatingBar',
+    title: 'Show floating bar',
+    description: 'Keep a quick-launch surface visible on supported pages for faster access.',
+    badge: 'Surface',
+    tone: 'default',
+  },
+  {
+    key: 'highlightElements',
+    title: 'Highlight page targets',
+    description: 'Reveal the element Flux is about to act on so automation stays legible.',
+    badge: 'Guidance',
+    tone: 'success',
+  },
+  {
+    key: 'soundNotifications',
+    title: 'Play sound notifications',
+    description: 'Alert you when runs complete or need attention without watching the panel.',
+    badge: 'Alerts',
+    tone: 'default',
+  },
+];
 
 function createDefaultProviderConfigs(): ProviderConfigMap {
   return PROVIDER_DEFINITIONS.reduce(
@@ -235,6 +297,38 @@ function normalizeMetadata(value: unknown): ProviderMetadataMap {
   return metadata;
 }
 
+function normalizeSettings(value: unknown): ExtensionSettings {
+  const defaults = createDefaultSettings();
+
+  if (!value || typeof value !== 'object') {
+    return defaults;
+  }
+
+  const candidate = value as Partial<ExtensionSettings>;
+
+  return {
+    ...defaults,
+    ...candidate,
+    language:
+      candidate.language === 'en' || candidate.language === 'vi' || candidate.language === 'auto'
+        ? candidate.language
+        : defaults.language,
+    theme:
+      candidate.theme === 'light' || candidate.theme === 'dark' || candidate.theme === 'system'
+        ? candidate.theme
+        : defaults.theme,
+    defaultProvider: isProviderType(candidate.defaultProvider)
+      ? candidate.defaultProvider
+      : defaults.defaultProvider,
+    allowedDomains: Array.isArray(candidate.allowedDomains)
+      ? candidate.allowedDomains.filter((value): value is string => typeof value === 'string')
+      : defaults.allowedDomains,
+    blockedDomains: Array.isArray(candidate.blockedDomains)
+      ? candidate.blockedDomains.filter((value): value is string => typeof value === 'string')
+      : defaults.blockedDomains,
+  };
+}
+
 function formatUpdatedAt(timestamp: number): string {
   return new Intl.DateTimeFormat('en', {
     month: 'short',
@@ -331,16 +425,22 @@ async function validateProviderConnection(
 export function App() {
   const [isReady, setIsReady] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<AIProviderType>(DEFAULT_PROVIDER);
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfigMap>(() =>
     createDefaultProviderConfigs(),
   );
+  const [settings, setSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
+  const [savedSettings, setSavedSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
   const [apiKeyMetadata, setApiKeyMetadata] = useState<ProviderMetadataMap>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveMessage, setSaveMessage] = useState('');
+  const [permissionSaveState, setPermissionSaveState] = useState<SaveState>('idle');
+  const [permissionMessage, setPermissionMessage] = useState('');
   const [validationState, setValidationState] = useState<ValidationState>('idle');
   const [validationMessage, setValidationMessage] = useState('');
+  const [customScriptsConfirmed, setCustomScriptsConfirmed] = useState(false);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -370,8 +470,13 @@ export function App() {
           ? settings.defaultProvider
           : DEFAULT_PROVIDER;
 
+      const normalizedSettings = normalizeSettings(localState[STORAGE_KEYS.settings]);
+
       setSelectedProvider(activeProvider);
       setProviderConfigs(normalizeProviderConfigs(localState[STORAGE_KEYS.providerConfigs]));
+      setSettings(normalizedSettings);
+      setSavedSettings(normalizedSettings);
+      setCustomScriptsConfirmed(normalizedSettings.allowCustomScripts);
       setApiKeyMetadata(normalizeMetadata(localState[STORAGE_KEYS.apiKeyMetadata]));
       setIsReady(true);
     }
@@ -413,6 +518,7 @@ export function App() {
 
     setSelectedProvider(nextProvider);
     setSaveState('idle');
+    setPermissionSaveState('idle');
     setValidationState('idle');
 
     if (apiKeyInputRef.current) {
@@ -439,16 +545,8 @@ export function App() {
         }
       }
 
-      const existingSettingsResult = await chrome.storage.local.get(STORAGE_KEYS.settings);
-      const existingSettings =
-        existingSettingsResult[STORAGE_KEYS.settings] &&
-        typeof existingSettingsResult[STORAGE_KEYS.settings] === 'object'
-          ? (existingSettingsResult[STORAGE_KEYS.settings] as Partial<ExtensionSettings>)
-          : {};
-
       const nextSettings: ExtensionSettings = {
-        ...createDefaultSettings(),
-        ...existingSettings,
+        ...savedSettings,
         defaultProvider: selectedProvider,
       };
 
@@ -471,6 +569,11 @@ export function App() {
       await chrome.storage.session.remove(STORAGE_KEYS.legacySessionApiKeys);
 
       setApiKeyMetadata(nextMetadata);
+      setSavedSettings(nextSettings);
+      setSettings((current) => ({
+        ...current,
+        defaultProvider: selectedProvider,
+      }));
       setSaveState('success');
       setSaveMessage(
         rawApiKey
@@ -486,6 +589,69 @@ export function App() {
       setSaveMessage('Failed to save provider settings.');
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function pickPermissionSettings(source: ExtensionSettings): Pick<
+    ExtensionSettings,
+    PermissionSettingKey
+  > {
+    return {
+      includeScreenshotsInContext: source.includeScreenshotsInContext,
+      screenshotOnError: source.screenshotOnError,
+      allowCustomScripts: source.allowCustomScripts,
+      showFloatingBar: source.showFloatingBar,
+      highlightElements: source.highlightElements,
+      soundNotifications: source.soundNotifications,
+    };
+  }
+
+  function handlePermissionToggle(key: PermissionSettingKey, checked: boolean): void {
+    setSettings((current) => ({
+      ...current,
+      [key]: checked,
+    }));
+
+    if (key === 'allowCustomScripts') {
+      setCustomScriptsConfirmed(!checked);
+    }
+
+    setPermissionSaveState('idle');
+  }
+
+  async function handleSavePermissions(): Promise<void> {
+    setIsSavingPermissions(true);
+    setPermissionSaveState('idle');
+
+    try {
+      if (settings.allowCustomScripts && !customScriptsConfirmed) {
+        setPermissionSaveState('error');
+        setPermissionMessage('Acknowledge the custom script warning before saving this permission profile.');
+        return;
+      }
+
+      const permissionSettings = pickPermissionSettings(settings);
+      const nextSettings: ExtensionSettings = {
+        ...savedSettings,
+        ...permissionSettings,
+      };
+
+      await chrome.storage.local.set({
+        [STORAGE_KEYS.settings]: nextSettings,
+      });
+
+      setSavedSettings(nextSettings);
+      setSettings((current) => ({
+        ...current,
+        ...permissionSettings,
+      }));
+      setPermissionSaveState('success');
+      setPermissionMessage('Permission toggles saved. Flux will use these capability boundaries on the next run.');
+    } catch {
+      setPermissionSaveState('error');
+      setPermissionMessage('Failed to save permission toggles.');
+    } finally {
+      setIsSavingPermissions(false);
     }
   }
 
@@ -542,6 +708,15 @@ export function App() {
           ? 'border-primary-500/30 bg-primary-50 text-primary-700'
           : 'border-border bg-surface-primary text-content-secondary';
 
+  const permissionTone =
+    permissionSaveState === 'success'
+      ? 'border-success-500/30 bg-success-50 text-success-700'
+      : permissionSaveState === 'error'
+        ? 'border-error-500/30 bg-error-50 text-error-700'
+        : 'border-border bg-surface-primary text-content-secondary';
+
+  const enabledPermissionCount = PERMISSION_DEFINITIONS.filter((permission) => settings[permission.key]).length;
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgb(var(--color-primary-500)/0.14),_transparent_28%),linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_rgb(var(--color-bg-primary))_26%)] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -551,14 +726,14 @@ export function App() {
             <div className="max-w-2xl space-y-3">
               <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/20 bg-primary-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-primary-700">
                 <Sparkles className="h-3.5 w-3.5" />
-                Options - Provider setup
+                Options - Control surface
               </div>
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight text-content-primary">
-                  Connect the model stack you want Flux to use.
+                  Configure providers and capability boundaries in one place.
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-content-secondary sm:text-base">
-                  U-07 now uses a real provider dropdown, masked key metadata, and endpoint-aware connection testing.
+                  The options workspace now covers provider setup and the first pass of runtime permission toggles without falling back to placeholder settings.
                 </p>
               </div>
             </div>
@@ -586,152 +761,258 @@ export function App() {
               </div>
               <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-content-tertiary">
-                  Secret retention
+                  Enabled capabilities
                 </p>
-                <p className="mt-2 text-sm font-semibold text-content-primary">No plaintext storage</p>
+                <p className="mt-2 text-sm font-semibold text-content-primary">{enabledPermissionCount}/{PERMISSION_DEFINITIONS.length}</p>
               </div>
             </div>
           </div>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
-          <Card className="overflow-hidden border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
-            <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
-              <CardTitle as="h2">Provider settings</CardTitle>
-              <CardDescription>
-                Provider dropdown, model config, masked API-key capture, and connection testing.
-              </CardDescription>
-            </CardHeader>
+          <div className="space-y-6">
+            <Card className="overflow-hidden border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
+              <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
+                <CardTitle as="h2">Provider settings</CardTitle>
+                <CardDescription>
+                  Provider dropdown, model config, masked API-key capture, and connection testing.
+                </CardDescription>
+              </CardHeader>
 
-            <CardContent className="space-y-6 pt-6">
-              <section className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
-                <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
-                  <div>
-                    <Select
-                      id="provider-select"
-                      label="Provider"
-                      value={selectedProvider}
-                      onChange={handleProviderChange}
-                      options={PROVIDER_DEFINITIONS.map((provider) => ({
-                        value: provider.type,
-                        label: provider.label,
-                      }))}
-                      helperText={selectedDefinition.tagline}
-                      className="bg-surface-elevated"
-                    />
-                  </div>
-
-                  <div className={`rounded-2xl border bg-gradient-to-br ${selectedDefinition.accent} border-border px-4 py-4`}>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
-                      Recommended default
-                    </p>
-                    <p className="mt-2 text-lg font-semibold tracking-tight text-content-primary">
-                      {selectedDefinition.defaultModel}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-content-secondary">
-                      Keep this as the starting point unless your account requires a different model id.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
-                  <Input
-                    label="Model"
-                    value={selectedConfig.model}
-                    onChange={(event) => updateProviderConfig({ model: event.target.value })}
-                    placeholder={selectedDefinition.defaultModel}
-                    helperText="Use the exact model id your provider expects."
-                  />
-
-                  {selectedDefinition.supportsEndpoint ? (
-                    <Input
-                      label={selectedDefinition.endpointLabel}
-                      value={selectedConfig.customEndpoint ?? ''}
-                      onChange={(event) => updateProviderConfig({ customEndpoint: event.target.value })}
-                      placeholder={selectedDefinition.endpointPlaceholder}
-                      helperText={
-                        selectedProvider === 'ollama'
-                          ? 'Only loopback URLs are allowed for local runtime testing.'
-                          : 'Remote custom endpoints must use HTTPS.'
-                      }
-                    />
-                  ) : null}
-
-                  {selectedDefinition.requiresApiKey ? (
-                    <div className="space-y-3">
-                      <Input
-                        ref={apiKeyInputRef}
-                        label="API key"
-                        type="password"
-                        placeholder="Paste a provider key when needed"
-                        helperText="This field is not persisted. Save stores only masked metadata, and test clears the field after validation."
-                        autoComplete="off"
-                        spellCheck={false}
-                        onCopy={(event) => event.preventDefault()}
+              <CardContent className="space-y-6 pt-6">
+                <section className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
+                  <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+                    <div>
+                      <Select
+                        id="provider-select"
+                        label="Provider"
+                        value={selectedProvider}
+                        onChange={handleProviderChange}
+                        options={PROVIDER_DEFINITIONS.map((provider) => ({
+                          value: provider.type,
+                          label: provider.label,
+                        }))}
+                        helperText={selectedDefinition.tagline}
+                        className="bg-surface-elevated"
                       />
-
-                      {savedMetadata ? (
-                        <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
-                          <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
-                            <KeyRound className="h-4 w-4 text-primary-600" />
-                            Saved key metadata
-                          </div>
-                          <p className="mt-2 text-sm text-content-secondary">
-                            {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
-                          </p>
-                          <p className="mt-1 text-xs text-content-tertiary">
-                            Re-enter the raw key whenever you want to test until encrypted key persistence is wired.
-                          </p>
-                        </div>
-                      ) : null}
                     </div>
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
-                      {selectedProvider === 'ollama'
-                        ? 'Ollama skips API keys. Use the test button to verify the loopback runtime is reachable.'
-                        : 'Custom provider baseline currently validates the endpoint only. Secret persistence stays disabled until secure encryption flow is connected.'}
-                    </div>
-                  )}
 
-                  <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
-                    {validationMessage || saveMessage || 'Save changes, then test the selected provider configuration.'}
+                    <div className={`rounded-2xl border bg-gradient-to-br ${selectedDefinition.accent} border-border px-4 py-4`}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
+                        Recommended default
+                      </p>
+                      <p className="mt-2 text-lg font-semibold tracking-tight text-content-primary">
+                        {selectedDefinition.defaultModel}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-content-secondary">
+                        Keep this as the starting point unless your account requires a different model id.
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      loading={isTesting}
-                      onClick={() => {
-                        void handleTestConnection();
-                      }}
-                      iconLeft={<RotateCw />}
-                      disabled={!isReady}
-                    >
-                      Test connection
-                    </Button>
-                    <Button
-                      type="button"
-                      loading={isSaving}
-                      onClick={() => {
-                        void handleSave();
-                      }}
-                      iconLeft={<ShieldCheck />}
-                      disabled={!isReady}
-                    >
-                      Save provider
-                    </Button>
+                  <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+                    <Input
+                      label="Model"
+                      value={selectedConfig.model}
+                      onChange={(event) => updateProviderConfig({ model: event.target.value })}
+                      placeholder={selectedDefinition.defaultModel}
+                      helperText="Use the exact model id your provider expects."
+                    />
+
+                    {selectedDefinition.supportsEndpoint ? (
+                      <Input
+                        label={selectedDefinition.endpointLabel}
+                        value={selectedConfig.customEndpoint ?? ''}
+                        onChange={(event) => updateProviderConfig({ customEndpoint: event.target.value })}
+                        placeholder={selectedDefinition.endpointPlaceholder}
+                        helperText={
+                          selectedProvider === 'ollama'
+                            ? 'Only loopback URLs are allowed for local runtime testing.'
+                            : 'Remote custom endpoints must use HTTPS.'
+                        }
+                      />
+                    ) : null}
+
+                    {selectedDefinition.requiresApiKey ? (
+                      <div className="space-y-3">
+                        <Input
+                          ref={apiKeyInputRef}
+                          label="API key"
+                          type="password"
+                          placeholder="Paste a provider key when needed"
+                          helperText="This field is not persisted. Save stores only masked metadata, and test clears the field after validation."
+                          autoComplete="off"
+                          spellCheck={false}
+                          onCopy={(event) => event.preventDefault()}
+                        />
+
+                        {savedMetadata ? (
+                          <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
+                            <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
+                              <KeyRound className="h-4 w-4 text-primary-600" />
+                              Saved key metadata
+                            </div>
+                            <p className="mt-2 text-sm text-content-secondary">
+                              {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
+                            </p>
+                            <p className="mt-1 text-xs text-content-tertiary">
+                              Re-enter the raw key whenever you want to test until encrypted key persistence is wired.
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
+                        {selectedProvider === 'ollama'
+                          ? 'Ollama skips API keys. Use the test button to verify the loopback runtime is reachable.'
+                          : 'Custom provider baseline currently validates the endpoint only. Secret persistence stays disabled until secure encryption flow is connected.'}
+                      </div>
+                    )}
+
+                    <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
+                      {validationMessage || saveMessage || 'Save changes, then test the selected provider configuration.'}
+                    </div>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        loading={isTesting}
+                        onClick={() => {
+                          void handleTestConnection();
+                        }}
+                        iconLeft={<RotateCw />}
+                        disabled={!isReady}
+                      >
+                        Test connection
+                      </Button>
+                      <Button
+                        type="button"
+                        loading={isSaving}
+                        onClick={() => {
+                          void handleSave();
+                        }}
+                        iconLeft={<ShieldCheck />}
+                        disabled={!isReady}
+                      >
+                        Save provider
+                      </Button>
+                    </div>
+                  </div>
+                </section>
+              </CardContent>
+            </Card>
+
+            <Card className="overflow-hidden border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
+              <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
+                <CardTitle as="h2">Permission toggles</CardTitle>
+                <CardDescription>
+                  Choose which runtime capabilities the extension is allowed to use before an automation flow starts.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-6 pt-6">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-content-tertiary">
+                      Capability budget
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-content-primary">
+                      {enabledPermissionCount}/{PERMISSION_DEFINITIONS.length}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-content-tertiary">
+                      Sensitive toggles
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-content-primary">
+                      {settings.allowCustomScripts ? '1 enabled' : '0 enabled'}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3 sm:col-span-2 xl:col-span-1">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-content-tertiary">
+                      Default behavior
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-content-primary">
+                      Visual guidance stays on, high-risk scripting stays off.
+                    </p>
                   </div>
                 </div>
-              </section>
-            </CardContent>
-          </Card>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {PERMISSION_DEFINITIONS.map((permission) => (
+                    <div
+                      key={permission.key}
+                      className="flex min-h-11 items-start justify-between gap-4 rounded-[22px] border border-border bg-surface-primary px-4 py-4 transition-colors duration-fast hover:border-primary-300 hover:bg-primary-50/40"
+                    >
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 flex-col items-start space-y-2 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2"
+                        onClick={() => handlePermissionToggle(permission.key, !settings[permission.key])}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-content-primary">{permission.title}</p>
+                          <Badge variant={permission.tone}>{permission.badge}</Badge>
+                        </div>
+                        <p className="text-sm leading-6 text-content-secondary">{permission.description}</p>
+                      </button>
+
+                      <Switch
+                        checked={settings[permission.key]}
+                        onCheckedChange={(checked) => handlePermissionToggle(permission.key, checked)}
+                        aria-label={permission.title}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {settings.allowCustomScripts ? (
+                  <div className="rounded-[22px] border border-error-500/20 bg-error-50 px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="error">High-risk capability</Badge>
+                      <p className="text-sm font-semibold text-error-700">Custom scripts can execute arbitrary page logic.</p>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-error-700">
+                      Leave this off unless you trust the workflow source and understand that scripts can interact with live page state beyond standard guarded actions.
+                    </p>
+                    <label className="mt-3 flex items-start gap-3 text-sm text-error-700">
+                      <input
+                        type="checkbox"
+                        checked={customScriptsConfirmed}
+                        onChange={(event) => setCustomScriptsConfirmed(event.target.checked)}
+                        className="mt-1 h-4 w-4 rounded border-error-500/40 text-error-600 focus:ring-error-500"
+                      />
+                      <span>I understand the risk and want to allow custom scripts for trusted workflows only.</span>
+                    </label>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className={`rounded-2xl border px-4 py-3 text-sm ${permissionTone}`}>
+                    {permissionMessage || 'Toggle the capabilities you want to allow, then save the permission profile.'}
+                  </div>
+
+                  <Button
+                    type="button"
+                    loading={isSavingPermissions}
+                    onClick={() => {
+                      void handleSavePermissions();
+                    }}
+                    iconLeft={<CheckCircle2 />}
+                    disabled={!isReady}
+                  >
+                    Save permissions
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="space-y-6">
             <Card className="border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
               <CardHeader>
                 <CardTitle as="h2">What is ready now</CardTitle>
-                <CardDescription>Immediate capabilities available from the U-07 baseline.</CardDescription>
+                <CardDescription>Immediate capabilities available from the current options baseline.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
@@ -746,6 +1027,10 @@ export function App() {
                   <RotateCw className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>The test action validates the selected provider and clears the key field after the check completes.</p>
                 </div>
+                <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary-600" />
+                  <p>Permission toggles now persist capability boundaries like screenshots, highlights, floating UI, and custom scripts.</p>
+                </div>
               </CardContent>
             </Card>
 
@@ -757,17 +1042,17 @@ export function App() {
               <CardContent className="space-y-3 text-sm text-content-secondary">
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
-                    <LaptopMinimal className="h-4 w-4 text-primary-600" />
-                    U-08 permission toggles
-                  </div>
-                  <p className="mt-1">Capability toggles can plug into the same options shell and storage contract.</p>
-                </div>
-                <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
-                  <div className="flex items-center gap-2 font-medium text-content-primary">
                     <Sparkles className="h-4 w-4 text-primary-600" />
                     U-09 appearance settings
                   </div>
-                  <p className="mt-1">Theme and language settings can reuse the same page layout without another structural rewrite.</p>
+                  <p className="mt-1">Theme and language controls can hook into the same settings state without another storage rewrite.</p>
+                </div>
+                <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
+                  <div className="flex items-center gap-2 font-medium text-content-primary">
+                    <LaptopMinimal className="h-4 w-4 text-primary-600" />
+                    U-10 onboarding flow
+                  </div>
+                  <p className="mt-1">The onboarding screens can now reuse provider setup and permission copy from this page.</p>
                 </div>
               </CardContent>
             </Card>
