@@ -1,6 +1,17 @@
 import type { ActionType } from '@shared/types';
 import { z } from 'zod';
 
+const NETWORK_RESOURCE_TYPES = [
+  'Document',
+  'XHR',
+  'Fetch',
+  'Script',
+  'Image',
+  'Stylesheet',
+  'Media',
+  'Other',
+] as const;
+
 const ACTION_TYPES = [
   'navigate',
   'goBack',
@@ -38,6 +49,7 @@ const ACTION_TYPES = [
 ] as const satisfies readonly ActionType[];
 
 const actionTypeSchema = z.enum(ACTION_TYPES);
+const networkResourceTypeSchema = z.enum(NETWORK_RESOURCE_TYPES);
 
 const elementSelectorSchema = z
   .object({
@@ -65,6 +77,9 @@ const baseActionSchema = z.object({
   optional: z.boolean().optional(),
   retries: z.number().int().min(0).optional(),
 });
+
+const urlPatternsSchema = z.array(z.string().min(1)).min(1);
+const responseHeadersSchema = z.record(z.string().min(1), z.string());
 
 function createClickLikeSchema(type: 'click' | 'doubleClick' | 'rightClick') {
   return baseActionSchema.extend({
@@ -190,8 +205,24 @@ const actionSchemas = {
     args: z.array(z.unknown()).optional(),
     outputVariable: z.string().min(1).optional(),
   }),
-  interceptNetwork: baseActionSchema.extend({ type: z.literal('interceptNetwork') }),
-  mockResponse: baseActionSchema.extend({ type: z.literal('mockResponse') }),
+  interceptNetwork: baseActionSchema.extend({
+    type: z.literal('interceptNetwork'),
+    urlPatterns: urlPatternsSchema,
+    operation: z.enum(['continue', 'block']),
+    resourceTypes: z.array(networkResourceTypeSchema).min(1).optional(),
+  }),
+  mockResponse: baseActionSchema.extend({
+    type: z.literal('mockResponse'),
+    urlPatterns: urlPatternsSchema,
+    resourceTypes: z.array(networkResourceTypeSchema).min(1).optional(),
+    response: z.object({
+      status: z.number().int().min(100).max(599),
+      headers: responseHeadersSchema.optional(),
+      body: z.string(),
+      bodyEncoding: z.enum(['utf8', 'base64']).optional(),
+      contentType: z.string().min(1).optional(),
+    }),
+  }),
 };
 
 const orderedActionSchemas = [

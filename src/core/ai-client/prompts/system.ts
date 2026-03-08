@@ -93,6 +93,12 @@ const ACTION_REFERENCE = `## Available Actions
 - \`closeTab\`: Close the current tab. Params: \`{ tabIndex?: number }\`
 - \`switchTab\`: Switch to a tab. Params: \`{ tabIndex: number }\`
 
+### Advanced
+- \`interceptNetwork\`: Intercept matching requests. Params: \`{ urlPatterns: string[], operation: "continue"|"block", resourceTypes?: NetworkResourceType[] }\`
+- \`mockResponse\`: Mock matching requests with a custom response. Params: \`{ urlPatterns: string[], resourceTypes?: NetworkResourceType[], response: { status: number, body: string, bodyEncoding?: "utf8"|"base64", headers?: Record<string, string>, contentType?: string } }\`
+
+Use wildcard URL patterns such as \`https://api.example.com/*\` when matching requests.
+
 ### Element Selector Format
 When specifying selectors, use this format:
 \`\`\`json
@@ -207,7 +213,7 @@ export function getCompactSystemPrompt(): string {
     '## Response Format',
     'Respond with JSON: { "thinking": "...", "summary": "...", "actions": [{ "type": "...", "description": "...", "url": "...", "selector": {...} }], "needsMoreInfo": { "question": "...", "context": "..." } }',
     '',
-    'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab.',
+    'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab, interceptNetwork, mockResponse.',
     '',
     'Use flat action fields, not params. For type use text, for select use option, and for switchTab/closeTab use tabIndex.',
     '',

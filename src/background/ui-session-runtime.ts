@@ -40,6 +40,10 @@ import type {
 } from '@shared/types';
 import { generateId, Logger } from '@shared/utils';
 import type { ProviderConfig } from '@shared/types';
+import {
+  NetworkInterceptionManager,
+  type INetworkInterceptionManager,
+} from './network-interception-manager';
 
 const DEFAULT_PROVIDER_MODELS: Record<SessionConfig['provider'], string> = {
   claude: 'claude-3-5-sonnet-20241022',
@@ -96,6 +100,7 @@ interface UISessionRuntimeOptions {
   aiClientManager?: AbortableAIClientManager;
   parserFactory?: (config: Partial<ParserConfig>) => CommandParser;
   tabManager?: TabManager;
+  networkInterceptionManager?: INetworkInterceptionManager;
 }
 
 interface RuntimeState {
@@ -111,6 +116,7 @@ export class UISessionRuntime {
   private readonly parserFactory?: (config: Partial<ParserConfig>) => CommandParser;
   private readonly tabManager: TabManager;
   private readonly orchestrator: ActionOrchestrator;
+  private readonly networkInterceptionManager: INetworkInterceptionManager;
   private readonly streamControllers = new Map<string, AbortController>();
   private readonly latestActionEntries = new Map<string, ActionLogEventEntry>();
   private activeSessionId: string | null = null;
@@ -121,6 +127,11 @@ export class UISessionRuntime {
     this.aiClientManager = options.aiClientManager ?? this.createDefaultAIClientManager();
     this.parserFactory = options.parserFactory;
     this.tabManager = options.tabManager ?? new TabManager();
+    this.networkInterceptionManager =
+      options.networkInterceptionManager ??
+      new NetworkInterceptionManager({
+        logger: this.logger.child('NetworkInterceptionManager'),
+      });
     this.orchestrator = new ActionOrchestrator({
       execute: (action, context) => this.executeAutomationAction(action, context.sessionId),
     });
@@ -235,6 +246,7 @@ export class UISessionRuntime {
     this.abortStream(payload.sessionId);
     this.clearLatestActionEntry(payload.sessionId);
     await this.clearHighlights(payload.sessionId);
+    await this.networkInterceptionManager.clearSession(payload.sessionId);
     this.sessionManager.abort(payload.sessionId);
 
     if (this.activeSessionId === payload.sessionId) {
@@ -288,6 +300,10 @@ export class UISessionRuntime {
     this.orchestrator.abort(payload.sessionId);
     this.activeSessionId = payload.sessionId;
     this.setSessionStatus(payload.sessionId, 'running');
+    this.networkInterceptionManager.activateSession(
+      payload.sessionId,
+      this.sessionManager.getSession(payload.sessionId)?.targetTabId ?? null,
+    );
     await this.sessionManager.sendMessage(payload.sessionId, payload.message);
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
 
@@ -753,6 +769,9 @@ export class UISessionRuntime {
           return await this.executeSwitchTabAction(action, sessionId);
         case 'closeTab':
           return await this.executeCloseTabAction(action, sessionId);
+        case 'interceptNetwork':
+        case 'mockResponse':
+          return await this.executeNetworkInterceptionAction(action, sessionId, tabId);
         default:
           return await this.executeDomAction(action, sessionId, tabId);
       }
@@ -784,6 +803,29 @@ export class UISessionRuntime {
     );
 
     return this.mapBridgeResult(action, payload);
+  }
+
+  private async executeNetworkInterceptionAction(
+    action: Extract<Action, { type: 'interceptNetwork' | 'mockResponse' }>,
+    sessionId: string | undefined,
+    tabId: number | null,
+  ): Promise<ActionResult> {
+    if (!sessionId) {
+      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, 'No active session available for network interception', true);
+    }
+
+    if (!tabId) {
+      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for network interception', true);
+    }
+
+    const startedAt = Date.now();
+    const registration = await this.networkInterceptionManager.registerAction(sessionId, tabId, action);
+    return {
+      actionId: action.id,
+      success: true,
+      duration: Date.now() - startedAt,
+      data: registration,
+    };
   }
 
   private async executeNavigateAction(action: Extract<Action, { type: 'navigate' }>, tabId: number | null): Promise<ActionResult> {
@@ -1011,8 +1053,12 @@ export class UISessionRuntime {
     const tab = await this.tabManager.createTab(action.url, action.active ?? true);
     const session = sessionId ? this.sessionManager.getSession(sessionId) : null;
     if (session) {
+      if (session.targetTabId !== null) {
+        await this.networkInterceptionManager.clearSession(session.config.id);
+      }
       session.targetTabId = tab.id;
       session.lastActivityAt = Date.now();
+      this.networkInterceptionManager.activateSession(session.config.id, tab.id);
     }
 
     return {
@@ -1034,8 +1080,12 @@ export class UISessionRuntime {
     await this.tabManager.switchTab(targetTab.id);
     const session = sessionId ? this.sessionManager.getSession(sessionId) : null;
     if (session) {
+      if (session.targetTabId !== null && session.targetTabId !== targetTab.id) {
+        await this.networkInterceptionManager.clearSession(session.config.id);
+      }
       session.targetTabId = targetTab.id;
       session.lastActivityAt = Date.now();
+      this.networkInterceptionManager.activateSession(session.config.id, targetTab.id);
     }
 
     return {
@@ -1059,11 +1109,15 @@ export class UISessionRuntime {
 
       await this.tabManager.closeTab(targetTab.id);
       if (session?.targetTabId === targetTab.id) {
+        await this.networkInterceptionManager.clearSession(session.config.id);
         session.targetTabId = null;
+        this.networkInterceptionManager.activateSession(session.config.id, null);
       }
     } else if (session?.targetTabId) {
+      await this.networkInterceptionManager.clearSession(session.config.id);
       await this.tabManager.closeTab(session.targetTabId);
       session.targetTabId = null;
+      this.networkInterceptionManager.activateSession(session.config.id, null);
     } else {
       await this.tabManager.closeTab();
     }
@@ -1211,6 +1265,10 @@ export class UISessionRuntime {
         return typeof action.tabIndex === 'number'
           ? `Closing tab index ${action.tabIndex}.`
           : 'Closing the active session tab.';
+      case 'interceptNetwork':
+        return `Intercepting matching requests (${action.operation}) for ${action.urlPatterns.join(', ')}.`;
+      case 'mockResponse':
+        return `Mocking matching requests for ${action.urlPatterns.join(', ')}.`;
       default:
         return `Running ${action.type}.`;
     }

@@ -246,14 +246,14 @@ UI-first order:
 
 ## PHASE 4 - Advanced Features
 
-Status summary: Not started.
+Status summary: Network interception baseline is complete; remaining advanced CDP features are pending.
 
 ### Sprint 4.1
 
-- [ ] `A-01` Network interception
-- [ ] `A-01a` Fetch.enable interception
-- [ ] `A-01b` Mock response injection
-- [ ] `A-01c` Request blocking
+- [x] `A-01` Network interception
+- [x] `A-01a` Fetch.enable interception
+- [x] `A-01b` Mock response injection
+- [x] `A-01c` Request blocking
 - [ ] `A-02` Device emulation
 - [ ] `A-02a` Device metrics override
 - [ ] `A-02b` User-agent override

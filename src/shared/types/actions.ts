@@ -45,6 +45,18 @@ export type ActionType =
   | 'interceptNetwork'
   | 'mockResponse';
 
+export type NetworkResourceType =
+  | 'Document'
+  | 'XHR'
+  | 'Fetch'
+  | 'Script'
+  | 'Image'
+  | 'Stylesheet'
+  | 'Media'
+  | 'Other';
+
+export type InterceptNetworkOperation = 'continue' | 'block';
+
 /**
  * Element selector - multiple strategies
  */
@@ -262,6 +274,28 @@ export interface EvaluateAction extends BaseAction {
   outputVariable?: string;
 }
 
+export interface InterceptNetworkAction extends BaseAction {
+  type: 'interceptNetwork';
+  urlPatterns: string[];
+  operation: InterceptNetworkOperation;
+  resourceTypes?: NetworkResourceType[];
+}
+
+export interface MockResponseDefinition {
+  status: number;
+  headers?: Record<string, string>;
+  body: string;
+  bodyEncoding?: 'utf8' | 'base64';
+  contentType?: string;
+}
+
+export interface MockResponseAction extends BaseAction {
+  type: 'mockResponse';
+  urlPatterns: string[];
+  resourceTypes?: NetworkResourceType[];
+  response: MockResponseDefinition;
+}
+
 /**
  * Union type for all actions
  */
@@ -292,7 +326,9 @@ export type Action =
   | NewTabAction
   | CloseTabAction
   | SwitchTabAction
-  | EvaluateAction;
+  | EvaluateAction
+  | InterceptNetworkAction
+  | MockResponseAction;
 
 /**
  * Parsed AI response containing actions

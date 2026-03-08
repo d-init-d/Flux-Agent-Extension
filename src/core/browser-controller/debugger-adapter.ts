@@ -31,6 +31,33 @@ export type CaptureScreenshotParams = {
   captureBeyondViewport?: boolean;
 } & CDPParams;
 
+export type FetchRequestPattern = {
+  urlPattern?: string;
+  resourceType?: string;
+  requestStage?: 'Request' | 'Response';
+};
+
+export type FulfillRequestHeader = {
+  name: string;
+  value: string;
+};
+
+export type FulfillRequestParams = {
+  responseCode: number;
+  responseHeaders?: FulfillRequestHeader[];
+  body?: string;
+  responsePhrase?: string;
+} & CDPParams;
+
+export type DebuggerEvent = {
+  tabId: number;
+  method: string;
+  params?: CDPParams;
+};
+
+export type DebuggerEventListener = (event: DebuggerEvent) => void;
+export type DebuggerDetachListener = (tabId: number, reason: string) => void;
+
 export type EvaluateOptions = {
   objectGroup?: string;
   includeCommandLineAPI?: boolean;
@@ -182,6 +209,71 @@ export class DebuggerAdapter {
       nodeId,
       selector,
     });
+  }
+
+  async enableFetchInterception(tabId: number, patterns?: FetchRequestPattern[]): Promise<void> {
+    await this.sendCommand(tabId, 'Fetch.enable', patterns ? { patterns } : undefined);
+  }
+
+  async disableFetchInterception(tabId: number): Promise<void> {
+    await this.sendCommand(tabId, 'Fetch.disable');
+  }
+
+  async continueInterceptedRequest(tabId: number, requestId: string): Promise<void> {
+    await this.sendCommand(tabId, 'Fetch.continueRequest', { requestId });
+  }
+
+  async failInterceptedRequest(
+    tabId: number,
+    requestId: string,
+    errorReason: string = 'BlockedByClient',
+  ): Promise<void> {
+    await this.sendCommand(tabId, 'Fetch.failRequest', { requestId, errorReason });
+  }
+
+  async fulfillInterceptedRequest(
+    tabId: number,
+    requestId: string,
+    response: FulfillRequestParams,
+  ): Promise<void> {
+    await this.sendCommand(tabId, 'Fetch.fulfillRequest', {
+      requestId,
+      ...response,
+    });
+  }
+
+  onEvent(listener: DebuggerEventListener): () => void {
+    const handleEvent: Parameters<typeof chrome.debugger.onEvent.addListener>[0] = (source, method, params) => {
+      if (typeof source.tabId !== 'number') {
+        return;
+      }
+
+      listener({
+        tabId: source.tabId,
+        method,
+        params: params as CDPParams | undefined,
+      });
+    };
+
+    chrome.debugger.onEvent.addListener(handleEvent);
+    return () => {
+      chrome.debugger.onEvent.removeListener(handleEvent);
+    };
+  }
+
+  onDetach(listener: DebuggerDetachListener): () => void {
+    const handleDetach: Parameters<typeof chrome.debugger.onDetach.addListener>[0] = (source, reason) => {
+      if (typeof source.tabId !== 'number') {
+        return;
+      }
+
+      listener(source.tabId, reason);
+    };
+
+    chrome.debugger.onDetach.addListener(handleDetach);
+    return () => {
+      chrome.debugger.onDetach.removeListener(handleDetach);
+    };
   }
 
   private readonly handleDetachEvent = (source: chrome.debugger.Debuggee): void => {

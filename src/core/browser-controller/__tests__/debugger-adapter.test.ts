@@ -116,6 +116,69 @@ describe('DebuggerAdapter', () => {
     });
   });
 
+  it('provides Fetch interception wrappers', async () => {
+    const sendSpy = vi.spyOn(chrome.debugger, 'sendCommand');
+
+    await adapter.enableFetchInterception(1, [{ urlPattern: 'https://api.example.com/*', requestStage: 'Request' }]);
+    await adapter.continueInterceptedRequest(1, 'req-1');
+    await adapter.failInterceptedRequest(1, 'req-2');
+    await adapter.fulfillInterceptedRequest(1, 'req-3', {
+      responseCode: 200,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: 'eyJvayI6dHJ1ZX0=',
+    });
+    await adapter.disableFetchInterception(1);
+
+    expect(sendSpy).toHaveBeenNthCalledWith(1, { tabId: 1 }, 'Fetch.enable', {
+      patterns: [{ urlPattern: 'https://api.example.com/*', requestStage: 'Request' }],
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(2, { tabId: 1 }, 'Fetch.continueRequest', { requestId: 'req-1' });
+    expect(sendSpy).toHaveBeenNthCalledWith(3, { tabId: 1 }, 'Fetch.failRequest', {
+      requestId: 'req-2',
+      errorReason: 'BlockedByClient',
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(4, { tabId: 1 }, 'Fetch.fulfillRequest', {
+      requestId: 'req-3',
+      responseCode: 200,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: 'eyJvayI6dHJ1ZX0=',
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(5, { tabId: 1 }, 'Fetch.disable', undefined);
+  });
+
+  it('subscribes to debugger events with tab ids only', async () => {
+    const listener = vi.fn();
+    const unsubscribe = adapter.onEvent(listener);
+
+    const onEvent = chrome.debugger.onEvent as unknown as {
+      dispatch: (source: chrome.debugger.Debuggee, method: string, params?: object) => void;
+    };
+
+    onEvent.dispatch({ tabId: 1 }, 'Fetch.requestPaused', {
+      requestId: 'req-1',
+      request: { url: 'https://api.example.com/users' },
+      resourceType: 'XHR',
+    });
+    onEvent.dispatch({}, 'Fetch.requestPaused', {
+      requestId: 'req-2',
+    });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({
+      tabId: 1,
+      method: 'Fetch.requestPaused',
+      params: {
+        requestId: 'req-1',
+        request: { url: 'https://api.example.com/users' },
+        resourceType: 'XHR',
+      },
+    });
+
+    unsubscribe();
+    onEvent.dispatch({ tabId: 1 }, 'Fetch.requestPaused', { requestId: 'req-3' });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it('maps missing tab to TAB_NOT_FOUND on attach', async () => {
     await expect(adapter.attach(9_999)).rejects.toMatchObject({
       code: ErrorCode.TAB_NOT_FOUND,

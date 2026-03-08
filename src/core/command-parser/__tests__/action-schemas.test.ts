@@ -34,8 +34,23 @@ describe('action schemas', () => {
     closeTab: { id: 'a29', type: 'closeTab' },
     switchTab: { id: 'a30', type: 'switchTab', tabIndex: 0 },
     evaluate: { id: 'a31', type: 'evaluate', script: 'return document.title;' },
-    interceptNetwork: { id: 'a32', type: 'interceptNetwork' },
-    mockResponse: { id: 'a33', type: 'mockResponse' },
+    interceptNetwork: {
+      id: 'a32',
+      type: 'interceptNetwork',
+      urlPatterns: ['https://api.example.com/*'],
+      operation: 'block',
+      resourceTypes: ['XHR'],
+    },
+    mockResponse: {
+      id: 'a33',
+      type: 'mockResponse',
+      urlPatterns: ['https://api.example.com/users/*'],
+      response: {
+        status: 200,
+        body: '{"ok":true}',
+        contentType: 'application/json',
+      },
+    },
   };
 
   it('covers and validates all action types', () => {
@@ -69,5 +84,38 @@ describe('action schemas', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors?.[0]).toContain('url');
+  });
+
+  it('requires urlPatterns for network interception actions', () => {
+    const interceptResult = validateActionSchema({ id: 'x5', type: 'interceptNetwork', operation: 'block' });
+    const mockResult = validateActionSchema({
+      id: 'x6',
+      type: 'mockResponse',
+      response: { status: 200, body: 'ok' },
+    });
+
+    expect(interceptResult.valid).toBe(false);
+    expect(interceptResult.errors?.[0]).toContain('urlPatterns');
+    expect(mockResult.valid).toBe(false);
+    expect(mockResult.errors?.[0]).toContain('urlPatterns');
+  });
+
+  it('requires a valid mock response payload', () => {
+    const missingResponse = validateActionSchema({
+      id: 'x7',
+      type: 'mockResponse',
+      urlPatterns: ['https://api.example.com/*'],
+    });
+    const invalidStatus = validateActionSchema({
+      id: 'x8',
+      type: 'mockResponse',
+      urlPatterns: ['https://api.example.com/*'],
+      response: { status: 99, body: 'ok' },
+    });
+
+    expect(missingResponse.valid).toBe(false);
+    expect(missingResponse.errors?.[0]).toContain('response');
+    expect(invalidStatus.valid).toBe(false);
+    expect(invalidStatus.errors?.[0]).toContain('response.status');
   });
 });

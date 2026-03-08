@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IServiceWorkerBridge } from '@core/bridge';
 import { AIClientManager } from '@core/ai-client';
 import type { IAIProvider } from '@core/ai-client';
+import { CommandParser } from '@core/command-parser';
 import { Logger } from '@shared/utils';
 import type {
   Action,
@@ -14,6 +15,7 @@ import type {
   PageContext,
   RequestPayloadMap,
 } from '@shared/types';
+import type { INetworkInterceptionManager } from '../network-interception-manager';
 import { UISessionRuntime } from '../ui-session-runtime';
 
 type MockTabsApi = typeof chrome.tabs & {
@@ -444,6 +446,198 @@ describe('UI session runtime', () => {
     expect(stateResponse.data?.session?.actionHistory[0]?.result).toEqual(
       expect.objectContaining({ success: true }),
     );
+  });
+
+  it('routes network interception actions to the background manager instead of the DOM bridge', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+    const networkInterceptionManager: INetworkInterceptionManager = {
+      activateSession: vi.fn(),
+      registerAction: vi.fn(async (sessionId: string, tabId: number, action) => ({
+        ruleId: action.id,
+        sessionId,
+        tabId,
+        operation: action.type === 'mockResponse' ? 'mock' : action.operation,
+        activeRuleCount: 1,
+        urlPatterns: [...action.urlPatterns],
+      })),
+      clearSession: vi.fn(async () => undefined),
+    };
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Block tracker requests',
+          actions: [
+            {
+              id: 'rule-block',
+              type: 'interceptNetwork',
+              urlPatterns: ['https://ads.example.com/*'],
+              operation: 'block',
+            },
+          ],
+        }),
+      ),
+      networkInterceptionManager,
+      parserFactory: () => new CommandParser({ strictMode: false, allowEvaluate: false }),
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Block tracker requests on this page',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(networkInterceptionManager.registerAction).toHaveBeenCalledWith(
+      sessionId,
+      1,
+      expect.objectContaining({
+        type: 'interceptNetwork',
+        urlPatterns: ['https://ads.example.com/*'],
+        operation: 'block',
+      }),
+    );
+    expect(actionHandler).not.toHaveBeenCalled();
+    expect(
+      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
+    ).toHaveLength(0);
+  });
+
+  it('clears network interception rules when a session is aborted', async () => {
+    const networkInterceptionManager: INetworkInterceptionManager = {
+      activateSession: vi.fn(),
+      registerAction: vi.fn(async () => ({
+        ruleId: 'rule-1',
+        sessionId: 'session-1',
+        tabId: 1,
+        operation: 'block',
+        activeRuleCount: 1,
+        urlPatterns: ['https://ads.example.com/*'],
+      })),
+      clearSession: vi.fn(async () => undefined),
+    };
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+      networkInterceptionManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const abortResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_ABORT', { sessionId: sessionId! }),
+    );
+
+    expect(abortResponse.success).toBe(true);
+    expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
+  });
+
+  it('clears session network interception rules before switching the target tab', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com',
+        title: 'Primary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 2,
+        index: 1,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://second.example.com',
+        title: 'Secondary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const networkInterceptionManager: INetworkInterceptionManager = {
+      activateSession: vi.fn(),
+      registerAction: vi.fn(async () => ({
+        ruleId: 'rule-1',
+        sessionId: 'session-1',
+        tabId: 1,
+        operation: 'block',
+        activeRuleCount: 1,
+        urlPatterns: ['https://ads.example.com/*'],
+      })),
+      clearSession: vi.fn(async () => undefined),
+    };
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Switch to the second tab',
+          actions: [{ id: 'switch-1', type: 'switchTab', tabIndex: 1 }],
+        }),
+      ),
+      networkInterceptionManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Switch to the second tab',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
   });
 
   it('waits for navigation readiness before collecting fresh page context', async () => {

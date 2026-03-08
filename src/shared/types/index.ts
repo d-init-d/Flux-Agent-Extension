@@ -41,6 +41,11 @@ export type {
   CloseTabAction,
   SwitchTabAction,
   EvaluateAction,
+  NetworkResourceType,
+  InterceptNetworkOperation,
+  InterceptNetworkAction,
+  MockResponseDefinition,
+  MockResponseAction,
   Action,
   ParsedResponse,
 } from './actions';
