@@ -34,15 +34,16 @@ describe('action schemas', () => {
     closeTab: { id: 'a29', type: 'closeTab' },
     switchTab: { id: 'a30', type: 'switchTab', tabIndex: 0 },
     evaluate: { id: 'a31', type: 'evaluate', script: 'return document.title;' },
+    emulateDevice: { id: 'a32', type: 'emulateDevice', preset: 'iphone', orientation: 'portrait' },
     interceptNetwork: {
-      id: 'a32',
+      id: 'a33',
       type: 'interceptNetwork',
       urlPatterns: ['https://api.example.com/*'],
       operation: 'block',
       resourceTypes: ['XHR'],
     },
     mockResponse: {
-      id: 'a33',
+      id: 'a34',
       type: 'mockResponse',
       urlPatterns: ['https://api.example.com/users/*'],
       response: {
@@ -54,7 +55,7 @@ describe('action schemas', () => {
   };
 
   it('covers and validates all action types', () => {
-    expect(ACTION_TYPES).toHaveLength(33);
+    expect(ACTION_TYPES).toHaveLength(34);
 
     for (const type of ACTION_TYPES) {
       const result = validateActionSchema(validActionsByType[type]);

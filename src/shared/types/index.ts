@@ -41,6 +41,8 @@ export type {
   CloseTabAction,
   SwitchTabAction,
   EvaluateAction,
+  DevicePreset,
+  EmulateDeviceAction,
   NetworkResourceType,
   InterceptNetworkOperation,
   InterceptNetworkAction,

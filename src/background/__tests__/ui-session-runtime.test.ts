@@ -15,6 +15,7 @@ import type {
   PageContext,
   RequestPayloadMap,
 } from '@shared/types';
+import type { IDeviceEmulationManager } from '../device-emulation-manager';
 import type { INetworkInterceptionManager } from '../network-interception-manager';
 import { UISessionRuntime } from '../ui-session-runtime';
 
@@ -159,6 +160,42 @@ function createBridge(
     send: ReturnType<typeof vi.fn>;
     ensureContentScript: ReturnType<typeof vi.fn>;
     sendOneWay: ReturnType<typeof vi.fn>;
+  };
+}
+
+function createNetworkManagerStub(): INetworkInterceptionManager {
+  return {
+    activateSession: vi.fn(),
+    registerAction: vi.fn(async (sessionId: string, tabId: number, action) => ({
+      ruleId: action.id,
+      sessionId,
+      tabId,
+      operation: action.type === 'mockResponse' ? 'mock' : action.operation,
+      activeRuleCount: 1,
+      urlPatterns: [...action.urlPatterns],
+    })),
+    clearSession: vi.fn(async () => undefined),
+  };
+}
+
+function createDeviceManagerStub(): IDeviceEmulationManager {
+  return {
+    activateSession: vi.fn(),
+    applyAction: vi.fn(async (sessionId: string, tabId: number, action) => ({
+      sessionId,
+      tabId,
+      preset: action.preset,
+      orientation: action.orientation ?? 'portrait',
+      viewport: {
+        width: 390,
+        height: 844,
+        deviceScaleFactor: 3,
+        mobile: true,
+      },
+      userAgent: 'Mock Mobile UA',
+      touchEnabled: true as const,
+    })),
+    clearSession: vi.fn(async () => undefined),
   };
 }
 
@@ -455,18 +492,7 @@ describe('UI session runtime', () => {
       duration: 5,
     }));
     const bridge = createBridge(actionHandler);
-    const networkInterceptionManager: INetworkInterceptionManager = {
-      activateSession: vi.fn(),
-      registerAction: vi.fn(async (sessionId: string, tabId: number, action) => ({
-        ruleId: action.id,
-        sessionId,
-        tabId,
-        operation: action.type === 'mockResponse' ? 'mock' : action.operation,
-        activeRuleCount: 1,
-        urlPatterns: [...action.urlPatterns],
-      })),
-      clearSession: vi.fn(async () => undefined),
-    };
+    const networkInterceptionManager = createNetworkManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge,
@@ -485,6 +511,7 @@ describe('UI session runtime', () => {
         }),
       ),
       networkInterceptionManager,
+      deviceEmulationManager: createDeviceManagerStub(),
       parserFactory: () => new CommandParser({ strictMode: false, allowEvaluate: false }),
     });
 
@@ -518,19 +545,61 @@ describe('UI session runtime', () => {
     ).toHaveLength(0);
   });
 
+  it('routes device emulation actions to the background manager instead of the DOM bridge', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+    const deviceEmulationManager = createDeviceManagerStub();
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Use the iPhone preset',
+          actions: [{ id: 'emu-1', type: 'emulateDevice', preset: 'iphone', orientation: 'portrait' }],
+        }),
+      ),
+      networkInterceptionManager: createNetworkManagerStub(),
+      deviceEmulationManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Emulate an iPhone viewport',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(deviceEmulationManager.applyAction).toHaveBeenCalledWith(
+      sessionId,
+      1,
+      expect.objectContaining({
+        type: 'emulateDevice',
+        preset: 'iphone',
+        orientation: 'portrait',
+      }),
+    );
+    expect(actionHandler).not.toHaveBeenCalled();
+    expect(
+      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
+    ).toHaveLength(0);
+  });
+
   it('clears network interception rules when a session is aborted', async () => {
-    const networkInterceptionManager: INetworkInterceptionManager = {
-      activateSession: vi.fn(),
-      registerAction: vi.fn(async () => ({
-        ruleId: 'rule-1',
-        sessionId: 'session-1',
-        tabId: 1,
-        operation: 'block',
-        activeRuleCount: 1,
-        urlPatterns: ['https://ads.example.com/*'],
-      })),
-      clearSession: vi.fn(async () => undefined),
-    };
+    const networkInterceptionManager = createNetworkManagerStub();
+    const deviceEmulationManager = createDeviceManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -541,6 +610,7 @@ describe('UI session runtime', () => {
       logger: new Logger('FluxSW:test', 'debug'),
       aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
       networkInterceptionManager,
+      deviceEmulationManager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -556,6 +626,7 @@ describe('UI session runtime', () => {
 
     expect(abortResponse.success).toBe(true);
     expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
   });
 
   it('clears session network interception rules before switching the target tab', async () => {
@@ -592,18 +663,8 @@ describe('UI session runtime', () => {
       },
     ]);
 
-    const networkInterceptionManager: INetworkInterceptionManager = {
-      activateSession: vi.fn(),
-      registerAction: vi.fn(async () => ({
-        ruleId: 'rule-1',
-        sessionId: 'session-1',
-        tabId: 1,
-        operation: 'block',
-        activeRuleCount: 1,
-        urlPatterns: ['https://ads.example.com/*'],
-      })),
-      clearSession: vi.fn(async () => undefined),
-    };
+    const networkInterceptionManager = createNetworkManagerStub();
+    const deviceEmulationManager = createDeviceManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -619,6 +680,7 @@ describe('UI session runtime', () => {
         }),
       ),
       networkInterceptionManager,
+      deviceEmulationManager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -637,7 +699,94 @@ describe('UI session runtime', () => {
 
     expect(sendResponse.success).toBe(true);
     expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+    expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+  });
+
+  it('clears session managers before opening a new target tab', async () => {
+    const networkInterceptionManager = createNetworkManagerStub();
+    const deviceEmulationManager = createDeviceManagerStub();
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Open docs in a new tab',
+          actions: [{ id: 'new-tab-1', type: 'newTab', url: 'https://docs.example.com' }],
+        }),
+      ),
+      networkInterceptionManager,
+      deviceEmulationManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Open docs in a new tab',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+    expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+  });
+
+  it('clears session managers when closing the active session tab', async () => {
+    const networkInterceptionManager = createNetworkManagerStub();
+    const deviceEmulationManager = createDeviceManagerStub();
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Close the current tab',
+          actions: [{ id: 'close-tab-1', type: 'closeTab' }],
+        }),
+      ),
+      networkInterceptionManager,
+      deviceEmulationManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Close the current tab',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, null);
+    expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, null);
+    expect(chrome.tabs.remove).toHaveBeenCalledWith(1);
   });
 
   it('waits for navigation readiness before collecting fresh page context', async () => {

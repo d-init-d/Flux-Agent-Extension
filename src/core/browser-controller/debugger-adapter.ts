@@ -49,6 +49,28 @@ export type FulfillRequestParams = {
   responsePhrase?: string;
 } & CDPParams;
 
+export type DeviceMetricsOverrideParams = {
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  mobile: boolean;
+  screenOrientation?: {
+    type: 'portraitPrimary' | 'portraitSecondary' | 'landscapePrimary' | 'landscapeSecondary';
+    angle: number;
+  };
+} & CDPParams;
+
+export type UserAgentOverrideParams = {
+  userAgent: string;
+  platform?: string;
+  acceptLanguage?: string;
+} & CDPParams;
+
+export type TouchEmulationParams = {
+  enabled: boolean;
+  maxTouchPoints?: number;
+} & CDPParams;
+
 export type DebuggerEvent = {
   tabId: number;
   method: string;
@@ -240,6 +262,22 @@ export class DebuggerAdapter {
       requestId,
       ...response,
     });
+  }
+
+  async setDeviceMetricsOverride(tabId: number, params: DeviceMetricsOverrideParams): Promise<void> {
+    await this.sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', params);
+  }
+
+  async clearDeviceMetricsOverride(tabId: number): Promise<void> {
+    await this.sendCommand(tabId, 'Emulation.clearDeviceMetricsOverride');
+  }
+
+  async setUserAgentOverride(tabId: number, params: UserAgentOverrideParams): Promise<void> {
+    await this.sendCommand(tabId, 'Emulation.setUserAgentOverride', params);
+  }
+
+  async setTouchEmulationEnabled(tabId: number, params: TouchEmulationParams): Promise<void> {
+    await this.sendCommand(tabId, 'Emulation.setTouchEmulationEnabled', params);
   }
 
   onEvent(listener: DebuggerEventListener): () => void {

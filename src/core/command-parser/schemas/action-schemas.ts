@@ -44,12 +44,14 @@ const ACTION_TYPES = [
   'closeTab',
   'switchTab',
   'evaluate',
+  'emulateDevice',
   'interceptNetwork',
   'mockResponse',
 ] as const satisfies readonly ActionType[];
 
 const actionTypeSchema = z.enum(ACTION_TYPES);
 const networkResourceTypeSchema = z.enum(NETWORK_RESOURCE_TYPES);
+const devicePresetSchema = z.enum(['iphone', 'pixel', 'ipad']);
 
 const elementSelectorSchema = z
   .object({
@@ -205,6 +207,11 @@ const actionSchemas = {
     args: z.array(z.unknown()).optional(),
     outputVariable: z.string().min(1).optional(),
   }),
+  emulateDevice: baseActionSchema.extend({
+    type: z.literal('emulateDevice'),
+    preset: devicePresetSchema,
+    orientation: z.enum(['portrait', 'landscape']).optional(),
+  }),
   interceptNetwork: baseActionSchema.extend({
     type: z.literal('interceptNetwork'),
     urlPatterns: urlPatternsSchema,
@@ -257,6 +264,7 @@ const orderedActionSchemas = [
   actionSchemas.closeTab,
   actionSchemas.switchTab,
   actionSchemas.evaluate,
+  actionSchemas.emulateDevice,
   actionSchemas.interceptNetwork,
   actionSchemas.mockResponse,
 ] as const;

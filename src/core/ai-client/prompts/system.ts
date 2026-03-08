@@ -94,6 +94,7 @@ const ACTION_REFERENCE = `## Available Actions
 - \`switchTab\`: Switch to a tab. Params: \`{ tabIndex: number }\`
 
 ### Advanced
+- \`emulateDevice\`: Emulate a mobile or tablet preset. Params: \`{ preset: "iphone"|"pixel"|"ipad", orientation?: "portrait"|"landscape" }\`
 - \`interceptNetwork\`: Intercept matching requests. Params: \`{ urlPatterns: string[], operation: "continue"|"block", resourceTypes?: NetworkResourceType[] }\`
 - \`mockResponse\`: Mock matching requests with a custom response. Params: \`{ urlPatterns: string[], resourceTypes?: NetworkResourceType[], response: { status: number, body: string, bodyEncoding?: "utf8"|"base64", headers?: Record<string, string>, contentType?: string } }\`
 
@@ -213,7 +214,7 @@ export function getCompactSystemPrompt(): string {
     '## Response Format',
     'Respond with JSON: { "thinking": "...", "summary": "...", "actions": [{ "type": "...", "description": "...", "url": "...", "selector": {...} }], "needsMoreInfo": { "question": "...", "context": "..." } }',
     '',
-    'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab, interceptNetwork, mockResponse.',
+    'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab, emulateDevice, interceptNetwork, mockResponse.',
     '',
     'Use flat action fields, not params. For type use text, for select use option, and for switchTab/closeTab use tabIndex.',
     '',
@@ -258,6 +259,7 @@ export const SUPPORTED_ACTION_TYPES: readonly ActionType[] = [
   'closeTab',
   'switchTab',
   'evaluate',
+  'emulateDevice',
   'interceptNetwork',
   'mockResponse',
 ] as const;

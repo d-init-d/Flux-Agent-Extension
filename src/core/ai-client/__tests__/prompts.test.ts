@@ -30,10 +30,11 @@ describe('ai-client prompts', () => {
     });
 
     it('exports supported action types list', () => {
-      expect(SUPPORTED_ACTION_TYPES.length).toBe(33);
+      expect(SUPPORTED_ACTION_TYPES.length).toBe(34);
       expect(SUPPORTED_ACTION_TYPES).toContain('navigate');
       expect(SUPPORTED_ACTION_TYPES).toContain('click');
       expect(SUPPORTED_ACTION_TYPES).toContain('fullPageScreenshot');
+      expect(SUPPORTED_ACTION_TYPES).toContain('emulateDevice');
       expect(SUPPORTED_ACTION_TYPES).toContain('mockResponse');
     });
   });

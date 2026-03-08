@@ -73,6 +73,7 @@ const BASE_SENSITIVITY: Record<ActionType, SensitivityLevel> = {
   newTab: 'medium',
   closeTab: 'medium',
   switchTab: 'medium',
+  emulateDevice: 'medium',
 
   // HIGH: advanced / code execution
   evaluate: 'high',

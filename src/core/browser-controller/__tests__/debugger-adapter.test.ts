@@ -146,6 +146,41 @@ describe('DebuggerAdapter', () => {
     expect(sendSpy).toHaveBeenNthCalledWith(5, { tabId: 1 }, 'Fetch.disable', undefined);
   });
 
+  it('provides device emulation wrappers', async () => {
+    const sendSpy = vi.spyOn(chrome.debugger, 'sendCommand');
+
+    await adapter.setDeviceMetricsOverride(1, {
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 3,
+      mobile: true,
+      screenOrientation: { type: 'portraitPrimary', angle: 0 },
+    });
+    await adapter.setUserAgentOverride(1, {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      platform: 'iPhone',
+    });
+    await adapter.setTouchEmulationEnabled(1, { enabled: true, maxTouchPoints: 5 });
+    await adapter.clearDeviceMetricsOverride(1);
+
+    expect(sendSpy).toHaveBeenNthCalledWith(1, { tabId: 1 }, 'Emulation.setDeviceMetricsOverride', {
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 3,
+      mobile: true,
+      screenOrientation: { type: 'portraitPrimary', angle: 0 },
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(2, { tabId: 1 }, 'Emulation.setUserAgentOverride', {
+      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      platform: 'iPhone',
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(3, { tabId: 1 }, 'Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 5,
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(4, { tabId: 1 }, 'Emulation.clearDeviceMetricsOverride', undefined);
+  });
+
   it('subscribes to debugger events with tab ids only', async () => {
     const listener = vi.fn();
     const unsubscribe = adapter.onEvent(listener);

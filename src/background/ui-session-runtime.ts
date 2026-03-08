@@ -44,6 +44,10 @@ import {
   NetworkInterceptionManager,
   type INetworkInterceptionManager,
 } from './network-interception-manager';
+import {
+  DeviceEmulationManager,
+  type IDeviceEmulationManager,
+} from './device-emulation-manager';
 
 const DEFAULT_PROVIDER_MODELS: Record<SessionConfig['provider'], string> = {
   claude: 'claude-3-5-sonnet-20241022',
@@ -101,6 +105,7 @@ interface UISessionRuntimeOptions {
   parserFactory?: (config: Partial<ParserConfig>) => CommandParser;
   tabManager?: TabManager;
   networkInterceptionManager?: INetworkInterceptionManager;
+  deviceEmulationManager?: IDeviceEmulationManager;
 }
 
 interface RuntimeState {
@@ -117,6 +122,7 @@ export class UISessionRuntime {
   private readonly tabManager: TabManager;
   private readonly orchestrator: ActionOrchestrator;
   private readonly networkInterceptionManager: INetworkInterceptionManager;
+  private readonly deviceEmulationManager: IDeviceEmulationManager;
   private readonly streamControllers = new Map<string, AbortController>();
   private readonly latestActionEntries = new Map<string, ActionLogEventEntry>();
   private activeSessionId: string | null = null;
@@ -131,6 +137,11 @@ export class UISessionRuntime {
       options.networkInterceptionManager ??
       new NetworkInterceptionManager({
         logger: this.logger.child('NetworkInterceptionManager'),
+      });
+    this.deviceEmulationManager =
+      options.deviceEmulationManager ??
+      new DeviceEmulationManager({
+        logger: this.logger.child('DeviceEmulationManager'),
       });
     this.orchestrator = new ActionOrchestrator({
       execute: (action, context) => this.executeAutomationAction(action, context.sessionId),
@@ -247,6 +258,7 @@ export class UISessionRuntime {
     this.clearLatestActionEntry(payload.sessionId);
     await this.clearHighlights(payload.sessionId);
     await this.networkInterceptionManager.clearSession(payload.sessionId);
+    await this.deviceEmulationManager.clearSession(payload.sessionId);
     this.sessionManager.abort(payload.sessionId);
 
     if (this.activeSessionId === payload.sessionId) {
@@ -301,6 +313,10 @@ export class UISessionRuntime {
     this.activeSessionId = payload.sessionId;
     this.setSessionStatus(payload.sessionId, 'running');
     this.networkInterceptionManager.activateSession(
+      payload.sessionId,
+      this.sessionManager.getSession(payload.sessionId)?.targetTabId ?? null,
+    );
+    this.deviceEmulationManager.activateSession(
       payload.sessionId,
       this.sessionManager.getSession(payload.sessionId)?.targetTabId ?? null,
     );
@@ -769,6 +785,8 @@ export class UISessionRuntime {
           return await this.executeSwitchTabAction(action, sessionId);
         case 'closeTab':
           return await this.executeCloseTabAction(action, sessionId);
+        case 'emulateDevice':
+          return await this.executeDeviceEmulationAction(action, sessionId, tabId);
         case 'interceptNetwork':
         case 'mockResponse':
           return await this.executeNetworkInterceptionAction(action, sessionId, tabId);
@@ -825,6 +843,29 @@ export class UISessionRuntime {
       success: true,
       duration: Date.now() - startedAt,
       data: registration,
+    };
+  }
+
+  private async executeDeviceEmulationAction(
+    action: Extract<Action, { type: 'emulateDevice' }>,
+    sessionId: string | undefined,
+    tabId: number | null,
+  ): Promise<ActionResult> {
+    if (!sessionId) {
+      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, 'No active session available for device emulation', true);
+    }
+
+    if (!tabId) {
+      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for device emulation', true);
+    }
+
+    const startedAt = Date.now();
+    const applied = await this.deviceEmulationManager.applyAction(sessionId, tabId, action);
+    return {
+      actionId: action.id,
+      success: true,
+      duration: Date.now() - startedAt,
+      data: applied,
     };
   }
 
@@ -1055,10 +1096,12 @@ export class UISessionRuntime {
     if (session) {
       if (session.targetTabId !== null) {
         await this.networkInterceptionManager.clearSession(session.config.id);
+        await this.deviceEmulationManager.clearSession(session.config.id);
       }
       session.targetTabId = tab.id;
       session.lastActivityAt = Date.now();
       this.networkInterceptionManager.activateSession(session.config.id, tab.id);
+      this.deviceEmulationManager.activateSession(session.config.id, tab.id);
     }
 
     return {
@@ -1082,10 +1125,12 @@ export class UISessionRuntime {
     if (session) {
       if (session.targetTabId !== null && session.targetTabId !== targetTab.id) {
         await this.networkInterceptionManager.clearSession(session.config.id);
+        await this.deviceEmulationManager.clearSession(session.config.id);
       }
       session.targetTabId = targetTab.id;
       session.lastActivityAt = Date.now();
       this.networkInterceptionManager.activateSession(session.config.id, targetTab.id);
+      this.deviceEmulationManager.activateSession(session.config.id, targetTab.id);
     }
 
     return {
@@ -1110,14 +1155,18 @@ export class UISessionRuntime {
       await this.tabManager.closeTab(targetTab.id);
       if (session?.targetTabId === targetTab.id) {
         await this.networkInterceptionManager.clearSession(session.config.id);
+        await this.deviceEmulationManager.clearSession(session.config.id);
         session.targetTabId = null;
         this.networkInterceptionManager.activateSession(session.config.id, null);
+        this.deviceEmulationManager.activateSession(session.config.id, null);
       }
     } else if (session?.targetTabId) {
       await this.networkInterceptionManager.clearSession(session.config.id);
+      await this.deviceEmulationManager.clearSession(session.config.id);
       await this.tabManager.closeTab(session.targetTabId);
       session.targetTabId = null;
       this.networkInterceptionManager.activateSession(session.config.id, null);
+      this.deviceEmulationManager.activateSession(session.config.id, null);
     } else {
       await this.tabManager.closeTab();
     }
@@ -1265,6 +1314,8 @@ export class UISessionRuntime {
         return typeof action.tabIndex === 'number'
           ? `Closing tab index ${action.tabIndex}.`
           : 'Closing the active session tab.';
+      case 'emulateDevice':
+        return `Applying the ${action.preset} device preset in ${action.orientation ?? 'portrait'} mode.`;
       case 'interceptNetwork':
         return `Intercepting matching requests (${action.operation}) for ${action.urlPatterns.join(', ')}.`;
       case 'mockResponse':

@@ -42,6 +42,7 @@ export type ActionType =
   | 'switchTab'
   // Advanced
   | 'evaluate' // Run custom JS
+  | 'emulateDevice'
   | 'interceptNetwork'
   | 'mockResponse';
 
@@ -56,6 +57,7 @@ export type NetworkResourceType =
   | 'Other';
 
 export type InterceptNetworkOperation = 'continue' | 'block';
+export type DevicePreset = 'iphone' | 'pixel' | 'ipad';
 
 /**
  * Element selector - multiple strategies
@@ -274,6 +276,12 @@ export interface EvaluateAction extends BaseAction {
   outputVariable?: string;
 }
 
+export interface EmulateDeviceAction extends BaseAction {
+  type: 'emulateDevice';
+  preset: DevicePreset;
+  orientation?: 'portrait' | 'landscape';
+}
+
 export interface InterceptNetworkAction extends BaseAction {
   type: 'interceptNetwork';
   urlPatterns: string[];
@@ -327,6 +335,7 @@ export type Action =
   | CloseTabAction
   | SwitchTabAction
   | EvaluateAction
+  | EmulateDeviceAction
   | InterceptNetworkAction
   | MockResponseAction;
 
