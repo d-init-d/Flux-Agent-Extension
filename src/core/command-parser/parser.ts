@@ -156,7 +156,12 @@ export class CommandParser implements ICommandParser {
 
     const actions = this.extractActions(payload);
     const thinking = typeof payload.thinking === 'string' ? payload.thinking : undefined;
-    const summary = typeof payload.summary === 'string' ? payload.summary : undefined;
+    const summary =
+      typeof payload.summary === 'string'
+        ? payload.summary
+        : typeof payload.message === 'string'
+          ? payload.message
+          : undefined;
 
     const needsMoreInfo = this.isRecord(payload.needsMoreInfo)
       ? {
@@ -220,12 +225,61 @@ export class CommandParser implements ICommandParser {
       );
     }
 
+    const normalized = this.normalizeLegacyActionShape(raw);
     const withId: Record<string, unknown> = {
-      ...raw,
-      id: typeof raw.id === 'string' && raw.id.trim().length > 0 ? raw.id : generateId(),
+      ...normalized,
+      id: typeof normalized.id === 'string' && normalized.id.trim().length > 0 ? normalized.id : generateId(),
     };
 
     return withId as unknown as Action;
+  }
+
+  private normalizeLegacyActionShape(raw: Record<string, unknown>): Record<string, unknown> {
+    const params = this.isRecord(raw.params) ? raw.params : {};
+    const normalized: Record<string, unknown> = {
+      ...params,
+      ...raw,
+    };
+
+    delete normalized.params;
+
+    if (normalized.type === 'type' && typeof normalized.text !== 'string' && typeof normalized.value === 'string') {
+      normalized.text = normalized.value;
+    }
+
+    if (
+      normalized.type === 'select' &&
+      normalized.option === undefined &&
+      (typeof normalized.value === 'string' || this.isRecord(normalized.value))
+    ) {
+      normalized.option = normalized.value;
+    }
+
+    if (
+      normalized.type === 'switchTab' &&
+      normalized.tabIndex === undefined &&
+      typeof normalized.index === 'number'
+    ) {
+      normalized.tabIndex = normalized.index;
+    }
+
+    if (
+      normalized.type === 'closeTab' &&
+      normalized.tabIndex === undefined &&
+      typeof normalized.index === 'number'
+    ) {
+      normalized.tabIndex = normalized.index;
+    }
+
+    if (
+      normalized.type === 'extractAll' &&
+      normalized.attributes === undefined &&
+      typeof normalized.attribute === 'string'
+    ) {
+      normalized.attributes = [normalized.attribute];
+    }
+
+    return normalized;
   }
 
   private extractCodeBlocks(input: string): string[] {

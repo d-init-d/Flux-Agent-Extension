@@ -62,9 +62,9 @@ const ACTION_REFERENCE = `## Available Actions
 
 ### Input
 - \`fill\`: Clear and fill a field. Params: \`{ selector: ElementSelector, value: string }\`
-- \`type\`: Type text character by character. Params: \`{ selector: ElementSelector, value: string }\`
+- \`type\`: Type text character by character. Params: \`{ selector: ElementSelector, text: string }\`
 - \`clear\`: Clear an input field. Params: \`{ selector: ElementSelector }\`
-- \`select\`: Select a dropdown option. Params: \`{ selector: ElementSelector, value: string }\`
+- \`select\`: Select a dropdown option. Params: \`{ selector: ElementSelector, option: string | { value?: string, label?: string, index?: number } }\`
 - \`check\`: Check a checkbox. Params: \`{ selector: ElementSelector }\`
 - \`uncheck\`: Uncheck a checkbox. Params: \`{ selector: ElementSelector }\`
 
@@ -90,8 +90,8 @@ const ACTION_REFERENCE = `## Available Actions
 
 ### Tab Management
 - \`newTab\`: Open a new tab. Params: \`{ url?: string }\`
-- \`closeTab\`: Close the current tab
-- \`switchTab\`: Switch to a tab. Params: \`{ index: number }\`
+- \`closeTab\`: Close the current tab. Params: \`{ tabIndex?: number }\`
+- \`switchTab\`: Switch to a tab. Params: \`{ tabIndex: number }\`
 
 ### Element Selector Format
 When specifying selectors, use this format:
@@ -119,28 +119,30 @@ You MUST respond with valid JSON in this exact structure:
 \`\`\`json
 {
   "thinking": "Brief explanation of your reasoning and plan",
+  "summary": "Short user-facing summary of what you will do",
   "actions": [
     {
       "type": "navigate",
-      "params": { "url": "https://example.com" },
+      "url": "https://example.com",
       "description": "Navigate to example.com"
     },
     {
       "type": "click",
-      "params": { "selector": { "css": "#login-btn" } },
+      "selector": { "css": "#login-btn" },
       "description": "Click the login button"
     }
-  ],
-  "message": "Optional message to display to the user"
+  ]
 }
 \`\`\`
 
 Rules:
 - \`thinking\` is your internal reasoning (shown to user for transparency)
+- \`summary\` should be a concise, user-friendly explanation of the plan
 - \`actions\` is an ordered array of actions to execute sequentially
-- Each action has \`type\`, \`params\`, and optional \`description\`
-- \`message\` is an optional user-friendly status message
-- If you need information before proceeding, return an empty \`actions\` array with a \`message\` asking the user
+- Each action must use flat fields that match the action schema directly; do NOT wrap fields in \`params\`
+- Use \`text\` for \`type\` actions, \`option\` for \`select\`, and \`tabIndex\` for \`switchTab\`/\`closeTab\`
+- If you need information before proceeding, return an empty \`actions\` array with a \`needsMoreInfo\` object:
+  \`{ "question": "...", "context": "..." }\`
 - For complex multi-step tasks, you may return partial actions and ask to continue`;
 
 /** Safety rules and sensitivity classification. */
@@ -203,9 +205,11 @@ export function getCompactSystemPrompt(): string {
     ROLE_DEFINITION,
     '',
     '## Response Format',
-    'Respond with JSON: { "thinking": "...", "actions": [{ "type": "...", "params": {...}, "description": "..." }], "message": "..." }',
+    'Respond with JSON: { "thinking": "...", "summary": "...", "actions": [{ "type": "...", "description": "...", "url": "...", "selector": {...} }], "needsMoreInfo": { "question": "...", "context": "..." } }',
     '',
     'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab.',
+    '',
+    'Use flat action fields, not params. For type use text, for select use option, and for switchTab/closeTab use tabIndex.',
     '',
     'Use element selectors with at least one of: css, xpath, text, textExact, ariaLabel, placeholder, testId, role, nearText.',
     '',

@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-07
+> Last updated: 2026-03-08
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
 
@@ -185,7 +185,7 @@ Phase-2 execution order locked:
 
 ## PHASE 3 - UI & Integration
 
-Status summary: UI foundation, sidepanel/service-worker store wiring, accessibility hardening, and UI security fixes are in place; remaining work is end-to-end coverage.
+Status summary: **PHASE 3 COMPLETE.** All UI tasks including E2E pipeline, accessibility, and security are done.
 
 ### Sprint 3.1
 
@@ -222,11 +222,11 @@ Status summary: UI foundation, sidepanel/service-worker store wiring, accessibil
 - [x] `U-12` Action status overlay
 - [x] `U-14` Keyboard shortcuts
 - [x] `U-15d` Overlay bridge wiring
-- [ ] `U-16` Full E2E pipeline
-- [ ] `U-16a` Navigation E2E
-- [ ] `U-16b` Form-filling E2E
-- [ ] `U-16c` Click E2E
-- [ ] `U-16d` Error recovery E2E
+- [x] `U-16` Full E2E pipeline
+- [x] `U-16a` Navigation E2E
+- [x] `U-16b` Form-filling E2E
+- [x] `U-16c` Click E2E
+- [x] `U-16d` Error recovery E2E
 - [x] `U-17` Accessibility audit/fixes
 - [x] `U-18` UI security audit
 - [x] `U-18a` API key input security

@@ -40,6 +40,38 @@ describe('CommandParser', () => {
     expect(result.actions[0]).toMatchObject({ type: 'navigate', url: 'https://localhost/docs' });
   });
 
+  it('normalizes prompt-style actions that use params and message aliases', () => {
+    const parser = new CommandParser();
+
+    const result = parser.parse(
+      JSON.stringify({
+        thinking: 'Need two steps',
+        message: 'Open docs and click sign in',
+        actions: [
+          {
+            type: 'navigate',
+            params: { url: 'https://localhost/docs' },
+            description: 'Open the docs page',
+          },
+          {
+            type: 'click',
+            params: { selector: { role: 'button', textExact: 'Sign in' } },
+            description: 'Click sign in',
+          },
+        ],
+      }),
+    );
+
+    expect(result.summary).toBe('Open docs and click sign in');
+    expect(result.actions).toEqual([
+      expect.objectContaining({ type: 'navigate', url: 'https://localhost/docs' }),
+      expect.objectContaining({
+        type: 'click',
+        selector: { role: 'button', textExact: 'Sign in' },
+      }),
+    ]);
+  });
+
   it('extracts balanced JSON object from surrounding text', () => {
     const parser = new CommandParser();
 
@@ -131,6 +163,90 @@ describe('CommandParser', () => {
 
     expect(result.actions).toHaveLength(1);
     expect(result.actions[0]).toMatchObject({ type: 'evaluate' });
+  });
+
+  it('normalizes legacy aliases for type, select, and tab index fields', () => {
+    const parser = new CommandParser({ strictMode: false, allowEvaluate: true });
+    const result = parser.parse(
+      JSON.stringify({
+        actions: [
+          {
+            type: 'type',
+            params: {
+              selector: { placeholder: 'Email' },
+              value: 'user@example.com',
+            },
+          },
+          {
+            type: 'select',
+            params: {
+              selector: { textExact: 'Country' },
+              value: 'Canada',
+            },
+          },
+          {
+            type: 'switchTab',
+            params: { index: 2 },
+          },
+        ],
+      }),
+    );
+
+    expect(result.actions[0]).toMatchObject({
+      type: 'type',
+      text: 'user@example.com',
+      selector: { placeholder: 'Email' },
+    });
+    expect(result.actions[1]).toMatchObject({
+      type: 'select',
+      option: 'Canada',
+      selector: { textExact: 'Country' },
+    });
+    expect(result.actions[2]).toMatchObject({ type: 'switchTab', tabIndex: 2 });
+  });
+
+  it('accepts the current prompt field names for type, select, switchTab, and closeTab', () => {
+    const parser = new CommandParser({ strictMode: false, allowEvaluate: true });
+    const result = parser.parse(
+      JSON.stringify({
+        summary: 'Use documented field names',
+        actions: [
+          {
+            type: 'type',
+            selector: { placeholder: 'Email' },
+            text: 'user@example.com',
+          },
+          {
+            type: 'select',
+            selector: { textExact: 'Country' },
+            option: { label: 'Canada' },
+          },
+          {
+            type: 'switchTab',
+            tabIndex: 2,
+          },
+          {
+            type: 'closeTab',
+            tabIndex: 1,
+          },
+        ],
+      }),
+    );
+
+    expect(result.actions).toEqual([
+      expect.objectContaining({
+        type: 'type',
+        text: 'user@example.com',
+        selector: { placeholder: 'Email' },
+      }),
+      expect.objectContaining({
+        type: 'select',
+        option: { label: 'Canada' },
+        selector: { textExact: 'Country' },
+      }),
+      expect.objectContaining({ type: 'switchTab', tabIndex: 2 }),
+      expect.objectContaining({ type: 'closeTab', tabIndex: 1 }),
+    ]);
   });
 
   it('throws AI_PARSE_ERROR when no JSON can be found', () => {
