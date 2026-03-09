@@ -1,7 +1,7 @@
 import type { AIProviderType } from './ai';
 import type { AIMessage } from './ai';
 import type { Action } from './actions';
-import type { ActionResult } from './browser';
+import type { ActionResult, SessionTabSummary } from './browser';
 
 /**
  * Session state
@@ -28,6 +28,9 @@ export interface Session {
   config: SessionConfig;
   status: SessionStatus;
   targetTabId: number | null;
+  tabSnapshot: SessionTabSummary[];
+  recording: SessionRecordingState;
+  playback: SessionPlaybackState;
 
   // Conversation
   messages: AIMessage[];
@@ -58,6 +61,41 @@ export interface ActionRecord {
   result: ActionResult;
   timestamp: number;
   pageStateBeforeSnapshot?: string; // For undo capability
+}
+
+export interface RecordedSessionAction {
+  action: Action;
+  timestamp: number;
+}
+
+export type SessionRecordingStatus = 'idle' | 'recording' | 'paused';
+
+export type SessionPlaybackStatus = 'idle' | 'playing' | 'paused';
+
+export type SessionPlaybackSpeed = 0.5 | 1 | 2;
+
+export interface SessionRecordingState {
+  status: SessionRecordingStatus;
+  actions: RecordedSessionAction[];
+  startedAt: number | null;
+  updatedAt: number | null;
+}
+
+export interface SessionPlaybackError {
+  message: string;
+  actionId?: string;
+  actionType?: Action['type'];
+  timestamp: number;
+}
+
+export interface SessionPlaybackState {
+  status: SessionPlaybackStatus;
+  nextActionIndex: number;
+  speed: SessionPlaybackSpeed;
+  startedAt: number | null;
+  updatedAt: number | null;
+  lastCompletedAt: number | null;
+  lastError: SessionPlaybackError | null;
 }
 
 /**

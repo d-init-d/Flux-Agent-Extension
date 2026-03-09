@@ -16,6 +16,13 @@ function createPageContext(overrides: Partial<PageContext> = {}): PageContext {
     url: 'https://example.com',
     title: 'Example',
     summary: 'Sample page',
+    frame: {
+      frameId: 0,
+      parentFrameId: null,
+      url: 'https://example.com',
+      origin: 'https://example.com',
+      isTop: true,
+    },
     interactiveElements: [
       {
         index: 0,
@@ -99,6 +106,111 @@ describe('SessionManager', () => {
     await manager.undo('s3', 1);
 
     expect(manager.getHistory('s3').map((record) => record.action.id)).toEqual(['a-1']);
+  });
+
+  it('pauses and resumes recording without clearing prior actions or startedAt', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('s3-recording'), 103);
+
+    manager.startRecording('s3-recording');
+    const startedAt = manager.getSession('s3-recording')?.recording.startedAt;
+
+    manager.appendRecordedAction('s3-recording', {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'submit' },
+      },
+      timestamp: 100,
+    });
+    manager.pauseRecording('s3-recording');
+    manager.resumeRecording('s3-recording');
+    manager.appendRecordedAction('s3-recording', {
+      action: {
+        id: 'recorded-fill-1',
+        type: 'fill',
+        selector: { testId: 'email' },
+        value: 'alice@example.com',
+      },
+      timestamp: 200,
+    });
+
+    const session = manager.getSession('s3-recording');
+    expect(session?.recording.status).toBe('recording');
+    expect(session?.recording.startedAt).toBe(startedAt);
+    expect(session?.recording.actions.map((entry) => entry.action.id)).toEqual([
+      'recorded-click-1',
+      'recorded-fill-1',
+    ]);
+  });
+
+  it('resets recorded actions on a fresh recording start', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('s3-reset-recording'), 103);
+
+    manager.startRecording('s3-reset-recording');
+    manager.appendRecordedAction('s3-reset-recording', {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'submit' },
+      },
+      timestamp: 100,
+    });
+    manager.stopRecording('s3-reset-recording');
+    manager.startRecording('s3-reset-recording');
+
+    const session = manager.getSession('s3-reset-recording');
+    expect(session?.recording.status).toBe('recording');
+    expect(session?.recording.actions).toEqual([]);
+  });
+
+  it('tracks playback lifecycle, speed, progress, and reset state separately from recording', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('s3-playback'), 103);
+
+    manager.startRecording('s3-playback');
+    manager.appendRecordedAction('s3-playback', {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'submit' },
+      },
+      timestamp: 100,
+    });
+    manager.stopRecording('s3-playback');
+
+    manager.startPlayback('s3-playback', 2);
+    manager.markPlaybackActionCompleted('s3-playback', 1, 150);
+    manager.pausePlayback('s3-playback');
+    manager.resumePlayback('s3-playback', 0.5);
+    manager.setPlaybackError('s3-playback', {
+      message: 'Playback paused after an execution failure',
+      actionId: 'recorded-click-1',
+      actionType: 'click',
+      timestamp: 175,
+    });
+    manager.completePlayback('s3-playback');
+
+    let session = manager.getSession('s3-playback');
+    expect(session?.recording.status).toBe('idle');
+    expect(session?.playback.status).toBe('idle');
+    expect(session?.playback.nextActionIndex).toBe(1);
+    expect(session?.playback.speed).toBe(0.5);
+    expect(session?.playback.lastCompletedAt).not.toBeNull();
+    expect(session?.playback.lastError).toBeNull();
+
+    manager.stopPlayback('s3-playback');
+    session = manager.getSession('s3-playback');
+    expect(session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 0,
+        startedAt: null,
+        lastCompletedAt: null,
+        lastError: null,
+      }),
+    );
   });
 
   it('builds context with provided page context and includes expected sections', async () => {

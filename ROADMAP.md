@@ -1,7 +1,7 @@
 # AI Browser Controller - Detailed Roadmap
 
 > **Version:** 1.0.0
-> **Last Updated:** 2026-03-05
+> **Last Updated:** 2026-03-09
 > **Timeline:** 20 weeks (5 phases)
 > **Target Release:** v1.0.0 Chrome Web Store
 
@@ -371,15 +371,27 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | A-02a | Emulation.setDeviceMetricsOverride | 2h | — | iPhone, Pixel, iPad presets |
 | A-02b | Emulation.setUserAgentOverride | 1h | — | Match device user agent |
 | A-02c | Emulation.setTouchEmulationEnabled | 1h | — | Touch events for mobile |
-| A-03 | Geolocation mock | 2h | C-13 | Set fake GPS coordinates |
+| A-03 | Geolocation mock | 6h | C-13 | Set fake GPS coordinates via CDP |
+| A-03.1 | Type definition in `actions.ts` | 0.5h | — | `MockGeolocationAction` interface, `'mockGeolocation'` in `ActionType` union, added to `Action` union |
+| A-03.2 | Sensitivity classification | 0.5h | A-03.1 | `mockGeolocation: 'medium'` in `BASE_SENSITIVITY` (`action-classifier.ts` line ~84) |
+| A-03.3 | Zod schema in `action-schemas.ts` | 1h | A-03.1 | Add `'mockGeolocation'` to `ACTION_TYPES` array (→35 total), add `mockGeolocationSchema` to `actionSchemas`, add to `orderedActionSchemas` |
+| A-03.4 | System prompt update in `system.ts` | 0.5h | A-03.3 | Add to `ACTION_REFERENCE` Advanced section, compact prompt list, `SUPPORTED_ACTION_TYPES` array (→35 total) |
+| A-03.5 | CDP wrappers in `debugger-adapter.ts` | 0.5h | C-13 | `setGeolocationOverride(tabId, {latitude, longitude, accuracy})` and `clearGeolocationOverride(tabId)` methods |
+| A-03.6 | `GeolocationMockManager` class | 1h | A-03.5 | New file `src/background/geolocation-mock-manager.ts`, follow `DeviceEmulationManager` pattern exactly |
+| A-03.7 | Runtime routing in `ui-session-runtime.ts` | 1h | A-03.6 | Import manager, add to constructor, route in `executeAutomationAction`, cleanup in abort/newTab/switchTab/closeTab |
+| A-03.8 | Unit tests for all components | 1h | A-03.7 | Tests for manager, CDP wrappers, schema, runtime routing. Update count assertions (34→35) |
+| A-03.9 | Run all verification gates | — | A-03.8 | `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm audit --audit-level=high` |
+| A-03.10 | Update tracker, commit, push | — | A-03.9 | DELIVERY_TRACKER.md update, `git commit`, `git push` |
 | A-04 | PDF generation | 3h | C-13 | Save page as PDF |
 | A-05 | File upload | 4h | C-13 | Handle file input elements |
-| A-06 | iframe support | 6h | C-13 | Navigate into iframes, interact |
-| A-06a | Same-origin iframe via CS | 2h | — | contentWindow access |
-| A-06b | Cross-origin iframe via CDP | 4h | — | Target.attachToTarget |
+| A-06 | iframe support | 6h | C-13 | Route actions into targeted frames and interact |
+| A-06a | Frame-aware CS bridge | 3h | — | `all_frames` + frame-targeted messaging |
+| A-06b | Frame context + selector targeting | 3h | — | `selector.frame` + frame registry routing |
 | A-07 | Multi-tab automation | 6h | C-11 | Orchestrate actions across tabs |
 | A-07a | Cross-tab action sequencing | 3h | — | "Open new tab, go to X, then..." |
 | A-07b | Tab state synchronization | 3h | — | Know which tab has what page |
+
+> Execution note: `A-04` remains in scope, but active implementation order is `A-05 -> A-06 -> A-04` because upload and iframe support are more core to browser control workflows.
 
 ### Sprint 4.2 (Week 17-18): Recording & Workflows
 
@@ -425,16 +437,18 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | A-14b | Script export security | 2h | A-10 | No sensitive data in exports |
 | A-14c | Workflow storage security | 2h | A-11 | Workflows can't contain secrets |
 
+> Live execution status: `A-03.1` through `A-03.9` PASS. `A-03.10` remains pending because commit/push requires an explicit user request. `A-05` implementation is complete with `pnpm typecheck`, targeted `pnpm vitest run`, `pnpm test`, and `pnpm build` passing; `pnpm audit --audit-level=high` still reports the known pre-existing `rollup` advisories via `@crxjs/vite-plugin`. `A-06` is now implemented via frame-aware content scripts, bridge routing, frame registry tracking, and `selector.frame` targeting; verification is in progress against the same audit baseline. `A-07` is verified complete. `A-08` is now PASS: QA coverage was added, the initial security blockers were fixed, the security re-audit verdict was `PASS WITH NOTES`, `pnpm typecheck` passed, selective `pnpm vitest run` across changed files passed at `65/65`, `pnpm test` passed at `66 files / 1057 tests`, `pnpm build` passed, and `pnpm audit --audit-level=high` remained on the known `rollup` advisory baseline via `@crxjs/vite-plugin` with no new high-severity findings. `A-09` is now PASS: `A-09a` and `A-09b` are complete, parent QA coverage was added in `src/test/e2e/full-pipeline.test.tsx`, `pnpm typecheck` passed, selective `pnpm vitest run src/test/e2e/full-pipeline.test.tsx` passed at `1 file / 8 tests`, `pnpm test` passed at `66 files / 1069 tests`, `pnpm build` passed, and `pnpm audit --audit-level=high` remained on the known `rollup` advisory baseline via `@crxjs/vite-plugin` with no new high-severity findings. `A-04` remains a lower-priority follow-up.
+
 ### Phase 4 Milestone Checklist
 
 ```
 □ Network interception working (block ads, mock APIs)
 □ Device emulation working (iPhone, Pixel presets)
 □ Geolocation mock working
-□ PDF generation working
-□ File upload working via CDP
-□ iframe interaction working (same + cross origin)
-□ Multi-tab automation working
+✅ PDF generation working
+✅ File upload working via staged sidepanel uploads
+✅ iframe interaction working via frame-aware bridge routing
+✅ Multi-tab automation working
 □ Action recording captures user actions accurately
 □ Action playback replays with correct timing
 □ Export to JSON/Playwright format working
@@ -535,6 +549,76 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 □ Chrome Web Store submission approved
 □ v1.0.0 RELEASED
 ```
+
+---
+
+## Mandatory Development Workflow
+
+> **This section is NORMATIVE.** Every agent session MUST follow this workflow for all phases. See BLUEPRINT.md §9 for full details.
+> **Enforcement:** This applies EVERY time the user instructs the agent to work. No exceptions.
+
+### Phase-Level Planning (MANDATORY FIRST STEP)
+
+When the user gives a command to work on any phase or task group:
+
+1. **READ** BLUEPRINT.md §9 and the relevant phase section below
+2. **CREATE a detailed TodoList** (`todowrite` tool) — atomic, sequential tasks
+3. **ASSIGN each task** to exactly ONE sub-agent (`@sub-tech-lead`, `@sub-ui-designer`, `@sub-qa-tester`, `@sub-security-auditor`)
+4. **SHOW the todolist** to the user before writing any code
+5. **NEVER start coding without a todolist**
+
+> ⚠️ If the agent starts implementing without creating a todolist first, the session is invalid.
+
+### Per-Task Execution Flow
+
+```
+PLAN → DELEGATE → REVIEW → VERIFY → PASS → COMMIT → NEXT
+```
+
+1. **PLAN** — Mark task `in_progress` in todolist (only ONE at a time). Read relevant files for context.
+2. **DELEGATE** — Call the `task` tool with the correct `subagent_type` to delegate implementation:
+   - `sub-tech-lead` → Core logic, managers, adapters, CDP, schemas, types, prompts
+   - `sub-ui-designer` → UI components, styling, frontend pages
+   - `sub-qa-tester` → Tests, mocks, coverage, E2E scenarios
+   - `sub-security-auditor` → Security audit, classification, vulnerability checks
+   - The prompt MUST include: exact files, code patterns, acceptance criteria
+   - **Main agent MUST NOT implement directly** — only delegate, review, verify
+3. **REVIEW** — Main agent reads the sub-agent's output. Checks correctness, pattern adherence, no regressions. If rejected → re-delegate with specific feedback (do NOT fix it yourself)
+4. **VERIFY** — Run ALL verification gates:
+   - `pnpm typecheck` → Exit 0
+   - `pnpm vitest run <changed-files>` → All pass
+   - `pnpm test` → All pass
+   - `pnpm build` → Exit 0
+   - `pnpm audit --audit-level=high` → No new advisories
+5. **PASS** — Only if ALL gates pass:
+   - Mark task `completed` in todolist **immediately** (never batch)
+   - Update DELIVERY_TRACKER.md with `✅ PASS`
+   - Update this roadmap's task status
+6. **COMMIT** — `git commit` (task files only) + `git push origin main`
+7. **NEXT** — Proceed to next task in order. **Never skip ahead.**
+
+### TodoList Management Rules
+
+| Rule | Detail |
+|------|--------|
+| Create BEFORE work | Todolist must exist before any code is written |
+| One `in_progress` at a time | Never have multiple tasks in_progress simultaneously |
+| Mark complete IMMEDIATELY | As soon as a task passes, mark it — never batch |
+| Include sub-agent assignment | Each todo must note which `@sub-*` is responsible |
+| Update on scope change | If scope changes, update todolist before proceeding |
+| Todolist = source of truth | If it's not in the todolist, it doesn't get done |
+
+### Hard Rules
+
+| Rule | Detail |
+|------|--------|
+| Sequential execution | Tasks run in roadmap order, no skipping |
+| Evidence required | All 5 gates must pass before marking PASS |
+| One commit per task | Never batch multiple tasks in one commit |
+| Revert on 3 failures | Stop → revert → document → escalate |
+| Sub-agent implements | Main agent only delegates (via `task` tool), reviews, and verifies |
+| Never start without todolist | Mandatory for every phase/task group |
+| Never bypass delegation | Every task goes through a sub-agent, no exceptions |
 
 ---
 

@@ -72,6 +72,15 @@ const ALLOWED_EXTENSION_MESSAGE_TYPES: readonly ExtensionMessageType[] = [
   'SESSION_SEND_MESSAGE',
   'SESSION_GET_STATE',
   'SESSION_LIST',
+  'SESSION_RECORDING_START',
+  'SESSION_RECORDING_PAUSE',
+  'SESSION_RECORDING_RESUME',
+  'SESSION_RECORDING_STOP',
+  'SESSION_PLAYBACK_START',
+  'SESSION_PLAYBACK_PAUSE',
+  'SESSION_PLAYBACK_RESUME',
+  'SESSION_PLAYBACK_STOP',
+  'SESSION_PLAYBACK_SET_SPEED',
   'ACTION_EXECUTE',
   'ACTION_EXECUTE_BATCH',
   'ACTION_ABORT',
@@ -863,8 +872,13 @@ export class ServiceWorkerManager {
     // PAGE_LOADED — content script announces it's ready
     const unsubPageLoaded = this.bridge.onEvent(
       'PAGE_LOADED' as MessageType,
-      (tabId: number, payload: unknown) => {
+      (tabId: number, frame, payload: unknown) => {
         try {
+          if (!frame.isTop) {
+            this.logger.debug(`Content script ready in subframe ${frame.frameId} for tab ${tabId}`, payload);
+            return;
+          }
+
           const existing = this.tabStates.get(tabId);
           this.tabStates.set(tabId, {
             id: tabId,
@@ -887,8 +901,13 @@ export class ServiceWorkerManager {
     // PAGE_UNLOAD — content script is going away
     const unsubPageUnload = this.bridge.onEvent(
       'PAGE_UNLOAD' as MessageType,
-      (tabId: number, _payload: unknown) => {
+      (tabId: number, frame, _payload: unknown) => {
         try {
+          if (!frame.isTop) {
+            this.logger.debug(`Content script unloaded in subframe ${frame.frameId} for tab ${tabId}`);
+            return;
+          }
+
           const existing = this.tabStates.get(tabId);
           if (existing) {
             this.tabStates.set(tabId, {
@@ -909,9 +928,9 @@ export class ServiceWorkerManager {
     // DOM_MUTATION — logged for future use
     const unsubDomMutation = this.bridge.onEvent(
       'DOM_MUTATION' as MessageType,
-      (tabId: number, payload: unknown) => {
+      (tabId: number, frame, payload: unknown) => {
         try {
-          this.logger.debug(`DOM mutation in tab ${tabId}`, payload);
+          this.logger.debug(`DOM mutation in tab ${tabId} frame ${frame.frameId}`, payload);
         } catch (error: unknown) {
           this.logger.error(`Error handling DOM_MUTATION for tab ${tabId}`, error);
         }

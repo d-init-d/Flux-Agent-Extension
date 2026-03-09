@@ -16,6 +16,7 @@ import type {
   RequestPayloadMap,
 } from '@shared/types';
 import type { IDeviceEmulationManager } from '../device-emulation-manager';
+import type { IGeolocationMockManager } from '../geolocation-mock-manager';
 import type { INetworkInterceptionManager } from '../network-interception-manager';
 import { UISessionRuntime } from '../ui-session-runtime';
 
@@ -42,6 +43,13 @@ function createPageContext(): PageContext {
     url: 'https://example.com/form',
     title: 'Example Form',
     summary: 'Form with email field and submit button.',
+    frame: {
+      frameId: 0,
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    },
     interactiveElements: [
       {
         index: 1,
@@ -99,20 +107,26 @@ class MockProvider implements IAIProvider {
   readonly supportsVision = false;
   readonly supportsStreaming = true;
   readonly supportsFunctionCalling = false;
+  public lastMessages: AIMessage[] = [];
+  private readonly responseQueue: string[];
 
-  constructor(private readonly responseText: string) {}
+  constructor(responseText: string | string[]) {
+    this.responseQueue = Array.isArray(responseText) ? [...responseText] : [responseText];
+  }
 
   async initialize(_config: AIModelConfig): Promise<void> {
     return undefined;
   }
 
   async *chat(
-    _messages: AIMessage[],
+    messages: AIMessage[],
     _options?: AIRequestOptions,
   ): AsyncGenerator<AIStreamChunk, void, unknown> {
-    const midpoint = Math.max(1, Math.floor(this.responseText.length / 2));
-    yield { type: 'text', content: this.responseText.slice(0, midpoint) };
-    yield { type: 'text', content: this.responseText.slice(midpoint) };
+    this.lastMessages = messages;
+    const responseText = this.responseQueue.shift() ?? this.responseQueue.at(-1) ?? '{"summary":"noop","actions":[]}';
+    const midpoint = Math.max(1, Math.floor(responseText.length / 2));
+    yield { type: 'text', content: responseText.slice(0, midpoint) };
+    yield { type: 'text', content: responseText.slice(midpoint) };
   }
 
   async validateApiKey(_apiKey: string): Promise<boolean> {
@@ -124,10 +138,14 @@ class MockProvider implements IAIProvider {
   }
 }
 
-function createAIManager(responseText: string): AIClientManager {
+function createAIManager(responseText: string | string[]): {
+  manager: AIClientManager;
+  provider: MockProvider;
+} {
   const manager = new AIClientManager({ autoFallback: false });
-  manager.registerProvider(new MockProvider(responseText));
-  return manager;
+  const provider = new MockProvider(responseText);
+  manager.registerProvider(provider);
+  return { manager, provider };
 }
 
 function createBridge(
@@ -136,7 +154,9 @@ function createBridge(
   send: ReturnType<typeof vi.fn>;
   ensureContentScript: ReturnType<typeof vi.fn>;
   sendOneWay: ReturnType<typeof vi.fn>;
+  emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
 } {
+  const eventHandlers = new Map<string, (tabId: number, frame: unknown, payload: unknown) => void>();
   const send = vi.fn(async (_tabId: number, type: string, payload: unknown) => {
     if (type === 'GET_PAGE_CONTEXT') {
       return { context: createPageContext() };
@@ -154,12 +174,21 @@ function createBridge(
     send,
     ensureContentScript: vi.fn(async () => undefined),
     sendOneWay: vi.fn(),
-    onEvent: vi.fn(() => () => undefined),
+    onEvent: vi.fn((type: string, handler: (tabId: number, frame: unknown, payload: unknown) => void) => {
+      eventHandlers.set(type, handler);
+      return () => {
+        eventHandlers.delete(type);
+      };
+    }),
     isReady: vi.fn(async () => true),
+    emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => {
+      eventHandlers.get(type)?.(tabId, frame, payload);
+    },
   } as unknown as IServiceWorkerBridge & {
     send: ReturnType<typeof vi.fn>;
     ensureContentScript: ReturnType<typeof vi.fn>;
     sendOneWay: ReturnType<typeof vi.fn>;
+    emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
   };
 }
 
@@ -194,6 +223,20 @@ function createDeviceManagerStub(): IDeviceEmulationManager {
       },
       userAgent: 'Mock Mobile UA',
       touchEnabled: true as const,
+    })),
+    clearSession: vi.fn(async () => undefined),
+  };
+}
+
+function createGeolocationManagerStub(): IGeolocationMockManager {
+  return {
+    activateSession: vi.fn(),
+    applyAction: vi.fn(async (sessionId: string, tabId: number, action) => ({
+      sessionId,
+      tabId,
+      latitude: action.latitude,
+      longitude: action.longitude,
+      accuracy: action.accuracy,
     })),
     clearSession: vi.fn(async () => undefined),
   };
@@ -261,6 +304,68 @@ function installNavigationCompletion(url: string, mode: 'load' | 'domContentLoad
   });
 }
 
+function installCreatedTabCompletion(url: string, mode: 'load' | 'domContentLoaded' = 'load'): void {
+  const tabsApi = chrome.tabs as MockTabsApi;
+  const baseCreate = vi.mocked(chrome.tabs.create).getMockImplementation();
+
+  vi.spyOn(chrome.tabs, 'create').mockImplementation(async (createProperties) => {
+    const response = baseCreate
+      ? await baseCreate(createProperties)
+      : ({ id: 2, url: createProperties.url, status: 'loading' } as chrome.tabs.Tab);
+
+    if (createProperties.url === url && response.id !== undefined) {
+      setTimeout(() => {
+        const existingTabs = tabsApi._getTabs?.() ?? [];
+        const nextTabs = existingTabs.map((tab) =>
+          tab.id === response.id
+            ? {
+                ...tab,
+                url,
+                status: 'complete',
+              }
+            : tab,
+        );
+        tabsApi._setTabs?.(nextTabs);
+
+        chrome.webNavigation.onCommitted.dispatch({
+          tabId: response.id,
+          frameId: 0,
+          url,
+          processId: 1,
+          timeStamp: Date.now(),
+          transitionQualifiers: [],
+          transitionType: 'link',
+        });
+        chrome.webNavigation.onDOMContentLoaded.dispatch({
+          tabId: response.id,
+          frameId: 0,
+          url,
+          processId: 1,
+          timeStamp: Date.now(),
+        });
+
+        if (mode === 'load') {
+          chrome.tabs.onUpdated.dispatch(response.id, { status: 'complete', url }, {
+            ...(nextTabs.find((tab) => tab.id === response.id) ?? response),
+            id: response.id,
+            url,
+            status: 'complete',
+          });
+          chrome.webNavigation.onCompleted.dispatch({
+            tabId: response.id,
+            frameId: 0,
+            url,
+            processId: 1,
+            timeStamp: Date.now(),
+          });
+        }
+      }, 0);
+    }
+
+    return response;
+  });
+}
+
 describe('UI session runtime', () => {
   beforeEach(async () => {
     vi.useRealTimers();
@@ -307,7 +412,7 @@ describe('UI session runtime', () => {
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
-      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -328,6 +433,86 @@ describe('UI session runtime', () => {
         payload: expect.objectContaining({ reason: 'created' }),
       }),
     );
+  });
+
+  it('synchronizes an ordered tab snapshot into the AI context', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 7,
+        index: 2,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://docs.example.com',
+        title: 'Docs',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 3,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://app.example.com',
+        title: 'App',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const ai = createAIManager('{"summary":"noop","actions":[]}');
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: ai.manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Describe the current tabs',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    const userMessage = [...ai.provider.lastMessages].reverse().find((message) => message.role === 'user');
+    expect(typeof userMessage?.content).toBe('string');
+    const userContent = userMessage?.content as string;
+    expect(userContent).toContain('## Tabs');
+    expect(userContent).toContain('[0] id=3 markers=target, active, complete');
+    expect(userContent).toContain('[1] id=7 markers=complete');
+    expect(userContent).not.toContain('title=');
+    expect(userContent).not.toContain('App');
+    expect(userContent).not.toContain('Docs');
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+
+    expect(stateResponse.data?.session?.tabSnapshot).toEqual([
+      expect.objectContaining({ tabIndex: 0, id: 3, isTarget: true, isActive: true }),
+      expect.objectContaining({ tabIndex: 1, id: 7, isTarget: false, isActive: false }),
+    ]);
   });
 
   it('streams an AI plan, executes the action, and persists the UI-facing summary', async () => {
@@ -352,7 +537,7 @@ describe('UI session runtime', () => {
             },
           ],
         }),
-      ),
+      ).manager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -371,7 +556,12 @@ describe('UI session runtime', () => {
 
     expect(sendResponse.success).toBe(true);
     expect(bridge.ensureContentScript).toHaveBeenCalled();
-    expect(bridge.send).toHaveBeenCalledWith(1, 'GET_PAGE_CONTEXT', undefined);
+    expect(bridge.send).toHaveBeenCalledWith(
+      1,
+      'GET_PAGE_CONTEXT',
+      { includeChildFrames: true },
+      { frameId: 0 },
+    );
     expect(bridge.send).toHaveBeenCalledWith(
       1,
       'EXECUTE_ACTION',
@@ -381,11 +571,13 @@ describe('UI session runtime', () => {
           selector: { role: 'button', textExact: 'Submit' },
         }),
       }),
+      { frameId: 0 },
     );
     expect(bridge.sendOneWay).toHaveBeenCalledWith(
       1,
       'HIGHLIGHT_ELEMENT',
       expect.objectContaining({ selector: { role: 'button', textExact: 'Submit' } }),
+      { frameId: 0 },
     );
     expect(actionHandler).toHaveBeenCalledTimes(1);
 
@@ -407,11 +599,97 @@ describe('UI session runtime', () => {
       expect.objectContaining({ role: 'assistant', content: 'Click the Submit button' }),
     );
     expect(stateResponse.data?.session?.actionHistory).toHaveLength(1);
-    expect(stateResponse.data?.session?.actionHistory[0]).toEqual(
+  expect(stateResponse.data?.session?.actionHistory[0]).toEqual(
       expect.objectContaining({
         action: expect.objectContaining({ type: 'click' }),
         result: expect.objectContaining({ success: true }),
       }),
+    );
+  });
+
+  it('routes iframe DOM actions to the resolved frame target when selector.frame uses url matching', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Click the continue button inside the checkout iframe',
+          actions: [
+            {
+              id: 'iframe-click-1',
+              type: 'click',
+              selector: {
+                textExact: 'Continue',
+                role: 'button',
+                frame: {
+                  mode: 'url',
+                  urlPattern: 'https://pay.example.com/*',
+                },
+              },
+            },
+          ],
+        }),
+      ).manager,
+      networkInterceptionManager: createNetworkManagerStub(),
+      deviceEmulationManager: createDeviceManagerStub(),
+    });
+
+    bridge.emitEvent(
+      'PAGE_LOADED',
+      1,
+      {
+        tabId: 1,
+        frameId: 7,
+        documentId: 'frame-doc-7',
+        parentFrameId: 0,
+        url: 'https://pay.example.com/embedded-checkout',
+        origin: 'https://pay.example.com',
+        isTop: false,
+      },
+      {
+        url: 'https://pay.example.com/embedded-checkout',
+        title: 'Embedded Checkout',
+        isTop: false,
+      },
+    );
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Click continue in the embedded checkout frame',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(bridge.send).toHaveBeenCalledWith(
+      1,
+      'EXECUTE_ACTION',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          type: 'click',
+          selector: expect.objectContaining({
+            frame: expect.objectContaining({
+              mode: 'url',
+              urlPattern: 'https://pay.example.com/*',
+            }),
+          }),
+        }),
+      }),
+      { frameId: 7, documentId: 'frame-doc-7' },
     );
   });
 
@@ -455,7 +733,7 @@ describe('UI session runtime', () => {
             },
           ],
         }),
-      ),
+      ).manager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -485,6 +763,1198 @@ describe('UI session runtime', () => {
     );
   });
 
+  it('stores recorded click actions with selector position and frame context', async () => {
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const startResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    expect(startResponse.success).toBe(true);
+    expect(bridge.sendOneWay).toHaveBeenCalledWith(
+      1,
+      'SET_RECORDING_STATE',
+      { active: true },
+      { frameId: 0 },
+    );
+
+    bridge.emitEvent(
+      'RECORDED_CLICK',
+      1,
+      {
+        tabId: 1,
+        frameId: 7,
+        documentId: 'frame-doc-7',
+        parentFrameId: 0,
+        url: 'https://example.com/embedded',
+        origin: 'https://example.com',
+        isTop: false,
+      },
+      {
+        action: {
+          id: 'recorded-click-1',
+          type: 'click',
+          selector: { testId: 'save-button' },
+          position: { x: 6, y: -4 },
+        },
+      },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+
+    expect(stateResponse.data?.session?.recording.status).toBe('recording');
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(1);
+    expect(stateResponse.data?.session?.recording.actions[0]?.action).toEqual(
+      expect.objectContaining({
+        type: 'click',
+        selector: {
+          testId: 'save-button',
+          frame: { mode: 'documentId', documentId: 'frame-doc-7' },
+        },
+        position: { x: 6, y: -4 },
+      }),
+    );
+
+    const stopResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    expect(stopResponse.success).toBe(true);
+    expect(bridge.sendOneWay).toHaveBeenLastCalledWith(
+      1,
+      'SET_RECORDING_STATE',
+      { active: false },
+      { frameId: 0 },
+    );
+  });
+
+  it('pauses recording without appending new actions, then resumes without clearing prior actions', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com/form',
+        title: 'Form',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-before-pause',
+        type: 'click',
+        selector: { testId: 'save-button' },
+      },
+    });
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_PAUSE', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-during-pause',
+        type: 'click',
+        selector: { testId: 'ignored-button' },
+      },
+    });
+
+    let stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.status).toBe('paused');
+    expect(stateResponse.data?.session?.recording.actions.map((entry) => entry.action.id)).toEqual([
+      'recorded-click-before-pause',
+    ]);
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_RESUME', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-after-resume',
+        type: 'click',
+        selector: { testId: 'resume-button' },
+      },
+    });
+
+    stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.status).toBe('recording');
+    expect(stateResponse.data?.session?.recording.actions.map((entry) => entry.action.id)).toEqual([
+      'recorded-click-before-pause',
+      'recorded-click-after-resume',
+    ]);
+  });
+
+  it('rejects recording start and resume while playback is not idle', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', { sessionId: sessionId! }),
+    );
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'submit' },
+      },
+    });
+    vi.setSystemTime(new Date('2026-03-09T00:00:01.000Z'));
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-2',
+        type: 'click',
+        selector: { testId: 'submit-2' },
+      },
+    });
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', { sessionId: sessionId! }),
+    );
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_RECORDING_START', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_PAUSE', { sessionId: sessionId! }),
+    );
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_RECORDING_RESUME', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+  });
+
+  it('restarts recording with a fresh action list after an earlier recording', async () => {
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-first-session',
+        type: 'click',
+        selector: { testId: 'save-button' },
+      },
+    });
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.status).toBe('recording');
+    expect(stateResponse.data?.session?.recording.actions).toEqual([]);
+  });
+
+  it('sends start, pause, resume, and stop recording state updates to the target tab', async () => {
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_PAUSE', {
+        sessionId: sessionId!,
+      }),
+    );
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_RESUME', {
+        sessionId: sessionId!,
+      }),
+    );
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    expect(bridge.sendOneWay).toHaveBeenNthCalledWith(
+      1,
+      1,
+      'SET_RECORDING_STATE',
+      { active: true },
+      { frameId: 0 },
+    );
+    expect(bridge.sendOneWay).toHaveBeenNthCalledWith(
+      2,
+      1,
+      'SET_RECORDING_STATE',
+      { active: false },
+      { frameId: 0 },
+    );
+    expect(bridge.sendOneWay).toHaveBeenNthCalledWith(
+      3,
+      1,
+      'SET_RECORDING_STATE',
+      { active: true },
+      { frameId: 0 },
+    );
+    expect(bridge.sendOneWay).toHaveBeenNthCalledWith(
+      4,
+      1,
+      'SET_RECORDING_STATE',
+      { active: false },
+      { frameId: 0 },
+    );
+  });
+
+  it('stores recorded fill actions with typed values and iframe frame context', async () => {
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const startResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    expect(startResponse.success).toBe(true);
+
+    bridge.emitEvent(
+      'RECORDED_INPUT',
+      1,
+      {
+        tabId: 1,
+        frameId: 7,
+        documentId: 'frame-doc-7',
+        parentFrameId: 0,
+        url: 'https://example.com/embedded',
+        origin: 'https://example.com',
+        isTop: false,
+      },
+      {
+        action: {
+          id: 'recorded-input-1',
+          type: 'fill',
+          selector: { testId: 'email-field' },
+          value: 'alice@example.com',
+        },
+      },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(1);
+    expect(stateResponse.data?.session?.recording.actions[0]?.action).toEqual(
+      expect.objectContaining({
+        type: 'fill',
+        selector: {
+          testId: 'email-field',
+          frame: { mode: 'documentId', documentId: 'frame-doc-7' },
+        },
+        value: 'alice@example.com',
+      }),
+    );
+  });
+
+  it('ignores recorded input events when recording is inactive', async () => {
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    bridge.emitEvent(
+      'RECORDED_INPUT',
+      1,
+      {
+        tabId: 1,
+        frameId: 0,
+        documentId: 'main-doc',
+        parentFrameId: null,
+        url: 'https://example.com/form',
+        origin: 'https://example.com',
+        isTop: true,
+      },
+      {
+        action: {
+          id: 'recorded-input-inactive',
+          type: 'fill',
+          selector: { testId: 'email-field' },
+          value: 'ignored@example.com',
+        },
+      },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+
+    expect(stateResponse.data?.session?.recording.status).toBe('idle');
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(0);
+  });
+
+  it('records top-frame navigation actions only while recording is active', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com/form',
+        title: 'Form',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    bridge.emitEvent(
+      'RECORDED_NAVIGATION',
+      1,
+      {
+        tabId: 1,
+        frameId: 0,
+        documentId: 'main-doc',
+        parentFrameId: null,
+        url: 'https://example.com/form',
+        origin: 'https://example.com',
+        isTop: true,
+      },
+      {
+        action: {
+          id: 'recorded-navigation-inactive',
+          type: 'navigate',
+          url: 'https://example.com/ignored',
+        },
+      },
+    );
+
+    let stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(0);
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent(
+      'RECORDED_NAVIGATION',
+      1,
+      {
+        tabId: 1,
+        frameId: 0,
+        documentId: 'main-doc',
+        parentFrameId: null,
+        url: 'https://example.com/form',
+        origin: 'https://example.com',
+        isTop: true,
+      },
+      {
+        action: {
+          id: 'recorded-navigation-1',
+          type: 'navigate',
+          url: 'https://example.com/dashboard?tab=activity',
+        },
+      },
+    );
+
+    stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(1);
+    expect(stateResponse.data?.session?.recording.actions[0]?.action).toEqual(
+      expect.objectContaining({
+        type: 'navigate',
+        url: 'https://example.com/dashboard?tab=activity',
+      }),
+    );
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent(
+      'RECORDED_NAVIGATION',
+      1,
+      {
+        tabId: 1,
+        frameId: 0,
+        documentId: 'main-doc',
+        parentFrameId: null,
+        url: 'https://example.com/dashboard?tab=activity',
+        origin: 'https://example.com',
+        isTop: true,
+      },
+      {
+        action: {
+          id: 'recorded-navigation-after-stop',
+          type: 'navigate',
+          url: 'https://example.com/ignored-after-stop',
+        },
+      },
+    );
+
+    stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(1);
+  });
+
+  it('deduplicates consecutive recorded navigation URLs', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com/form',
+        title: 'Form',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    const frame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    bridge.emitEvent('RECORDED_NAVIGATION', 1, frame, {
+      action: {
+        id: 'recorded-navigation-1',
+        type: 'navigate',
+        url: 'https://example.com/checkout',
+      },
+    });
+    bridge.emitEvent('RECORDED_NAVIGATION', 1, frame, {
+      action: {
+        id: 'recorded-navigation-2',
+        type: 'navigate',
+        url: 'https://example.com/checkout',
+      },
+    });
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(1);
+    expect(stateResponse.data?.session?.recording.actions[0]?.action).toEqual(
+      expect.objectContaining({ type: 'navigate', url: 'https://example.com/checkout' }),
+    );
+  });
+
+  it('ignores iframe navigation events for top-level recording', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com/form',
+        title: 'Form',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent(
+      'RECORDED_NAVIGATION',
+      1,
+      {
+        tabId: 1,
+        frameId: 7,
+        documentId: 'frame-doc-7',
+        parentFrameId: 0,
+        url: 'https://pay.example.com/embedded',
+        origin: 'https://pay.example.com',
+        isTop: false,
+      },
+      {
+        action: {
+          id: 'recorded-navigation-iframe',
+          type: 'navigate',
+          url: 'https://pay.example.com/embedded#step-2',
+        },
+      },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(0);
+  });
+
+  it('records top-frame full page navigations from PAGE_LOADED while recording', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com/form',
+        title: 'Form',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', {
+        sessionId: sessionId!,
+      }),
+    );
+
+    bridge.emitEvent(
+      'PAGE_LOADED',
+      1,
+      {
+        tabId: 1,
+        frameId: 0,
+        documentId: 'main-doc-2',
+        parentFrameId: null,
+        url: 'https://example.com/orders',
+        origin: 'https://example.com',
+        isTop: true,
+      },
+      {
+        url: 'https://example.com/orders',
+        title: 'Orders',
+        isTop: true,
+      },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toHaveLength(1);
+    expect(stateResponse.data?.session?.recording.actions[0]?.action).toEqual(
+      expect.objectContaining({ type: 'navigate', url: 'https://example.com/orders' }),
+    );
+  });
+
+  it('plays back recorded actions with timestamp-based delays, pause/resume, and stop reset', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
+
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', { sessionId: sessionId! }),
+    );
+
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'playback-click-1',
+        type: 'click',
+        selector: { testId: 'first-button' },
+      },
+    });
+    vi.setSystemTime(new Date('2026-03-09T00:00:01.000Z'));
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'playback-click-2',
+        type: 'click',
+        selector: { testId: 'second-button' },
+      },
+    });
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', { sessionId: sessionId! }),
+    );
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_SET_SPEED', { sessionId: sessionId!, speed: 2 }),
+    );
+
+    const startResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+    );
+    expect(startResponse.success).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    const pauseResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_PAUSE', { sessionId: sessionId! }),
+    );
+    expect(pauseResponse.success).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    let stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'paused',
+        nextActionIndex: 1,
+        speed: 2,
+      }),
+    );
+
+    const resumeResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_RESUME', { sessionId: sessionId!, speed: 0.5 }),
+    );
+    expect(resumeResponse.success).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(actionHandler).toHaveBeenCalledTimes(2);
+
+    stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 2,
+        speed: 0.5,
+        lastError: null,
+      }),
+    );
+    expect(stateResponse.data?.session?.actionHistory).toHaveLength(2);
+
+    actionHandler.mockClear();
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId!, speed: 1 }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    const stopResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_STOP', { sessionId: sessionId! }),
+    );
+    expect(stopResponse.success).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 0,
+        speed: 1,
+        startedAt: null,
+      }),
+    );
+  });
+
+  it('stops active playback through ACTION_ABORT and marks the current progress entry aborted', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
+
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', { sessionId: sessionId! }),
+    );
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'submit' },
+      },
+    });
+    vi.setSystemTime(new Date('2026-03-09T00:00:01.000Z'));
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-2',
+        type: 'click',
+        selector: { testId: 'submit-2' },
+      },
+    });
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', { sessionId: sessionId! }),
+    );
+
+    vi.mocked(chrome.runtime.sendMessage).mockClear();
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    const abortResponse = await runtime.handleMessage(
+      createExtensionMessage('ACTION_ABORT', { sessionId: sessionId! }),
+    );
+    expect(abortResponse.success).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 0,
+        startedAt: null,
+      }),
+    );
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'EVENT_SESSION_UPDATE',
+        payload: expect.objectContaining({
+          sessionId,
+          session: expect.objectContaining({
+            playback: expect.objectContaining({ status: 'idle', nextActionIndex: 0 }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects invalid playback transitions and invalid speed values', async () => {
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', { sessionId: sessionId! }),
+    );
+
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_PLAYBACK_RESUME', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_PLAYBACK_SET_SPEED', { sessionId: sessionId!, speed: 3 }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_START', { sessionId: sessionId! }),
+    );
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_PAUSE', { sessionId: sessionId! }),
+    );
+
+    bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'submit' },
+      },
+    });
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', { sessionId: sessionId! }),
+    );
+
+    (chrome.tabs as MockTabsApi)._setTabs?.([]);
+
+    await expect(
+      runtime.handleMessage(
+        createExtensionMessage('SESSION_PLAYBACK_START', { sessionId: sessionId! }),
+      ),
+    ).rejects.toMatchObject({ code: 'TAB_NOT_FOUND' });
+  });
+
   it('routes network interception actions to the background manager instead of the DOM bridge', async () => {
     const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
       actionId: action.id,
@@ -509,7 +1979,7 @@ describe('UI session runtime', () => {
             },
           ],
         }),
-      ),
+      ).manager,
       networkInterceptionManager,
       deviceEmulationManager: createDeviceManagerStub(),
       parserFactory: () => new CommandParser({ strictMode: false, allowEvaluate: false }),
@@ -562,7 +2032,7 @@ describe('UI session runtime', () => {
           summary: 'Use the iPhone preset',
           actions: [{ id: 'emu-1', type: 'emulateDevice', preset: 'iphone', orientation: 'portrait' }],
         }),
-      ),
+      ).manager,
       networkInterceptionManager: createNetworkManagerStub(),
       deviceEmulationManager,
     });
@@ -597,9 +2067,143 @@ describe('UI session runtime', () => {
     ).toHaveLength(0);
   });
 
+  it('routes geolocation mock actions to the background manager instead of the DOM bridge', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+    const geolocationMockManager = createGeolocationManagerStub();
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Mock the browser location',
+          actions: [
+            {
+              id: 'geo-1',
+              type: 'mockGeolocation',
+              latitude: 37.7749,
+              longitude: -122.4194,
+              accuracy: 25,
+            },
+          ],
+        }),
+      ).manager,
+      networkInterceptionManager: createNetworkManagerStub(),
+      deviceEmulationManager: createDeviceManagerStub(),
+      geolocationMockManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Pretend I am in San Francisco',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(geolocationMockManager.applyAction).toHaveBeenCalledWith(
+      sessionId,
+      1,
+      expect.objectContaining({
+        type: 'mockGeolocation',
+        latitude: 37.7749,
+        longitude: -122.4194,
+        accuracy: 25,
+      }),
+    );
+    expect(actionHandler).not.toHaveBeenCalled();
+    expect(
+      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
+    ).toHaveLength(0);
+  });
+
+  it('stages uploads for the session and resolves them into uploadFile DOM actions', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 8,
+      data: { uploaded: true },
+    }));
+    const bridge = createBridge(actionHandler);
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Upload the selected resume',
+          actions: [
+            {
+              id: 'upload-1',
+              type: 'uploadFile',
+              selector: { css: '#resume-input' },
+              fileIds: ['file-resume'],
+            },
+          ],
+        }),
+      ).manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Upload the resume file',
+        uploads: [
+          {
+            id: 'file-resume',
+            name: 'resume.txt',
+            mimeType: 'text/plain',
+            size: 4,
+            lastModified: 1700000000000,
+            base64Data: 'dGVzdA==',
+          },
+        ],
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(bridge.send).toHaveBeenCalledWith(
+      1,
+      'EXECUTE_ACTION',
+      expect.objectContaining({
+        action: expect.objectContaining({ type: 'uploadFile', fileIds: ['file-resume'] }),
+        context: expect.objectContaining({
+          uploads: [
+            expect.objectContaining({
+              id: 'file-resume',
+              name: 'resume.txt',
+              base64Data: 'dGVzdA==',
+            }),
+          ],
+        }),
+      }),
+      { frameId: 0 },
+    );
+  });
+
   it('clears network interception rules when a session is aborted', async () => {
     const networkInterceptionManager = createNetworkManagerStub();
     const deviceEmulationManager = createDeviceManagerStub();
+    const geolocationMockManager = createGeolocationManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -608,9 +2212,10 @@ describe('UI session runtime', () => {
         duration: 5,
       })),
       logger: new Logger('FluxSW:test', 'debug'),
-      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
       networkInterceptionManager,
       deviceEmulationManager,
+      geolocationMockManager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -627,6 +2232,7 @@ describe('UI session runtime', () => {
     expect(abortResponse.success).toBe(true);
     expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(geolocationMockManager.clearSession).toHaveBeenCalledWith(sessionId);
   });
 
   it('clears session network interception rules before switching the target tab', async () => {
@@ -665,6 +2271,7 @@ describe('UI session runtime', () => {
 
     const networkInterceptionManager = createNetworkManagerStub();
     const deviceEmulationManager = createDeviceManagerStub();
+    const geolocationMockManager = createGeolocationManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -678,9 +2285,10 @@ describe('UI session runtime', () => {
           summary: 'Switch to the second tab',
           actions: [{ id: 'switch-1', type: 'switchTab', tabIndex: 1 }],
         }),
-      ),
+      ).manager,
       networkInterceptionManager,
       deviceEmulationManager,
+      geolocationMockManager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -700,13 +2308,26 @@ describe('UI session runtime', () => {
     expect(sendResponse.success).toBe(true);
     expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(geolocationMockManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
     expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+    expect(geolocationMockManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.tabSnapshot).toEqual([
+      expect.objectContaining({ tabIndex: 0, id: 1, isTarget: false }),
+      expect.objectContaining({ tabIndex: 1, id: 2, isTarget: true }),
+    ]);
   });
 
   it('clears session managers before opening a new target tab', async () => {
+    installCreatedTabCompletion('https://docs.example.com', 'load');
+
     const networkInterceptionManager = createNetworkManagerStub();
     const deviceEmulationManager = createDeviceManagerStub();
+    const geolocationMockManager = createGeolocationManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -720,9 +2341,10 @@ describe('UI session runtime', () => {
           summary: 'Open docs in a new tab',
           actions: [{ id: 'new-tab-1', type: 'newTab', url: 'https://docs.example.com' }],
         }),
-      ),
+      ).manager,
       networkInterceptionManager,
       deviceEmulationManager,
+      geolocationMockManager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -742,13 +2364,223 @@ describe('UI session runtime', () => {
     expect(sendResponse.success).toBe(true);
     expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(geolocationMockManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
     expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+    expect(geolocationMockManager.activateSession).toHaveBeenLastCalledWith(sessionId, 2);
+  });
+
+  it('switches tabs by the planned snapshot even if live tab order changes before execution', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com',
+        title: 'Primary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 2,
+        index: 1,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://second.example.com',
+        title: 'Secondary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const ai = createAIManager(
+      JSON.stringify({
+        summary: 'Switch to the second tab',
+        actions: [{ id: 'switch-snapshot', type: 'switchTab', tabIndex: 1 }],
+      }),
+    );
+
+    vi.spyOn(ai.provider, 'chat').mockImplementation(async function* (messages: AIMessage[]) {
+      this.lastMessages = messages;
+      (chrome.tabs as MockTabsApi)._setTabs?.([
+        {
+          id: 2,
+          index: 0,
+          windowId: 1,
+          highlighted: false,
+          active: false,
+          pinned: false,
+          incognito: false,
+          url: 'https://second.example.com',
+          title: 'Secondary',
+          status: 'complete',
+          discarded: false,
+          autoDiscardable: true,
+          groupId: -1,
+        },
+        {
+          id: 1,
+          index: 1,
+          windowId: 1,
+          highlighted: true,
+          active: true,
+          pinned: false,
+          incognito: false,
+          url: 'https://example.com',
+          title: 'Primary',
+          status: 'complete',
+          discarded: false,
+          autoDiscardable: true,
+          groupId: -1,
+        },
+      ]);
+
+      yield { type: 'text', content: '{"summary":"Switch to the second tab",' };
+      yield { type: 'text', content: '"actions":[{"id":"switch-snapshot","type":"switchTab","tabIndex":1}]}' };
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: ai.manager,
+      networkInterceptionManager: createNetworkManagerStub(),
+      deviceEmulationManager: createDeviceManagerStub(),
+      geolocationMockManager: createGeolocationManagerStub(),
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Switch to the second tab',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(chrome.tabs.update).toHaveBeenCalledWith(2, { active: true });
+    expect(chrome.tabs.update).not.toHaveBeenCalledWith(1, { active: true });
+  });
+
+  it('waits for a new tab URL to finish loading before continuing cross-tab actions', async () => {
+    installCreatedTabCompletion('https://docs.example.com', 'load');
+
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    bridge.send.mockImplementation(async (tabId: number, type: string, payload: unknown) => {
+      const tab = (chrome.tabs as MockTabsApi)._getTabs?.().find((candidate) => candidate.id === tabId);
+
+      if (tabId === 2 && tab?.status !== 'complete') {
+        throw new Error(`Tab ${tabId} is still loading`);
+      }
+
+      if (type === 'GET_PAGE_CONTEXT') {
+        return { context: createPageContext() };
+      }
+
+      if (type === 'EXECUTE_ACTION') {
+        const request = payload as RequestPayloadMap['ACTION_EXECUTE'];
+        return {
+          result: {
+            actionId: request.action.id,
+            success: true,
+            duration: 5,
+          },
+        };
+      }
+
+      throw new Error(`Unexpected bridge command: ${type}`);
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Open docs in a new tab and click Start',
+          actions: [
+            {
+              id: 'new-tab-sequence',
+              type: 'newTab',
+              url: 'https://docs.example.com',
+            },
+            {
+              id: 'click-new-tab',
+              type: 'click',
+              selector: { role: 'button', textExact: 'Start' },
+            },
+          ],
+        }),
+      ).manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Open docs in a new tab and click Start',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(bridge.send).toHaveBeenCalledWith(
+      2,
+      'GET_PAGE_CONTEXT',
+      { includeChildFrames: true },
+      { frameId: 0 },
+    );
+    expect(bridge.send).toHaveBeenCalledWith(
+      2,
+      'EXECUTE_ACTION',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          id: 'click-new-tab',
+          type: 'click',
+        }),
+      }),
+      { frameId: 0 },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.targetTabId).toBe(2);
   });
 
   it('clears session managers when closing the active session tab', async () => {
     const networkInterceptionManager = createNetworkManagerStub();
     const deviceEmulationManager = createDeviceManagerStub();
+    const geolocationMockManager = createGeolocationManagerStub();
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -762,9 +2594,10 @@ describe('UI session runtime', () => {
           summary: 'Close the current tab',
           actions: [{ id: 'close-tab-1', type: 'closeTab' }],
         }),
-      ),
+      ).manager,
       networkInterceptionManager,
       deviceEmulationManager,
+      geolocationMockManager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -784,9 +2617,298 @@ describe('UI session runtime', () => {
     expect(sendResponse.success).toBe(true);
     expect(networkInterceptionManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(deviceEmulationManager.clearSession).toHaveBeenCalledWith(sessionId);
+    expect(geolocationMockManager.clearSession).toHaveBeenCalledWith(sessionId);
     expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, null);
     expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, null);
+    expect(geolocationMockManager.activateSession).toHaveBeenLastCalledWith(sessionId, null);
     expect(chrome.tabs.remove).toHaveBeenCalledWith(1);
+  });
+
+  it('retargets the session to a remaining tab after closing the current target tab', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com',
+        title: 'Primary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 2,
+        index: 1,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://second.example.com',
+        title: 'Secondary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const networkInterceptionManager = createNetworkManagerStub();
+    const deviceEmulationManager = createDeviceManagerStub();
+    const geolocationMockManager = createGeolocationManagerStub();
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Switch, close, then keep working in the remaining tab',
+          actions: [
+            { id: 'switch-2', type: 'switchTab', tabIndex: 1 },
+            { id: 'close-2', type: 'closeTab' },
+            { id: 'click-after-close', type: 'click', selector: { role: 'button', textExact: 'Submit' } },
+          ],
+        }),
+      ).manager,
+      networkInterceptionManager,
+      deviceEmulationManager,
+      geolocationMockManager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Switch, close, then keep working in the remaining tab',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(networkInterceptionManager.activateSession).toHaveBeenLastCalledWith(sessionId, 1);
+    expect(deviceEmulationManager.activateSession).toHaveBeenLastCalledWith(sessionId, 1);
+    expect(geolocationMockManager.activateSession).toHaveBeenLastCalledWith(sessionId, 1);
+    expect(bridge.send).toHaveBeenCalledWith(
+      1,
+      'EXECUTE_ACTION',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          id: 'click-after-close',
+          type: 'click',
+        }),
+      }),
+      { frameId: 0 },
+    );
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.targetTabId).toBe(1);
+    expect(stateResponse.data?.session?.tabSnapshot).toEqual([
+      expect.objectContaining({ tabIndex: 0, id: 1, isTarget: true }),
+    ]);
+  });
+
+  it('reindexes the ordered tab snapshot after closing a non-target tab by tabIndex', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com',
+        title: 'Primary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 2,
+        index: 1,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://middle.example.com',
+        title: 'Middle',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 3,
+        index: 2,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://tail.example.com',
+        title: 'Tail',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const ai = createAIManager(
+      JSON.stringify({
+        summary: 'Close the middle tab',
+        actions: [{ id: 'close-middle', type: 'closeTab', tabIndex: 1 }],
+      }),
+    );
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: ai.manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const closeResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Close the middle tab',
+      }),
+    );
+
+    expect(closeResponse.success).toBe(true);
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.targetTabId).toBe(1);
+    expect(stateResponse.data?.session?.tabSnapshot).toEqual([
+      expect.objectContaining({ tabIndex: 0, id: 1, isTarget: true, isActive: true }),
+      expect.objectContaining({ tabIndex: 1, id: 3, isTarget: false, isActive: false }),
+    ]);
+  });
+
+  it('fails safely when a planned closeTab target disappears before execution', async () => {
+    (chrome.tabs as MockTabsApi)._setTabs?.([
+      {
+        id: 1,
+        index: 0,
+        windowId: 1,
+        highlighted: true,
+        active: true,
+        pinned: false,
+        incognito: false,
+        url: 'https://example.com',
+        title: 'Primary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+      {
+        id: 2,
+        index: 1,
+        windowId: 1,
+        highlighted: false,
+        active: false,
+        pinned: false,
+        incognito: false,
+        url: 'https://second.example.com',
+        title: 'Secondary',
+        status: 'complete',
+        discarded: false,
+        autoDiscardable: true,
+        groupId: -1,
+      },
+    ]);
+
+    const ai = createAIManager(
+      JSON.stringify({
+        summary: 'Close the second tab',
+        actions: [{ id: 'close-missing', type: 'closeTab', tabIndex: 1 }],
+      }),
+    );
+
+    vi.spyOn(ai.provider, 'chat').mockImplementation(async function* (messages: AIMessage[]) {
+      this.lastMessages = messages;
+      (chrome.tabs as MockTabsApi)._setTabs?.([
+        {
+          id: 1,
+          index: 0,
+          windowId: 1,
+          highlighted: true,
+          active: true,
+          pinned: false,
+          incognito: false,
+          url: 'https://example.com',
+          title: 'Primary',
+          status: 'complete',
+          discarded: false,
+          autoDiscardable: true,
+          groupId: -1,
+        },
+      ]);
+
+      yield { type: 'text', content: '{"summary":"Close the second tab",' };
+      yield { type: 'text', content: '"actions":[{"id":"close-missing","type":"closeTab","tabIndex":1}]}' };
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: ai.manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Close the second tab',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(false);
+    expect(sendResponse.error?.code).toBe('ACTION_FAILED');
+    expect(sendResponse.error?.message).toContain('snapshot index 1');
+    expect(chrome.tabs.remove).not.toHaveBeenCalled();
   });
 
   it('waits for navigation readiness before collecting fresh page context', async () => {
@@ -812,7 +2934,7 @@ describe('UI session runtime', () => {
             },
           ],
         }),
-      ),
+      ).manager,
     });
 
     const createResponse = await runtime.handleMessage(
@@ -831,7 +2953,92 @@ describe('UI session runtime', () => {
 
     expect(sendResponse.success).toBe(true);
     expect(chrome.tabs.update).toHaveBeenCalledWith(1, { url: 'https://localhost/dashboard' });
-    expect(bridge.send).toHaveBeenNthCalledWith(1, 1, 'GET_PAGE_CONTEXT', undefined);
-    expect(bridge.send).toHaveBeenNthCalledWith(2, 1, 'GET_PAGE_CONTEXT', undefined);
+    expect(bridge.send).toHaveBeenNthCalledWith(
+      1,
+      1,
+      'GET_PAGE_CONTEXT',
+      { includeChildFrames: true },
+      { frameId: 0 },
+    );
+    expect(bridge.send).toHaveBeenNthCalledWith(
+      2,
+      1,
+      'GET_PAGE_CONTEXT',
+      { includeChildFrames: true },
+      { frameId: 0 },
+    );
+  });
+
+  it('routes savePdf actions through CDP debugger and triggers chrome.downloads', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValue({ data: 'bW9jay1wZGYtZGF0YQ==' });
+
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Save the page as PDF',
+          actions: [
+            {
+              id: 'pdf-1',
+              type: 'savePdf',
+              landscape: true,
+              filename: 'report.pdf',
+            },
+          ],
+        }),
+      ).manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Save this page as a PDF',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 1 },
+      'Page.printToPDF',
+      expect.objectContaining({ landscape: true }),
+    );
+    expect(chrome.downloads.download).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: expect.stringContaining('data:application/pdf;base64,'),
+        filename: 'report.pdf',
+        saveAs: false,
+      }),
+    );
+    expect(chrome.debugger.detach).toHaveBeenCalledWith({ tabId: 1 });
+    expect(actionHandler).not.toHaveBeenCalled();
+    expect(
+      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
+    ).toHaveLength(0);
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.actionHistory).toHaveLength(1);
+    expect(stateResponse.data?.session?.actionHistory[0]?.result).toEqual(
+      expect.objectContaining({
+        success: true,
+        data: expect.objectContaining({ filename: 'report.pdf' }),
+      }),
+    );
   });
 });

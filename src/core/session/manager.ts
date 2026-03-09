@@ -2,6 +2,7 @@ import type {
   ActionRecord,
   AIMessage,
   PageContext,
+  RecordedSessionAction,
   Session,
   SessionConfig,
   SessionEvent,
@@ -32,6 +33,22 @@ export class SessionManager implements ISessionManager {
       config: { ...config },
       status: 'idle',
       targetTabId: tabId,
+      tabSnapshot: [],
+      recording: {
+        status: 'idle',
+        actions: [],
+        startedAt: null,
+        updatedAt: null,
+      },
+      playback: {
+        status: 'idle',
+        nextActionIndex: 0,
+        speed: 1,
+        startedAt: null,
+        updatedAt: null,
+        lastCompletedAt: null,
+        lastError: null,
+      },
       messages: [],
       currentTurn: 0,
       actionHistory: [],
@@ -193,6 +210,153 @@ export class SessionManager implements ISessionManager {
     this.emit(sessionId, { type: 'ai_response', content });
   }
 
+  startRecording(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.recording.status = 'recording';
+    session.recording.actions = [];
+    session.recording.startedAt = now;
+    session.recording.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  pauseRecording(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.recording.status = 'paused';
+    session.recording.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  resumeRecording(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.recording.status = 'recording';
+    session.recording.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  stopRecording(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    session.recording.status = 'idle';
+    session.recording.updatedAt = Date.now();
+    session.lastActivityAt = session.recording.updatedAt;
+  }
+
+  appendRecordedAction(sessionId: string, action: RecordedSessionAction): void {
+    const session = this.requireSession(sessionId);
+    session.recording.actions.push(action);
+    session.recording.updatedAt = action.timestamp;
+    session.lastActivityAt = action.timestamp;
+  }
+
+  startPlayback(sessionId: string, speed: 0.5 | 1 | 2 = 1): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.status = 'playing';
+    session.playback.nextActionIndex = 0;
+    session.playback.speed = speed;
+    session.playback.startedAt = now;
+    session.playback.updatedAt = now;
+    session.playback.lastCompletedAt = null;
+    session.playback.lastError = null;
+    session.lastActivityAt = now;
+  }
+
+  pausePlayback(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.status = 'paused';
+    session.playback.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  resumePlayback(sessionId: string, speed?: 0.5 | 1 | 2): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.status = 'playing';
+    session.playback.speed = speed ?? session.playback.speed;
+    session.playback.startedAt ??= now;
+    session.playback.updatedAt = now;
+    session.playback.lastError = null;
+    session.lastActivityAt = now;
+  }
+
+  stopPlayback(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.status = 'idle';
+    session.playback.nextActionIndex = 0;
+    session.playback.startedAt = null;
+    session.playback.updatedAt = now;
+    session.playback.lastCompletedAt = null;
+    session.playback.lastError = null;
+    session.lastActivityAt = now;
+  }
+
+  completePlayback(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.status = 'idle';
+    session.playback.updatedAt = now;
+    session.playback.lastCompletedAt = now;
+    session.playback.lastError = null;
+    session.lastActivityAt = now;
+  }
+
+  setPlaybackSpeed(sessionId: string, speed: 0.5 | 1 | 2): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.speed = speed;
+    session.playback.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  setPlaybackNextActionIndex(sessionId: string, nextActionIndex: number): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.nextActionIndex = nextActionIndex;
+    session.playback.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  setPlaybackError(
+    sessionId: string,
+    error: {
+      message: string;
+      actionId?: string;
+      actionType?: RecordedSessionAction['action']['type'];
+      timestamp?: number;
+    },
+  ): void {
+    const session = this.requireSession(sessionId);
+    const timestamp = error.timestamp ?? Date.now();
+    session.playback.lastError = {
+      message: error.message,
+      actionId: error.actionId,
+      actionType: error.actionType,
+      timestamp,
+    };
+    session.playback.updatedAt = timestamp;
+    session.lastActivityAt = timestamp;
+  }
+
+  clearPlaybackError(sessionId: string): void {
+    const session = this.requireSession(sessionId);
+    const now = Date.now();
+    session.playback.lastError = null;
+    session.playback.updatedAt = now;
+    session.lastActivityAt = now;
+  }
+
+  markPlaybackActionCompleted(sessionId: string, nextActionIndex: number, timestamp: number = Date.now()): void {
+    const session = this.requireSession(sessionId);
+    session.playback.nextActionIndex = nextActionIndex;
+    session.playback.updatedAt = timestamp;
+    session.playback.lastCompletedAt = timestamp;
+    session.lastActivityAt = timestamp;
+  }
+
   private emit(sessionId: string, event: SessionEvent): void {
     const handlers = this.subscriptions.get(sessionId);
     if (!handlers) {
@@ -232,6 +396,13 @@ export class SessionManager implements ISessionManager {
       url: 'about:blank',
       title: 'Unknown page',
       summary: 'No page context available yet.',
+      frame: {
+        frameId: 0,
+        parentFrameId: null,
+        url: 'about:blank',
+        origin: 'null',
+        isTop: true,
+      },
       interactiveElements: [],
       headings: [],
       links: [],

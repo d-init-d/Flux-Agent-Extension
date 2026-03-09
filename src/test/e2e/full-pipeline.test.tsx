@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
@@ -84,6 +84,14 @@ function createPageContext(): PageContext {
     url: 'https://example.com/app',
     title: 'Flux Demo App',
     summary: 'Demo page with form fields and submit buttons.',
+    frame: {
+      frameId: 0,
+      parentFrameId: null,
+      url: 'https://example.com/app',
+      origin: 'https://example.com',
+      name: 'main',
+      isTop: true,
+    },
     interactiveElements: [
       {
         index: 1,
@@ -190,7 +198,9 @@ function createBridge(
   send: ReturnType<typeof vi.fn>;
   ensureContentScript: ReturnType<typeof vi.fn>;
   sendOneWay: ReturnType<typeof vi.fn>;
+  emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
 } {
+  const eventHandlers = new Map<string, (tabId: number, frame: unknown, payload: unknown) => void>();
   const send = vi.fn(async (_tabId: number, type: string, payload: unknown) => {
     if (type === 'GET_PAGE_CONTEXT') {
       return { context: createPageContext() };
@@ -208,13 +218,47 @@ function createBridge(
     send,
     ensureContentScript: vi.fn(async () => undefined),
     sendOneWay: vi.fn(),
-    onEvent: vi.fn(() => () => undefined),
+    onEvent: vi.fn((type: string, handler: (tabId: number, frame: unknown, payload: unknown) => void) => {
+      eventHandlers.set(type, handler);
+      return () => {
+        eventHandlers.delete(type);
+      };
+    }),
     isReady: vi.fn(async () => true),
+    emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => {
+      eventHandlers.get(type)?.(tabId, frame, payload);
+    },
   } as unknown as IServiceWorkerBridge & {
     send: ReturnType<typeof vi.fn>;
     ensureContentScript: ReturnType<typeof vi.fn>;
     sendOneWay: ReturnType<typeof vi.fn>;
+    emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
   };
+}
+
+function createTopFrame(url: string = 'https://example.com/app'): Record<string, unknown> {
+  return {
+    tabId: 1,
+    frameId: 0,
+    documentId: 'main-doc',
+    parentFrameId: null,
+    url,
+    origin: 'https://example.com',
+    isTop: true,
+  };
+}
+
+async function emitRecordedEvent(
+  bridge: ReturnType<typeof createBridge>,
+  type: 'RECORDED_CLICK' | 'RECORDED_INPUT' | 'RECORDED_NAVIGATION' | 'PAGE_LOADED',
+  payload: unknown,
+  frame: Record<string, unknown> = createTopFrame(),
+  options: { useFakeTimers?: boolean } = {},
+): Promise<void> {
+  act(() => {
+    bridge.emitEvent(type, 1, frame, payload);
+  });
+  await settleAsyncSideEffects(2, options);
 }
 
 async function renderApp(): Promise<void> {
@@ -238,14 +282,31 @@ async function flushExtensionRequests(): Promise<void> {
   }
 }
 
-async function settleAsyncSideEffects(iterations: number = 1): Promise<void> {
+async function settleAsyncSideEffects(
+  iterations: number = 1,
+  options: { useFakeTimers?: boolean } = {},
+): Promise<void> {
   for (let index = 0; index < iterations; index += 1) {
     await act(async () => {
       await flushExtensionRequests();
       await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (options.useFakeTimers) {
+        await vi.advanceTimersByTimeAsync(0);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     });
   }
+}
+
+async function advancePlaybackTime(milliseconds: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds);
+    await flushExtensionRequests();
+    await Promise.resolve();
+  });
+
+  await settleAsyncSideEffects(1, { useFakeTimers: true });
 }
 
 function installNavigationCompletion(url: string): void {
@@ -356,6 +417,7 @@ describe('Full pipeline E2E (U-16)', () => {
   let originalConsoleError: typeof console.error;
 
   beforeEach(async () => {
+    vi.useRealTimers();
     originalConsoleError = console.error;
     console.error = (...args: unknown[]) => {
       const message = typeof args[0] === 'string' ? args[0] : '';
@@ -395,6 +457,7 @@ describe('Full pipeline E2E (U-16)', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     console.error = originalConsoleError;
     activeRuntime = null;
     extensionListeners.clear();
@@ -600,5 +663,435 @@ describe('Full pipeline E2E (U-16)', () => {
     await openActionLog(user);
     expect(await screen.findByText('Click the Login button')).toBeInTheDocument();
     expect(screen.queryByText('Request failed')).not.toBeInTheDocument();
+  });
+
+  it('A-08a records a full click-input-pause-resume-stop flow through the sidepanel UI', async () => {
+    const user = userEvent.setup();
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionSelect = screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement;
+    const sessionId = sessionSelect.value;
+    expect(sessionId).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Start recording' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('recording-live-indicator')).toHaveTextContent('Live');
+    });
+    expect(screen.getByText('0 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: { testId: 'login-button' },
+      },
+    });
+    await emitRecordedEvent(bridge, 'RECORDED_INPUT', {
+      action: {
+        id: 'recorded-input-1',
+        type: 'fill',
+        selector: { testId: 'email-field' },
+        value: 'alice@example.com',
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('2 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() => {
+      expect(screen.getByText('Paused')).toBeInTheDocument();
+    });
+
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'recorded-click-paused',
+        type: 'click',
+        selector: { testId: 'ignored-while-paused' },
+      },
+    });
+
+    expect(screen.getByText('2 actions captured. Resume when you want to keep collecting steps.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('recording-live-indicator')).toHaveTextContent('Live');
+    });
+
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'recorded-click-2',
+        type: 'click',
+        selector: { testId: 'submit-button' },
+      },
+    });
+
+    expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Start recording' })).toBeInTheDocument();
+    });
+    expect(screen.getByText('3 actions captured in this session. Start again to continue recording.')).toBeInTheDocument();
+
+    const stateResponse = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.success).toBe(true);
+    expect(stateResponse.data?.session?.recording.status).toBe('idle');
+    expect(stateResponse.data?.session?.recording.actions.map((entry) => entry.action.id)).toEqual([
+      'recorded-click-1',
+      'recorded-input-1',
+      'recorded-click-2',
+    ]);
+  });
+
+  it('A-08b records navigation events only while active and appends again after resume', async () => {
+    const user = userEvent.setup();
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Start recording' }));
+
+    await emitRecordedEvent(
+      bridge,
+      'RECORDED_NAVIGATION',
+      {
+        action: {
+          id: 'recorded-navigation-1',
+          type: 'navigate',
+          url: 'https://example.com/dashboard',
+        },
+      },
+      createTopFrame('https://example.com/app'),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('1 action captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() => {
+      expect(screen.getByText('Paused')).toBeInTheDocument();
+    });
+
+    await emitRecordedEvent(
+      bridge,
+      'PAGE_LOADED',
+      {
+        url: 'https://example.com/ignored-during-pause',
+        title: 'Ignored during pause',
+        isTop: true,
+      },
+      createTopFrame('https://example.com/ignored-during-pause'),
+    );
+
+    expect(screen.getByText('1 action captured. Resume when you want to keep collecting steps.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Resume' }));
+
+    await emitRecordedEvent(
+      bridge,
+      'PAGE_LOADED',
+      {
+        url: 'https://example.com/orders',
+        title: 'Orders',
+        isTop: true,
+      },
+      createTopFrame('https://example.com/orders'),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('2 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    });
+
+    const stateResponse = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.success).toBe(true);
+    expect(stateResponse.data?.session?.recording.actions.map((entry) => entry.action)).toEqual([
+      expect.objectContaining({ id: 'recorded-navigation-1', type: 'navigate', url: 'https://example.com/dashboard' }),
+      expect.objectContaining({ type: 'navigate', url: 'https://example.com/orders' }),
+    ]);
+  });
+
+  it('A-09a replays a recorded click-fill-click flow with deterministic timing, pause, and resume', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+      data: action.type === 'fill' ? { filled: true } : { clicked: true },
+    }));
+    const bridge = createBridge(actionHandler);
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    const recordedAt = {
+      first: Date.parse('2026-03-09T00:00:00.000Z'),
+      second: Date.parse('2026-03-09T00:00:01.000Z'),
+      third: Date.parse('2026-03-09T00:00:03.000Z'),
+      playbackStart: Date.parse('2026-03-09T00:00:04.000Z'),
+    };
+    const dateNowSpy = vi.spyOn(Date, 'now');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await settleAsyncSideEffects(1);
+
+    dateNowSpy.mockReturnValue(recordedAt.first);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'playback-click-1',
+        type: 'click',
+        selector: { testId: 'login-button' },
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.second);
+    await emitRecordedEvent(bridge, 'RECORDED_INPUT', {
+      action: {
+        id: 'playback-fill-1',
+        type: 'fill',
+        selector: { testId: 'email-field' },
+        value: 'alice@example.com',
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.third);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'playback-click-2',
+        type: 'click',
+        selector: { testId: 'submit-button' },
+      },
+    });
+
+    expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await settleAsyncSideEffects(1);
+
+    expect(screen.getByText('Ready to replay 3 actions from the start.')).toBeInTheDocument();
+    expect(screen.getByText('0 / 3 actions')).toBeInTheDocument();
+
+    const recordedState = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(recordedState.success).toBe(true);
+    expect(recordedState.data?.session?.recording.actions.map((entry) => entry.action.id)).toEqual([
+      'playback-click-1',
+      'playback-fill-1',
+      'playback-click-2',
+    ]);
+
+    dateNowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(recordedAt.playbackStart));
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Playback speed' }), {
+      target: { value: '2' },
+    });
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+    expect(screen.getByRole('combobox', { name: 'Playback speed' })).toHaveValue('2');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+
+    await advancePlaybackTime(0);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual(['playback-click-1']);
+    expect(screen.getByText('Playing')).toBeInTheDocument();
+    expect(screen.getByText('Playing step 2 of 3 at 2x.')).toBeInTheDocument();
+    expect(screen.getByText('1 / 3 actions')).toBeInTheDocument();
+
+    await advancePlaybackTime(499);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await settleAsyncSideEffects(2, { useFakeTimers: true });
+
+    expect(screen.getByText('Paused')).toBeInTheDocument();
+    expect(screen.getByText('Paused on step 2 of 3 at 2x.')).toBeInTheDocument();
+    expect(screen.getByText('1 / 3 actions')).toBeInTheDocument();
+
+    await advancePlaybackTime(5_000);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Playback speed' }), {
+      target: { value: '0.5' },
+    });
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+    expect(screen.getByRole('combobox', { name: 'Playback speed' })).toHaveValue('0.5');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+
+    await advancePlaybackTime(1_999);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    await advancePlaybackTime(1);
+    expect(actionHandler).toHaveBeenCalledTimes(2);
+    expect(actionHandler.mock.calls[1]?.[0]).toEqual(
+      expect.objectContaining({
+        id: 'playback-fill-1',
+        type: 'fill',
+        selector: { testId: 'email-field' },
+        value: 'alice@example.com',
+      }),
+    );
+    expect(screen.getByText('Playing step 3 of 3 at 0.5x.')).toBeInTheDocument();
+    expect(screen.getByText('2 / 3 actions')).toBeInTheDocument();
+
+    await advancePlaybackTime(3_999);
+    expect(actionHandler).toHaveBeenCalledTimes(2);
+
+    await advancePlaybackTime(1);
+    expect(actionHandler).toHaveBeenCalledTimes(3);
+    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual([
+      'playback-click-1',
+      'playback-fill-1',
+      'playback-click-2',
+    ]);
+    expect(screen.getByText('Finished')).toBeInTheDocument();
+    expect(screen.getByText('Playback finished for 3 actions. You can replay it from the start.')).toBeInTheDocument();
+    expect(screen.getByText('3 / 3 actions')).toBeInTheDocument();
+
+    const finishedState = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(finishedState.success).toBe(true);
+    expect(finishedState.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 3,
+        speed: 0.5,
+        lastError: null,
+      }),
+    );
+  });
+
+  it('A-09b stops playback from the UI and resets progress back to the start', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const bridge = createBridge(actionHandler);
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    const recordedAt = {
+      first: Date.parse('2026-03-09T01:00:00.000Z'),
+      second: Date.parse('2026-03-09T01:00:01.000Z'),
+      playbackStart: Date.parse('2026-03-09T01:00:02.000Z'),
+    };
+    const dateNowSpy = vi.spyOn(Date, 'now');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await settleAsyncSideEffects(1);
+
+    dateNowSpy.mockReturnValue(recordedAt.first);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'stop-click-1',
+        type: 'click',
+        selector: { testId: 'open-menu' },
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.second);
+    await emitRecordedEvent(bridge, 'RECORDED_INPUT', {
+      action: {
+        id: 'stop-fill-1',
+        type: 'fill',
+        selector: { testId: 'search-field' },
+        value: 'Flux',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await settleAsyncSideEffects(1);
+    expect(screen.getByText('Ready to replay 2 actions from the start.')).toBeInTheDocument();
+
+    dateNowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(recordedAt.playbackStart));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+
+    await advancePlaybackTime(0);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual(['stop-click-1']);
+    expect(screen.getByText('Playing step 2 of 2 at 1x.')).toBeInTheDocument();
+    expect(screen.getByText('1 / 2 actions')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await settleAsyncSideEffects(2, { useFakeTimers: true });
+
+    expect(screen.getByText('Ready to replay 2 actions from the start.')).toBeInTheDocument();
+    expect(screen.getByText('0 / 2 actions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
+
+    await advancePlaybackTime(5_000);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    const stoppedState = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(stoppedState.success).toBe(true);
+    expect(stoppedState.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 0,
+        speed: 1,
+        startedAt: null,
+      }),
+    );
   });
 });

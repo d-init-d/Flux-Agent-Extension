@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-08
+> Last updated: 2026-03-09
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
 
@@ -246,9 +246,11 @@ UI-first order:
 
 ## PHASE 4 - Advanced Features
 
-Status summary: Network interception and device emulation are complete; remaining advanced CDP features are pending.
+Status summary: Network interception, device emulation, file upload, iframe routing, and PDF generation are implemented; remaining advanced features are multi-tab automation and workflow features.
 
 ### Sprint 4.1
+
+Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are complete. A-03 geolocation implementation is done but pending commit (A-03.10).
 
 - [x] `A-01` Network interception
 - [x] `A-01a` Fetch.enable interception
@@ -259,25 +261,35 @@ Status summary: Network interception and device emulation are complete; remainin
 - [x] `A-02b` User-agent override
 - [x] `A-02c` Touch emulation
 - [ ] `A-03` Geolocation mock
-- [ ] `A-04` PDF generation
-- [ ] `A-05` File upload
-- [ ] `A-06` iframe support
-- [ ] `A-06a` Same-origin iframe
-- [ ] `A-06b` Cross-origin iframe
-- [ ] `A-07` Multi-tab automation
-- [ ] `A-07a` Cross-tab sequencing
-- [ ] `A-07b` Tab state sync
+- [x] `A-03.1` Type definition (`MockGeolocationAction` in `actions.ts`)
+- [x] `A-03.2` Sensitivity classification (`mockGeolocation: 'medium'` in `action-classifier.ts`)
+- [x] `A-03.3` Zod schema (`action-schemas.ts` — ACTION_TYPES→35, schema, orderedActionSchemas)
+- [x] `A-03.4` System prompt update (`system.ts` — ACTION_REFERENCE, compact, SUPPORTED→35)
+- [x] `A-03.5` CDP wrappers (`debugger-adapter.ts` — setGeolocationOverride, clearGeolocationOverride)
+- [x] `A-03.6` GeolocationMockManager (`src/background/geolocation-mock-manager.ts` — follow DeviceEmulationManager)
+- [x] `A-03.7` Runtime routing (`ui-session-runtime.ts` — import, construct, route, cleanup in 5 locations)
+- [x] `A-03.8` Unit tests (manager tests, schema count 34→35, CDP wrapper tests, runtime routing tests)
+- [x] `A-03.9` Verification gates (typecheck, test, build, audit)
+- [ ] `A-03.10` Record completion, commit, push
+- [x] `A-04` PDF generation (`savePdf` action — CDP `Page.printToPDF`, `chrome.downloads.download`, 7 unit tests)
+- [x] `A-05` File upload (staged sidepanel uploads -> content-script injection)
+- [x] `A-06` iframe support (frame-aware bridge routing)
+- [x] `A-06a` Frame-aware content script injection (`all_frames` + `match_about_blank`)
+- [x] `A-06b` Frame context + selector targeting (`selector.frame`, frame registry, targeted bridge sends)
+- [x] `A-07` Multi-tab automation (snapshot-based tab targeting + redacted AI-visible tab mapping)
+- [x] `A-07a` Cross-tab sequencing (wait for new-tab readiness + retarget remaining tab after close)
+- [x] `A-07b` Tab state sync (session tab snapshot + AI-visible `## Tabs` mapping)
 
 ### Sprint 4.2
 
-- [ ] `A-08` Action recording
-- [ ] `A-08a` Click capture
-- [ ] `A-08b` Input capture
-- [ ] `A-08c` Navigation capture
-- [ ] `A-08d` Recording UI
-- [ ] `A-09` Playback
-- [ ] `A-09a` Playback engine
-- [ ] `A-09b` Playback controls UI
+- [x] `A-08` Action recording
+- [x] `A-08a` Click capture
+- [x] `A-08b` Input capture
+- [x] `A-08c` Navigation capture
+- [x] `A-08d` Recording UI
+- [x] `A-09` Playback
+- [x] `A-09a` Playback engine
+- [x] `A-09b` Playback controls UI
 - [ ] `A-10` Script export
 - [ ] `A-11` Workflow manager
 - [ ] `A-11a` Workflow schema

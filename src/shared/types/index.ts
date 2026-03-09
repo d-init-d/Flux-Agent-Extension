@@ -12,6 +12,7 @@ export type {
 // Action types
 export type {
   ActionType,
+  FrameTarget,
   ElementSelector,
   BaseAction,
   NavigateAction,
@@ -24,6 +25,7 @@ export type {
   FillAction,
   TypeAction,
   ClearAction,
+  UploadFileAction,
   SelectAction,
   CheckAction,
   PressAction,
@@ -48,15 +50,22 @@ export type {
   InterceptNetworkAction,
   MockResponseDefinition,
   MockResponseAction,
+  MockGeolocationAction,
   Action,
   ParsedResponse,
 } from './actions';
 
+export { FILE_UPLOAD_LIMITS } from './uploads';
+export type { FileUploadMetadata, SerializedFileUpload } from './uploads';
+
 // Browser types
 export type {
   TabState,
+  SessionTabSummary,
   ActionResult,
   BrowserControllerOptions,
+  FrameDescriptor,
+  FrameContextSummary,
   PageContext,
   InteractiveElement,
   FormInfo,
@@ -67,10 +76,17 @@ export type {
 export type {
   MessageType,
   BridgeMessage,
+  BridgeSendTarget,
+  BridgeFrameContext,
   ExecuteActionPayload,
   ActionResultPayload,
+  GetPageContextPayload,
   PageContextPayload,
   HighlightPayload,
+  SetRecordingStatePayload,
+  RecordedClickPayload,
+  RecordedInputPayload,
+  RecordedNavigationPayload,
 } from './bridge';
 
 // Session types
@@ -79,6 +95,13 @@ export type {
   SessionConfig,
   Session,
   ActionRecord,
+  RecordedSessionAction,
+  SessionRecordingStatus,
+  SessionRecordingState,
+  SessionPlaybackStatus,
+  SessionPlaybackSpeed,
+  SessionPlaybackError,
+  SessionPlaybackState,
   SessionEvent,
 } from './session';
 
@@ -106,6 +129,11 @@ export type {
   ActionProgressEventPayload,
   AIStreamEventPayload,
   SessionStartRequest,
+  SessionPlaybackControlRequest,
+  SessionPlaybackStartRequest,
+  SessionPlaybackResumeRequest,
+  SessionPlaybackSetSpeedRequest,
+  SessionSendMessageRequest,
   ActionExecuteRequest,
   ActionExecuteResponse,
   ContextGetRequest,

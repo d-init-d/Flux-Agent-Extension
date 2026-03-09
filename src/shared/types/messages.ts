@@ -1,6 +1,7 @@
 import type { Action, ElementSelector } from './actions';
 import type { ActionResult, PageContext } from './browser';
 import type { SessionConfig, Session } from './session';
+import type { SerializedFileUpload } from './uploads';
 import type { ContextBuilderOptions } from '../../core/session/interfaces';
 
 /**
@@ -21,6 +22,15 @@ export type ExtensionMessageType =
   | 'SESSION_SEND_MESSAGE'
   | 'SESSION_GET_STATE'
   | 'SESSION_LIST'
+  | 'SESSION_RECORDING_START'
+  | 'SESSION_RECORDING_PAUSE'
+  | 'SESSION_RECORDING_RESUME'
+  | 'SESSION_RECORDING_STOP'
+  | 'SESSION_PLAYBACK_START'
+  | 'SESSION_PLAYBACK_PAUSE'
+  | 'SESSION_PLAYBACK_RESUME'
+  | 'SESSION_PLAYBACK_STOP'
+  | 'SESSION_PLAYBACK_SET_SPEED'
 
   // Action execution
   | 'ACTION_EXECUTE'
@@ -130,6 +140,28 @@ export interface SessionStartRequest {
   prompt?: string;
 }
 
+export interface SessionPlaybackControlRequest {
+  sessionId: string;
+}
+
+export interface SessionPlaybackStartRequest extends SessionPlaybackControlRequest {
+  speed?: number;
+}
+
+export interface SessionPlaybackResumeRequest extends SessionPlaybackControlRequest {
+  speed?: number;
+}
+
+export interface SessionPlaybackSetSpeedRequest extends SessionPlaybackControlRequest {
+  speed: number;
+}
+
+export interface SessionSendMessageRequest {
+  sessionId: string;
+  message: string;
+  uploads?: SerializedFileUpload[];
+}
+
 export interface ActionExecuteRequest {
   sessionId?: string;
   action: Action;
@@ -167,9 +199,18 @@ export interface RequestPayloadMap {
   SESSION_PAUSE: { sessionId: string };
   SESSION_RESUME: { sessionId: string };
   SESSION_ABORT: { sessionId: string };
-  SESSION_SEND_MESSAGE: { sessionId: string; message: string };
+  SESSION_SEND_MESSAGE: SessionSendMessageRequest;
   SESSION_GET_STATE: { sessionId: string };
   SESSION_LIST: void;
+  SESSION_RECORDING_START: { sessionId: string };
+  SESSION_RECORDING_PAUSE: { sessionId: string };
+  SESSION_RECORDING_RESUME: { sessionId: string };
+  SESSION_RECORDING_STOP: { sessionId: string };
+  SESSION_PLAYBACK_START: SessionPlaybackStartRequest;
+  SESSION_PLAYBACK_PAUSE: SessionPlaybackControlRequest;
+  SESSION_PLAYBACK_RESUME: SessionPlaybackResumeRequest;
+  SESSION_PLAYBACK_STOP: SessionPlaybackControlRequest;
+  SESSION_PLAYBACK_SET_SPEED: SessionPlaybackSetSpeedRequest;
   ACTION_EXECUTE: ActionExecuteRequest;
   ACTION_EXECUTE_BATCH: { sessionId?: string; actions: Action[] };
   ACTION_ABORT: { sessionId?: string };
@@ -203,6 +244,15 @@ export interface ResponsePayloadMap {
   SESSION_SEND_MESSAGE: void;
   SESSION_GET_STATE: { session: Session | null };
   SESSION_LIST: { sessions: Session[] };
+  SESSION_RECORDING_START: void;
+  SESSION_RECORDING_PAUSE: void;
+  SESSION_RECORDING_RESUME: void;
+  SESSION_RECORDING_STOP: void;
+  SESSION_PLAYBACK_START: void;
+  SESSION_PLAYBACK_PAUSE: void;
+  SESSION_PLAYBACK_RESUME: void;
+  SESSION_PLAYBACK_STOP: void;
+  SESSION_PLAYBACK_SET_SPEED: void;
   ACTION_EXECUTE: ActionExecuteResponse;
   ACTION_EXECUTE_BATCH: { results: ActionResult[] };
   ACTION_ABORT: void;
