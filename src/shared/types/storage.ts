@@ -1,5 +1,6 @@
 import type { AIProviderType, AIMessage } from './ai';
 import type { SessionConfig } from './session';
+import type { SavedWorkflowCollection } from './workflow';
 
 /**
  * Extension settings stored in chrome.storage.local
@@ -25,6 +26,9 @@ export interface StorageSchema {
 
   // Session configs
   savedSessions: SessionConfig[];
+
+  // Saved workflows
+  savedWorkflows: SavedWorkflowCollection;
 
   // Usage statistics
   usage: UsageStats;

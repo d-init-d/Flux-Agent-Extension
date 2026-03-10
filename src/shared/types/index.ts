@@ -115,6 +115,13 @@ export type {
   UsageStats,
 } from './storage';
 
+// Workflow types
+export type {
+  SavedWorkflowSource,
+  SavedWorkflow,
+  SavedWorkflowCollection,
+} from './workflow';
+
 // Message types
 export type {
   MessageChannel,
