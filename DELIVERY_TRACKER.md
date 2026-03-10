@@ -246,7 +246,7 @@ UI-first order:
 
 ## PHASE 4 - Advanced Features
 
-Status summary: Network interception, device emulation, file upload, iframe routing, PDF generation, multi-tab automation, and workflow manager are complete; advanced prompt templates are now in progress.
+Status summary: Network interception, device emulation, file upload, iframe routing, PDF generation, multi-tab automation, and workflow manager are complete; advanced prompt templates are in progress with `A-12a` and `A-12b` passing.
 
 ### Sprint 4.1
 
@@ -298,7 +298,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-11 QA` Gate verification + stability pass
 - [ ] `A-12` Advanced prompt templates
 - [x] `A-12a` Extract table template
-- [ ] `A-12b` Fill profile template
+- [x] `A-12b` Fill profile template
 - [ ] `A-12c` Compare prices template
 - [ ] `A-12d` Monitor changes template
 - [ ] `A-13` Advanced feature test suite

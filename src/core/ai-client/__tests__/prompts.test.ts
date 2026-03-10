@@ -4,6 +4,7 @@ import {
   buildEnrichedUserMessage,
   buildErrorRecoveryBlock,
   buildExtractTableDataPrompt,
+  buildFillFormFromProfilePrompt,
   buildPageContextBlock,
   buildSessionContextBlock,
   formatSelector,
@@ -198,6 +199,16 @@ describe('ai-client prompts', () => {
       expect(prompt).toContain('Choose the single best matching table.');
       expect(prompt).toContain('Do not invent or fill missing values.');
       expect(prompt).toContain('If no table is present, say clearly: No table found.');
+    });
+
+    it('buildFillFormFromProfilePrompt emphasizes saved profile use without guessing', () => {
+      const prompt = buildFillFormFromProfilePrompt();
+
+      expect(prompt).toContain('Fill the current form using the saved user profile data already available to you.');
+      expect(prompt).toContain('Map profile fields carefully to the best matching form fields on the page.');
+      expect(prompt).toContain('Before submitting, summarize which profile values you plan to use');
+      expect(prompt).toContain('Do not invent profile details or guess values for missing fields.');
+      expect(prompt).toContain('If the page is not a form, or no saved profile data is available, say that clearly and ask for the missing details.');
     });
 
     it('formatSelector builds human-readable selector text', () => {

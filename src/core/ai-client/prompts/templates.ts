@@ -310,6 +310,22 @@ export function buildExtractTableDataPrompt(): string {
 }
 
 /**
+ * Build a focused prompt for filling the current form from saved profile data.
+ *
+ * Used by the sidepanel slash command flow as a ready-to-edit form-filling prompt
+ * without changing the message payload contract.
+ */
+export function buildFillFormFromProfilePrompt(): string {
+  return [
+    'Fill the current form using the saved user profile data already available to you.',
+    'Map profile fields carefully to the best matching form fields on the page.',
+    'Before submitting, summarize which profile values you plan to use and call out any required fields that are missing from the saved profile.',
+    'Do not invent profile details or guess values for missing fields.',
+    'If the page is not a form, or no saved profile data is available, say that clearly and ask for the missing details.',
+  ].join('\n');
+}
+
+/**
  * Format an element selector for human-readable display.
  */
 export function formatSelector(selector: ElementSelector): string {

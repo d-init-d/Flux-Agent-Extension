@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { buildExtractTableDataPrompt } from '@core/ai-client/prompts/templates';
+import { buildExtractTableDataPrompt, buildFillFormFromProfilePrompt } from '@core/ai-client/prompts/templates';
 import { Button } from '@/ui/components';
 
 interface SlashCommand {
@@ -31,6 +31,12 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     command: '/extract-table',
     description: 'Insert a prompt for extracting table data.',
     insertText: buildExtractTableDataPrompt(),
+  },
+  {
+    id: 'fill-from-profile',
+    command: '/fill-from-profile',
+    description: 'Insert a prompt for filling a form from saved profile data.',
+    insertText: buildFillFormFromProfilePrompt(),
   },
   {
     id: 'settings',
