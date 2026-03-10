@@ -539,6 +539,52 @@ describe('UI session runtime', () => {
     ]);
   });
 
+  it('creates a saved workflow through workflow messages with normalized metadata', async () => {
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('WORKFLOW_CREATE', {
+        name: '  Checkout handoff  ',
+        description: '  Replays the saved checkout handoff.  ',
+        tags: [' qa ', 'smoke', 'qa', ''],
+        actions: createSavedWorkflow('workflow-create-source').actions,
+        source: {
+          sessionId: ' session-1 ',
+          sessionName: '  Checkout recorder  ',
+          recordedAt: 1_710_000_001_000.9,
+        },
+      }),
+    );
+
+    expect(createResponse.success).toBe(true);
+    expect(createResponse.data?.workflow).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        name: 'Checkout handoff',
+        description: 'Replays the saved checkout handoff.',
+        tags: ['qa', 'smoke'],
+        actions: createSavedWorkflow('workflow-create-source').actions,
+        source: {
+          sessionId: 'session-1',
+          sessionName: 'Checkout recorder',
+          recordedAt: 1_710_000_001_000,
+        },
+      }),
+    );
+
+    const stored = await chrome.storage.local.get('savedWorkflows');
+    expect(stored.savedWorkflows.items).toHaveLength(1);
+    expect(stored.savedWorkflows.items[0]).toEqual(createResponse.data?.workflow);
+  });
+
   it('loads a saved workflow into the session and starts playback immediately', async () => {
     vi.useFakeTimers();
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createDefaultOnboardingState } from '../../shared/storage/onboarding';
 import { App } from '../App';
@@ -75,11 +75,10 @@ describe('Options App', () => {
     await user.selectOptions(screen.getByLabelText('Provider'), 'openrouter');
 
     const modelInput = screen.getByLabelText('Model');
-    await user.clear(modelInput);
-    await user.type(modelInput, 'anthropic/claude-3.7-sonnet');
+    fireEvent.change(modelInput, { target: { value: 'anthropic/claude-3.7-sonnet' } });
 
     const apiKeyInput = screen.getByLabelText('API key');
-    await user.type(apiKeyInput, 'sk-test-openrouter-1234');
+    fireEvent.change(apiKeyInput, { target: { value: 'sk-test-openrouter-1234' } });
 
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
@@ -111,7 +110,7 @@ describe('Options App', () => {
     renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
-    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-openai-test' } });
     await user.click(screen.getByRole('button', { name: /test connection/i }));
 
     expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();

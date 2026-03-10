@@ -246,7 +246,7 @@ UI-first order:
 
 ## PHASE 4 - Advanced Features
 
-Status summary: Network interception, device emulation, file upload, iframe routing, and PDF generation are implemented; remaining advanced features are multi-tab automation and workflow features.
+Status summary: Network interception, device emulation, file upload, iframe routing, PDF generation, and multi-tab automation are implemented; workflow manager is in final QA/closeout.
 
 ### Sprint 4.1
 
@@ -291,10 +291,11 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-09a` Playback engine
 - [x] `A-09b` Playback controls UI
 - [x] `A-10` Script export
-- [ ] `A-11` Workflow manager
+- [~] `A-11` Workflow manager
 - [x] `A-11a` Workflow schema
 - [x] `A-11b` Workflow list UI
 - [x] `A-11c` Workflow CRUD/run
+- [x] `A-11 QA` Gate verification + stability pass
 - [ ] `A-12` Advanced prompt templates
 - [ ] `A-12a` Extract table template
 - [ ] `A-12b` Fill profile template
