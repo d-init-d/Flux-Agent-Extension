@@ -408,6 +408,31 @@ function createSettings() {
   };
 }
 
+function decodeDownloadTextUrl(url: string): string {
+  const [, encodedContent = ''] = url.split(',', 2);
+  return decodeURIComponent(encodedContent);
+}
+
+function extractEmbeddedRecording(script: string): {
+  actionCount: number;
+  exportedAt: string;
+  actions: Array<{ action: Action; timestamp: number }>;
+} {
+  const prefix = 'const recording = ';
+  const start = script.indexOf(prefix);
+  const end = script.indexOf('\n\nfunction wildcardToRegExp', start);
+
+  if (start === -1 || end === -1) {
+    throw new Error('Unable to locate embedded recording payload in exported script');
+  }
+
+  return JSON.parse(script.slice(start + prefix.length, end).trim().replace(/;$/, '')) as {
+    actionCount: number;
+    exportedAt: string;
+    actions: Array<{ action: Action; timestamp: number }>;
+  };
+}
+
 describe('Full pipeline E2E (U-16)', () => {
   // Suppress the React act() warnings that originate from the App bootstrap
   // async chain (hydrate → setInitialSessionCount → createSession → syncSession).
@@ -1093,5 +1118,252 @@ describe('Full pipeline E2E (U-16)', () => {
         startedAt: null,
       }),
     );
+  });
+
+  it('A-10a records navigate-click-fill steps and exports ordered JSON from the sidepanel', async () => {
+    const user = userEvent.setup();
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    const recordedAt = {
+      navigate: Date.parse('2026-03-09T01:00:00.000Z'),
+      click: Date.parse('2026-03-09T01:00:01.250Z'),
+      fill: Date.parse('2026-03-09T01:00:03.500Z'),
+      exportAt: Date.parse('2026-03-09T01:00:10.000Z'),
+    };
+    const dateNowSpy = vi.spyOn(Date, 'now');
+
+    await user.click(screen.getByRole('button', { name: 'Start recording' }));
+
+    dateNowSpy.mockReturnValue(recordedAt.navigate);
+    await emitRecordedEvent(bridge, 'RECORDED_NAVIGATION', {
+      action: {
+        id: 'export-nav-1',
+        type: 'navigate',
+        url: 'https://example.com/checkout?step=shipping',
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.click);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'export-click-1',
+        type: 'click',
+        selector: { role: 'button', textExact: 'Continue' },
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.fill);
+    await emitRecordedEvent(bridge, 'RECORDED_INPUT', {
+      action: {
+        id: 'export-fill-1',
+        type: 'fill',
+        selector: { placeholder: 'Email' },
+        value: 'qa@example.com',
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => {
+      expect(screen.getByText('Ready to replay 3 actions from the start.')).toBeInTheDocument();
+    });
+
+    dateNowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(recordedAt.exportAt));
+    vi.mocked(chrome.downloads.download).mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await settleAsyncSideEffects(2, { useFakeTimers: true });
+
+    expect(chrome.downloads.download).toHaveBeenCalledTimes(1);
+    const downloadCall = vi.mocked(chrome.downloads.download).mock.calls[0]?.[0];
+    expect(downloadCall).toEqual(
+      expect.objectContaining({
+        url: expect.stringContaining('data:application/json;charset=utf-8,'),
+        filename: expect.stringMatching(/^recording-.+-json-2026-03-09T01-00-10-000Z\.json$/),
+        saveAs: false,
+      }),
+    );
+
+    const jsonExport = JSON.parse(decodeDownloadTextUrl(downloadCall?.url ?? '')) as {
+      sessionId: string;
+      actionCount: number;
+      recordingStatus: string;
+      exportedAt: string;
+      actions: Array<{ action: Action; timestamp: number }>;
+    };
+
+    expect(jsonExport).toEqual(
+      expect.objectContaining({
+        sessionId,
+        actionCount: 3,
+        recordingStatus: 'idle',
+        exportedAt: '2026-03-09T01:00:10.000Z',
+      }),
+    );
+    expect(jsonExport.actions.map((entry) => entry.action)).toEqual([
+      expect.objectContaining({
+        id: 'export-nav-1',
+        type: 'navigate',
+        url: 'https://example.com/checkout?step=shipping',
+      }),
+      expect.objectContaining({
+        id: 'export-click-1',
+        type: 'click',
+        selector: { role: 'button', textExact: 'Continue' },
+      }),
+      expect.objectContaining({
+        id: 'export-fill-1',
+        type: 'fill',
+        selector: { placeholder: 'Email' },
+        value: 'qa@example.com',
+      }),
+    ]);
+    expect(jsonExport.actions.map((entry) => entry.timestamp)).toEqual([
+      recordedAt.navigate,
+      recordedAt.click,
+      recordedAt.fill,
+    ]);
+  });
+
+  it('A-10b exports a Playwright script with escaped recorded input and replay timing logic', async () => {
+    const user = userEvent.setup();
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const recordedAt = {
+      navigate: Date.parse('2026-03-09T02:30:00.000Z'),
+      click: Date.parse('2026-03-09T02:30:01.500Z'),
+      fill: Date.parse('2026-03-09T02:30:04.000Z'),
+      exportAt: Date.parse('2026-03-09T02:30:10.000Z'),
+    };
+    const specialValue = 'Line 1 "quoted" \\\\ path\nLine 2';
+    const dateNowSpy = vi.spyOn(Date, 'now');
+
+    await user.click(screen.getByRole('button', { name: 'Start recording' }));
+
+    dateNowSpy.mockReturnValue(recordedAt.navigate);
+    await emitRecordedEvent(bridge, 'RECORDED_NAVIGATION', {
+      action: {
+        id: 'export-script-nav',
+        type: 'navigate',
+        url: 'https://example.com/profile',
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.click);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'export-script-click',
+        type: 'click',
+        selector: { testId: 'notes-toggle' },
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.fill);
+    await emitRecordedEvent(bridge, 'RECORDED_INPUT', {
+      action: {
+        id: 'export-script-fill',
+        type: 'fill',
+        selector: { ariaLabel: 'Notes', placeholder: 'Notes' },
+        value: specialValue,
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => {
+      expect(screen.getByText('Ready to replay 3 actions from the start.')).toBeInTheDocument();
+    });
+
+    dateNowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(recordedAt.exportAt));
+    vi.mocked(chrome.downloads.download).mockClear();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Recording export format' }), {
+      target: { value: 'playwright' },
+    });
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    await settleAsyncSideEffects(2, { useFakeTimers: true });
+
+    expect(chrome.downloads.download).toHaveBeenCalledTimes(1);
+    const downloadCall = vi.mocked(chrome.downloads.download).mock.calls[0]?.[0];
+    expect(downloadCall).toEqual(
+      expect.objectContaining({
+        url: expect.stringContaining('data:text/javascript;charset=utf-8,'),
+        filename: expect.stringMatching(/^recording-.+-playwright-2026-03-09T02-30-10-000Z\.js$/),
+        saveAs: false,
+      }),
+    );
+
+    const playwrightScript = decodeDownloadTextUrl(downloadCall?.url ?? '');
+    const embeddedRecording = extractEmbeddedRecording(playwrightScript);
+
+    expect(playwrightScript).toContain("const { chromium } = require('playwright');");
+    expect(playwrightScript).toContain('function getDelayMs(actions, index)');
+    expect(playwrightScript).toContain('return Math.max(0, actions[index].timestamp - actions[index - 1].timestamp);');
+    expect(playwrightScript).toContain('await page.waitForTimeout(delayMs);');
+    expect(playwrightScript).toContain(JSON.stringify(specialValue));
+    expect(embeddedRecording.actionCount).toBe(3);
+    expect(embeddedRecording.exportedAt).toBe('2026-03-09T02:30:10.000Z');
+    expect(embeddedRecording.actions.map((entry) => entry.action)).toEqual([
+      expect.objectContaining({
+        id: 'export-script-nav',
+        type: 'navigate',
+        url: 'https://example.com/profile',
+      }),
+      expect.objectContaining({
+        id: 'export-script-click',
+        type: 'click',
+        selector: { testId: 'notes-toggle' },
+      }),
+      expect.objectContaining({
+        id: 'export-script-fill',
+        type: 'fill',
+        selector: { ariaLabel: 'Notes', placeholder: 'Notes' },
+        value: specialValue,
+      }),
+    ]);
+    expect(embeddedRecording.actions.map((entry) => entry.timestamp)).toEqual([
+      recordedAt.navigate,
+      recordedAt.click,
+      recordedAt.fill,
+    ]);
   });
 });

@@ -290,7 +290,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-09` Playback
 - [x] `A-09a` Playback engine
 - [x] `A-09b` Playback controls UI
-- [ ] `A-10` Script export
+- [x] `A-10` Script export
 - [ ] `A-11` Workflow manager
 - [ ] `A-11a` Workflow schema
 - [ ] `A-11b` Workflow list UI

@@ -1,6 +1,6 @@
 import type { Action, ElementSelector } from './actions';
 import type { ActionResult, PageContext } from './browser';
-import type { SessionConfig, Session } from './session';
+import type { SessionConfig, Session, SessionRecordingExportFormat } from './session';
 import type { SerializedFileUpload } from './uploads';
 import type { ContextBuilderOptions } from '../../core/session/interfaces';
 
@@ -26,6 +26,7 @@ export type ExtensionMessageType =
   | 'SESSION_RECORDING_PAUSE'
   | 'SESSION_RECORDING_RESUME'
   | 'SESSION_RECORDING_STOP'
+  | 'SESSION_RECORDING_EXPORT'
   | 'SESSION_PLAYBACK_START'
   | 'SESSION_PLAYBACK_PAUSE'
   | 'SESSION_PLAYBACK_RESUME'
@@ -156,6 +157,17 @@ export interface SessionPlaybackSetSpeedRequest extends SessionPlaybackControlRe
   speed: number;
 }
 
+export interface SessionRecordingExportRequest {
+  sessionId: string;
+  format: SessionRecordingExportFormat;
+}
+
+export interface SessionRecordingExportResponse {
+  downloadId: number;
+  filename: string;
+  format: SessionRecordingExportFormat;
+}
+
 export interface SessionSendMessageRequest {
   sessionId: string;
   message: string;
@@ -206,6 +218,7 @@ export interface RequestPayloadMap {
   SESSION_RECORDING_PAUSE: { sessionId: string };
   SESSION_RECORDING_RESUME: { sessionId: string };
   SESSION_RECORDING_STOP: { sessionId: string };
+  SESSION_RECORDING_EXPORT: SessionRecordingExportRequest;
   SESSION_PLAYBACK_START: SessionPlaybackStartRequest;
   SESSION_PLAYBACK_PAUSE: SessionPlaybackControlRequest;
   SESSION_PLAYBACK_RESUME: SessionPlaybackResumeRequest;
@@ -248,6 +261,7 @@ export interface ResponsePayloadMap {
   SESSION_RECORDING_PAUSE: void;
   SESSION_RECORDING_RESUME: void;
   SESSION_RECORDING_STOP: void;
+  SESSION_RECORDING_EXPORT: SessionRecordingExportResponse;
   SESSION_PLAYBACK_START: void;
   SESSION_PLAYBACK_PAUSE: void;
   SESSION_PLAYBACK_RESUME: void;

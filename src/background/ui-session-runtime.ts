@@ -20,40 +20,41 @@ import type {
   Action,
   ActionLogEventEntry,
   ActionLogEventStatus,
-  ActionResult,
-  AIMessage,
   ActionProgressEventPayload,
+  ActionResult,
   ActionResultPayload,
+  AIMessage,
   AIStreamEventPayload,
   BridgeFrameContext,
-    BridgeSendTarget,
-    ClickAction,
-    ElementSelector,
-    ExecuteActionPayload,
-    ExtensionSettings,
-    FillAction,
-    NavigateAction,
-    ExtensionMessage,
-    ExtensionResponse,
+  BridgeSendTarget,
+  ClickAction,
+  ElementSelector,
+  ExecuteActionPayload,
+  ExtensionMessage,
+  ExtensionResponse,
+  ExtensionSettings,
   FileUploadMetadata,
   FrameContextSummary,
   GetPageContextPayload,
+  NavigateAction,
   PageContext,
   PageContextPayload,
-    ParsedResponse,
-    RequestPayloadMap,
-    RecordedClickPayload,
-    RecordedInputPayload,
-    RecordedNavigationPayload,
+  ParsedResponse,
+  RecordedClickPayload,
+  RecordedInputPayload,
+  RecordedNavigationPayload,
+  RequestPayloadMap,
   ResponsePayloadMap,
   Session,
   SessionConfig,
-  SessionPlaybackSpeed,
-  SetRecordingStatePayload,
-  SessionTabSummary,
   SessionCreateRequest,
+  SessionPlaybackSpeed,
+  SessionRecordingExportFormat,
+  SessionTabSummary,
   SessionUpdateEventPayload,
+  SetRecordingStatePayload,
   TabState,
+  FillAction,
 } from '@shared/types';
 import { generateId, Logger } from '@shared/utils';
 import type { ProviderConfig } from '@shared/types';
@@ -70,6 +71,7 @@ import {
   type IGeolocationMockManager,
 } from './geolocation-mock-manager';
 import { FileUploadManager, type IFileUploadManager } from './file-upload-manager';
+import { buildSessionRecordingExportArtifact } from './session-recording-export';
 
 const DEFAULT_PROVIDER_MODELS: Record<SessionConfig['provider'], string> = {
   claude: 'claude-3-5-sonnet-20241022',
@@ -339,6 +341,10 @@ export class UISessionRuntime {
         return this.handleSessionRecordingStop(
           message.payload as RequestPayloadMap['SESSION_RECORDING_STOP'],
         );
+      case 'SESSION_RECORDING_EXPORT':
+        return this.handleSessionRecordingExport(
+          message.payload as RequestPayloadMap['SESSION_RECORDING_EXPORT'],
+        );
       case 'SESSION_PLAYBACK_START':
         return this.handleSessionPlaybackStart(
           message.payload as RequestPayloadMap['SESSION_PLAYBACK_START'],
@@ -474,6 +480,37 @@ export class UISessionRuntime {
     await this.disableSessionRecording(payload.sessionId);
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
     return { success: true };
+  }
+
+  private async handleSessionRecordingExport(
+    payload: RequestPayloadMap['SESSION_RECORDING_EXPORT'],
+  ): RuntimeHandlerResponse<'SESSION_RECORDING_EXPORT'> {
+    const session = this.requireSession(payload.sessionId);
+    const format = this.normalizeRecordingExportFormat(payload.format);
+
+    if (session.recording.actions.length === 0) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Recording export requires at least one recorded action',
+        true,
+      );
+    }
+
+    const artifact = buildSessionRecordingExportArtifact(session, format);
+    const downloadId = await chrome.downloads.download({
+      url: `data:${artifact.mimeType};charset=utf-8,${encodeURIComponent(artifact.content)}`,
+      filename: artifact.filename,
+      saveAs: false,
+    });
+
+    return {
+      success: true,
+      data: {
+        downloadId,
+        filename: artifact.filename,
+        format: artifact.format,
+      },
+    };
   }
 
   private async handleSessionRecordingPause(
@@ -1793,6 +1830,20 @@ export class UISessionRuntime {
     throw new ExtensionError(
       ErrorCode.ACTION_INVALID,
       `Unsupported playback speed "${String(speed)}". Allowed values: ${PLAYBACK_SPEEDS.join(', ')}`,
+      true,
+    );
+  }
+
+  private normalizeRecordingExportFormat(
+    format: SessionRecordingExportFormat,
+  ): SessionRecordingExportFormat {
+    if (format === 'json' || format === 'playwright' || format === 'puppeteer') {
+      return format;
+    }
+
+    throw new ExtensionError(
+      ErrorCode.ACTION_INVALID,
+      `Unsupported recording export format "${String(format)}"`,
       true,
     );
   }

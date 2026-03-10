@@ -68,6 +68,8 @@ export interface RecordedSessionAction {
   timestamp: number;
 }
 
+export type SessionRecordingExportFormat = 'json' | 'playwright' | 'puppeteer';
+
 export type SessionRecordingStatus = 'idle' | 'recording' | 'paused';
 
 export type SessionPlaybackStatus = 'idle' | 'playing' | 'paused';

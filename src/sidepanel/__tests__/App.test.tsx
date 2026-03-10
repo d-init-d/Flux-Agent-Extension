@@ -500,6 +500,165 @@ describe('Side panel App (U-15 integration)', () => {
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
   });
 
+  it('exports recorded actions in each supported format from the playback card', async () => {
+    const user = userEvent.setup();
+
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-1', {
+                recording: {
+                  status: 'idle',
+                  actions: [
+                    {
+                      action: { id: 'recorded-nav', type: 'navigate', url: 'https://example.com' },
+                      timestamp: Date.now() - 2000,
+                    },
+                    {
+                      action: { id: 'recorded-click', type: 'click', selector: { testId: 'submit' } },
+                      timestamp: Date.now() - 1000,
+                    },
+                  ],
+                  startedAt: Date.now() - 3000,
+                  updatedAt: Date.now() - 1000,
+                },
+              }),
+            ],
+          };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'SESSION_RECORDING_EXPORT':
+          return { downloadId: 1, filename: 'recording-session-1.js', format: 'playwright' };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    const exportFormat = await screen.findByRole('combobox', { name: 'Recording export format' });
+    const exportButton = screen.getByRole('button', { name: 'Export' });
+
+    await user.click(exportButton);
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('SESSION_RECORDING_EXPORT', {
+        sessionId: 'session-1',
+        format: 'json',
+      });
+    });
+
+    await user.selectOptions(exportFormat, 'playwright');
+    await user.click(exportButton);
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('SESSION_RECORDING_EXPORT', {
+        sessionId: 'session-1',
+        format: 'playwright',
+      });
+    });
+
+    await user.selectOptions(exportFormat, 'puppeteer');
+    await user.click(exportButton);
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('SESSION_RECORDING_EXPORT', {
+        sessionId: 'session-1',
+        format: 'puppeteer',
+      });
+    });
+  });
+
+  it('disables recording export when unavailable and while the export request is in flight', async () => {
+    const user = userEvent.setup();
+    const deferred = createDeferred<void>();
+
+    sendExtensionRequest.mockImplementation((type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return Promise.resolve({
+            sessions: [
+              createSession('session-1', {
+                recording: {
+                  status: 'recording',
+                  actions: [
+                    {
+                      action: { id: 'recorded-click', type: 'click', selector: { css: '#submit' } },
+                      timestamp: Date.now() - 1000,
+                    },
+                  ],
+                  startedAt: Date.now() - 2000,
+                  updatedAt: Date.now() - 1000,
+                },
+              }),
+            ],
+          });
+        case 'SESSION_CREATE':
+          return Promise.resolve({ session: createSession('session-2') });
+        case 'SESSION_SEND_MESSAGE':
+          return Promise.resolve(undefined);
+        case 'SESSION_RECORDING_EXPORT':
+          return deferred.promise;
+        default:
+          return Promise.resolve(undefined);
+      }
+    });
+
+    await renderApp();
+
+    const exportFormat = await screen.findByRole('combobox', { name: 'Recording export format' });
+    const exportButton = screen.getByRole('button', { name: 'Export' });
+
+    expect(exportFormat).toBeDisabled();
+    expect(exportButton).toBeDisabled();
+
+    await act(async () => {
+      emitExtensionEvent({
+        id: 'evt-export-ready',
+        channel: 'sidePanel',
+        type: 'EVENT_SESSION_UPDATE',
+        timestamp: Date.now(),
+        payload: {
+          sessionId: 'session-1',
+          reason: 'updated',
+          session: createSession('session-1', {
+            recording: {
+              status: 'idle',
+              actions: [
+                {
+                  action: { id: 'recorded-click', type: 'click', selector: { css: '#submit' } },
+                  timestamp: Date.now() - 1000,
+                },
+              ],
+              startedAt: Date.now() - 2000,
+              updatedAt: Date.now() - 1000,
+            },
+          }),
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(exportFormat).not.toBeDisabled();
+      expect(exportButton).not.toBeDisabled();
+    });
+
+    await user.click(exportButton);
+
+    await waitFor(() => {
+      expect(exportFormat).toBeDisabled();
+      expect(exportButton).toBeDisabled();
+    });
+
+    deferred.resolve(undefined);
+
+    await waitFor(() => {
+      expect(exportFormat).not.toBeDisabled();
+      expect(exportButton).not.toBeDisabled();
+    });
+  });
+
   it('disables duplicate recording requests while a request is in flight', async () => {
     const user = userEvent.setup();
     const deferred = createDeferred<void>();

@@ -102,6 +102,11 @@ function createPageContext(): PageContext {
   };
 }
 
+function decodeDownloadTextUrl(url: string): string {
+  const [, encodedContent = ''] = url.split(',', 2);
+  return decodeURIComponent(encodedContent);
+}
+
 class MockProvider implements IAIProvider {
   readonly name = 'openai' as const;
   readonly supportsVision = false;
@@ -3040,5 +3045,170 @@ describe('UI session runtime', () => {
         data: expect.objectContaining({ filename: 'report.pdf' }),
       }),
     );
+  });
+
+  it('exports recorded sessions as json, playwright, and puppeteer downloads', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-09T12:34:56.789Z'));
+    vi.mocked(chrome.downloads.download).mockClear();
+
+    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini', name: 'Checkout Flow' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+    const topFrame = {
+      tabId: 1,
+      frameId: 0,
+      documentId: 'main-doc',
+      parentFrameId: null,
+      url: 'https://example.com/form',
+      origin: 'https://example.com',
+      isTop: true,
+    };
+    const iframe = {
+      tabId: 1,
+      frameId: 7,
+      documentId: 'frame-doc-7',
+      parentFrameId: 0,
+      url: 'https://pay.example.com/embedded',
+      origin: 'https://pay.example.com',
+      isTop: false,
+    };
+
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_START', { sessionId: sessionId! }),
+    );
+    bridge.emitEvent('RECORDED_NAVIGATION', 1, topFrame, {
+      action: {
+        id: 'recorded-navigation-1',
+        type: 'navigate',
+        url: 'https://example.com/checkout',
+        waitUntil: 'domContentLoaded',
+      },
+    });
+    vi.setSystemTime(new Date('2026-03-09T12:34:58.289Z'));
+    bridge.emitEvent('RECORDED_CLICK', 1, iframe, {
+      action: {
+        id: 'recorded-click-1',
+        type: 'click',
+        selector: {
+          testId: 'pay-now',
+          textExact: 'Pay now',
+          nth: 1,
+        },
+      },
+    });
+    vi.setSystemTime(new Date('2026-03-09T12:35:00.789Z'));
+    bridge.emitEvent('RECORDED_INPUT', 1, topFrame, {
+      action: {
+        id: 'recorded-input-1',
+        type: 'fill',
+        selector: { ariaLabel: 'Email address', placeholder: 'Email address' },
+        value: 'alice@example.com',
+      },
+    });
+    await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_STOP', { sessionId: sessionId! }),
+    );
+
+    const jsonResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_EXPORT', { sessionId: sessionId!, format: 'json' }),
+    );
+    expect(jsonResponse.success).toBe(true);
+    expect(jsonResponse.data).toEqual(
+      expect.objectContaining({
+        downloadId: expect.any(Number),
+        format: 'json',
+        filename: 'recording-Checkout-Flow-json-2026-03-09T12-35-00-789Z.json',
+      }),
+    );
+
+    const jsonDownloadCall = vi.mocked(chrome.downloads.download).mock.calls.at(-1)?.[0];
+    expect(jsonDownloadCall).toEqual(
+      expect.objectContaining({
+        filename: 'recording-Checkout-Flow-json-2026-03-09T12-35-00-789Z.json',
+        saveAs: false,
+      }),
+    );
+    const jsonExport = JSON.parse(decodeDownloadTextUrl(jsonDownloadCall?.url ?? ''));
+    expect(jsonExport).toEqual(
+      expect.objectContaining({
+        schemaVersion: 1,
+        sessionId,
+        sessionName: 'Checkout Flow',
+        actionCount: 3,
+        exportedAt: '2026-03-09T12:35:00.789Z',
+      }),
+    );
+    expect(jsonExport.actions).toHaveLength(3);
+    expect(jsonExport.actions[1].action.selector.frame).toEqual({
+      mode: 'documentId',
+      documentId: 'frame-doc-7',
+    });
+
+    const playwrightResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_EXPORT', { sessionId: sessionId!, format: 'playwright' }),
+    );
+    expect(playwrightResponse.success).toBe(true);
+    expect(playwrightResponse.data).toEqual(
+      expect.objectContaining({
+        downloadId: expect.any(Number),
+        format: 'playwright',
+        filename: 'recording-Checkout-Flow-playwright-2026-03-09T12-35-00-789Z.js',
+      }),
+    );
+
+    const playwrightDownloadCall = vi.mocked(chrome.downloads.download).mock.calls.at(-1)?.[0];
+    expect(playwrightDownloadCall).toEqual(
+      expect.objectContaining({
+        filename: 'recording-Checkout-Flow-playwright-2026-03-09T12-35-00-789Z.js',
+        saveAs: false,
+      }),
+    );
+    const playwrightScript = decodeDownloadTextUrl(playwrightDownloadCall?.url ?? '');
+    expect(playwrightScript).toContain("const { chromium } = require('playwright');");
+    expect(playwrightScript).toContain('await page.waitForTimeout(delayMs);');
+    expect(playwrightScript).toContain('alice@example.com');
+    expect(playwrightScript).toContain('frame-doc-7');
+    expect(playwrightScript).toContain('recording.actions[index]');
+
+    const puppeteerResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_RECORDING_EXPORT', { sessionId: sessionId!, format: 'puppeteer' }),
+    );
+    expect(puppeteerResponse.success).toBe(true);
+    expect(puppeteerResponse.data).toEqual(
+      expect.objectContaining({
+        downloadId: expect.any(Number),
+        format: 'puppeteer',
+        filename: 'recording-Checkout-Flow-puppeteer-2026-03-09T12-35-00-789Z.js',
+      }),
+    );
+
+    const puppeteerDownloadCall = vi.mocked(chrome.downloads.download).mock.calls.at(-1)?.[0];
+    expect(puppeteerDownloadCall).toEqual(
+      expect.objectContaining({
+        filename: 'recording-Checkout-Flow-puppeteer-2026-03-09T12-35-00-789Z.js',
+        saveAs: false,
+      }),
+    );
+    const puppeteerScript = decodeDownloadTextUrl(puppeteerDownloadCall?.url ?? '');
+    expect(puppeteerScript).toContain("const puppeteer = require('puppeteer');");
+    expect(puppeteerScript).toContain('await new Promise((resolve) => setTimeout(resolve, delayMs));');
+    expect(puppeteerScript).toContain('alice@example.com');
+    expect(puppeteerScript).toContain('frame-doc-7');
+    expect(puppeteerScript).toContain('recording.actions[index]');
   });
 });

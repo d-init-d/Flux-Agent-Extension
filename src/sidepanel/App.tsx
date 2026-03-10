@@ -12,6 +12,7 @@ import { ThemeToggle } from '@/ui/theme';
 import type {
   AIStreamEventPayload,
   ActionProgressEventPayload,
+  SessionRecordingExportFormat,
   SessionPlaybackSpeed,
   SerializedFileUpload,
   SessionUpdateEventPayload,
@@ -34,6 +35,15 @@ const PLAYBACK_SPEED_OPTIONS: Array<{ value: SessionPlaybackSpeed; label: string
   { value: 0.5, label: '0.5x' },
   { value: 1, label: '1x' },
   { value: 2, label: '2x' },
+];
+
+const RECORDING_EXPORT_FORMAT_OPTIONS: Array<{
+  value: SessionRecordingExportFormat;
+  label: string;
+}> = [
+  { value: 'json', label: 'JSON' },
+  { value: 'playwright', label: 'Playwright' },
+  { value: 'puppeteer', label: 'Puppeteer' },
 ];
 
 function getRecordingSummary(status: 'idle' | 'recording' | 'paused', actionCount: number): string {
@@ -112,8 +122,12 @@ export function App() {
   const [initialSessionCount, setInitialSessionCount] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [recordingRequest, setRecordingRequest] = useState<RecordingRequestAction | null>(null);
+  const [recordingExportRequest, setRecordingExportRequest] =
+    useState<SessionRecordingExportFormat | null>(null);
   const [playbackRequest, setPlaybackRequest] = useState<PlaybackRequestAction | null>(null);
   const [playbackSpeedDraft, setPlaybackSpeedDraft] = useState<SessionPlaybackSpeed>(1);
+  const [recordingExportFormat, setRecordingExportFormat] =
+    useState<SessionRecordingExportFormat>('json');
 
   const { sessions, activeSessionId, isHydrating, hydrate, createSession, switchSession, applySessionUpdate } =
     useSession();
@@ -227,6 +241,11 @@ export function App() {
     recordingActionCount === 0 ||
     recordingStatus !== 'idle' ||
     playbackRequest !== null;
+  const recordingExportDisabled =
+    !activeSessionId ||
+    recordingActionCount === 0 ||
+    recordingStatus !== 'idle' ||
+    recordingExportRequest !== null;
   const playbackButtonsDisabled = !activeSessionId || playbackRequest !== null;
   const playbackSpeedDisabled =
     !activeSessionId ||
@@ -304,6 +323,26 @@ export function App() {
       setSubmitError(error instanceof Error ? error.message : 'Playback speed update failed');
     } finally {
       setPlaybackRequest(null);
+    }
+  };
+
+  const handleRecordingExport = async () => {
+    if (!activeSessionId || recordingExportRequest !== null) {
+      return;
+    }
+
+    setSubmitError(null);
+    setRecordingExportRequest(recordingExportFormat);
+
+    try {
+      await sendExtensionRequest('SESSION_RECORDING_EXPORT', {
+        sessionId: activeSessionId,
+        format: recordingExportFormat,
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Recording export failed');
+    } finally {
+      setRecordingExportRequest(null);
     }
   };
 
@@ -565,6 +604,40 @@ export function App() {
                         ))}
                       </select>
                     </label>
+
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="flex min-w-0 flex-col gap-1 text-xs font-medium text-[rgb(var(--color-text-secondary))]">
+                        <span>Export format</span>
+                        <select
+                          aria-label="Recording export format"
+                          className="min-h-11 rounded-lg border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 text-sm text-[rgb(var(--color-text-primary))] focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-border-focus))] disabled:cursor-not-allowed disabled:opacity-50"
+                          value={recordingExportFormat}
+                          disabled={recordingExportDisabled}
+                          onChange={(event) => {
+                            setRecordingExportFormat(event.target.value as SessionRecordingExportFormat);
+                          }}
+                        >
+                          {RECORDING_EXPORT_FORMAT_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        className="min-h-11 px-4"
+                        disabled={recordingExportDisabled}
+                        loading={recordingExportRequest !== null}
+                        onClick={() => {
+                          void handleRecordingExport();
+                        }}
+                      >
+                        Export
+                      </Button>
+                    </div>
 
                     <div className="flex flex-wrap items-center gap-2">
                       {playbackState.status === 'idle' ? (
