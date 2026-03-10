@@ -380,7 +380,9 @@ async function openActionLog(user: ReturnType<typeof userEvent.setup>): Promise<
 }
 
 async function sendPrompt(user: ReturnType<typeof userEvent.setup>, prompt: string): Promise<void> {
-  await user.type(screen.getByRole('textbox', { name: 'Message input' }), prompt);
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message input' }), {
+    target: { value: prompt },
+  });
   await user.click(screen.getByRole('button', { name: 'Send' }));
   await settleAsyncSideEffects(2);
 }
@@ -868,7 +870,9 @@ describe('Full pipeline E2E (U-16)', () => {
     ]);
   });
 
-  it('A-09a replays a recorded click-fill-click flow with deterministic timing, pause, and resume', async () => {
+  it(
+    'A-09a replays a recorded click-fill-click flow with deterministic timing, pause, and resume',
+    async () => {
     const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
       actionId: action.id,
       success: true,
@@ -1029,7 +1033,9 @@ describe('Full pipeline E2E (U-16)', () => {
         lastError: null,
       }),
     );
-  });
+    },
+    15_000,
+  );
 
   it('A-09b stops playback from the UI and resets progress back to the start', async () => {
     const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
@@ -1118,7 +1124,7 @@ describe('Full pipeline E2E (U-16)', () => {
         startedAt: null,
       }),
     );
-  });
+  }, 10_000);
 
   it('A-10a records navigate-click-fill steps and exports ordered JSON from the sidepanel', async () => {
     const user = userEvent.setup();

@@ -3,7 +3,6 @@ import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
-import { SAVED_WORKFLOWS_STORAGE_KEY } from '../../shared/storage/workflows';
 import { App } from '../App';
 import { resetActionLogStore } from '../store/actionLogStore';
 import { resetChatStore } from '../store/chatStore';
@@ -142,6 +141,8 @@ describe('Side panel App (U-15 integration)', () => {
           return { session: createSession('session-2') };
         case 'SESSION_SEND_MESSAGE':
           return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
         default:
           return undefined;
       }
@@ -180,11 +181,19 @@ describe('Side panel App (U-15 integration)', () => {
   it('opens the saved workflows library and renders stored workflow metadata with a view toggle', async () => {
     const user = userEvent.setup();
 
-    await chrome.storage.local.set({
-      [SAVED_WORKFLOWS_STORAGE_KEY]: {
-        version: 1,
-        items: [createSavedWorkflow('workflow-1')],
-      },
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return { sessions: [createSession('session-1')] };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [createSavedWorkflow('workflow-1')] };
+        default:
+          return undefined;
+      }
     });
 
     await renderApp();
@@ -204,13 +213,23 @@ describe('Side panel App (U-15 integration)', () => {
     await user.click(listToggle);
 
     expect(listToggle).toHaveAttribute('aria-pressed', 'true');
-    expect(within(dialog).getByRole('button', { name: 'Run' })).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeDisabled();
-    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Run' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
   it('opens the save workflow modal and persists a saved workflow from recorded actions', async () => {
     const user = userEvent.setup();
+    const createdWorkflow = createSavedWorkflow('workflow-created', {
+      name: 'Checkout happy path',
+      description: 'Covers cart review through confirmation.',
+      tags: ['qa', 'smoke'],
+      source: {
+        sessionId: 'session-1',
+        sessionName: 'Checkout recorder',
+        recordedAt: Date.now() - 2000,
+      },
+    });
 
     sendExtensionRequest.mockImplementation(async (type: string) => {
       switch (type) {
@@ -246,6 +265,10 @@ describe('Side panel App (U-15 integration)', () => {
           return { session: createSession('session-2') };
         case 'SESSION_SEND_MESSAGE':
           return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
+        case 'WORKFLOW_CREATE':
+          return { workflow: createdWorkflow };
         default:
           return undefined;
       }
@@ -272,36 +295,198 @@ describe('Side panel App (U-15 integration)', () => {
     fireEvent.change(tagsInput, { target: { value: 'qa, smoke' } });
     await user.click(within(dialog).getByRole('button', { name: 'Save workflow' }));
 
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_CREATE', {
+        name: 'Checkout happy path',
+        description: 'Covers cart review through confirmation.',
+        tags: ['qa', 'smoke'],
+        actions: expect.arrayContaining([
+          expect.objectContaining({ action: expect.objectContaining({ type: 'navigate' }) }),
+          expect.objectContaining({ action: expect.objectContaining({ type: 'click' }) }),
+        ]),
+        source: expect.objectContaining({
+          sessionId: 'session-1',
+          sessionName: 'Checkout recorder',
+        }),
+      });
+    });
+
     const libraryDialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
     expect(within(libraryDialog).getAllByText('Checkout happy path')).toHaveLength(2);
     expect(within(libraryDialog).getAllByText('Covers cart review through confirmation.')).toHaveLength(2);
     expect(within(libraryDialog).getAllByText('smoke')).toHaveLength(2);
+  });
 
-    const stored = await chrome.storage.local.get(SAVED_WORKFLOWS_STORAGE_KEY);
-    expect(stored[SAVED_WORKFLOWS_STORAGE_KEY]).toEqual(
-      expect.objectContaining({
-        version: 1,
-        items: [
-          expect.objectContaining({
-            name: 'Checkout happy path',
-            description: 'Covers cart review through confirmation.',
-            tags: ['qa', 'smoke'],
-            actions: expect.arrayContaining([
-              expect.objectContaining({
-                action: expect.objectContaining({ type: 'navigate' }),
-              }),
-              expect.objectContaining({
-                action: expect.objectContaining({ type: 'click' }),
-              }),
-            ]),
-            source: expect.objectContaining({
-              sessionId: 'session-1',
-              sessionName: 'Checkout recorder',
+  it('runs a saved workflow against the active session from the library', async () => {
+    const user = userEvent.setup();
+
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return { sessions: [createSession('session-1')] };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [createSavedWorkflow('workflow-1')] };
+        case 'WORKFLOW_RUN':
+          return {
+            workflow: createSavedWorkflow('workflow-1'),
+            session: createSession('session-1', {
+              recording: {
+                status: 'idle',
+                actions: createSavedWorkflow('workflow-1').actions,
+                startedAt: null,
+                updatedAt: Date.now(),
+              },
+              playback: {
+                status: 'playing',
+                nextActionIndex: 0,
+                speed: 1,
+                startedAt: Date.now(),
+                updatedAt: Date.now(),
+                lastCompletedAt: null,
+                lastError: null,
+              },
             }),
-          }),
-        ],
-      }),
-    );
+          };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Saved workflows' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_RUN', {
+        workflowId: 'workflow-1',
+        sessionId: 'session-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Saved workflows' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('reuses the save modal to edit workflow metadata', async () => {
+    const user = userEvent.setup();
+    const updatedWorkflow = createSavedWorkflow('workflow-1', {
+      name: 'Checkout recovery path',
+      description: 'Covers retries before payment confirmation.',
+      tags: ['qa', 'recovery'],
+    });
+
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return { sessions: [createSession('session-1')] };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [createSavedWorkflow('workflow-1')] };
+        case 'WORKFLOW_UPDATE':
+          return { workflow: updatedWorkflow };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Saved workflows' }));
+    const libraryDialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
+
+    await user.click(within(libraryDialog).getByRole('button', { name: 'Edit' }));
+
+    const editDialog = await screen.findByRole('dialog', { name: 'Edit workflow' });
+    expect(within(editDialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument();
+
+    fireEvent.change(within(editDialog).getByLabelText('Workflow name'), {
+      target: { value: 'Checkout recovery path' },
+    });
+    fireEvent.change(within(editDialog).getByLabelText('Description'), {
+      target: { value: 'Covers retries before payment confirmation.' },
+    });
+    fireEvent.change(within(editDialog).getByLabelText('Tags'), {
+      target: { value: 'qa, recovery' },
+    });
+    await user.click(within(editDialog).getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_UPDATE', {
+        workflowId: 'workflow-1',
+        updates: {
+          name: 'Checkout recovery path',
+          description: 'Covers retries before payment confirmation.',
+          tags: ['qa', 'recovery'],
+        },
+      });
+    });
+
+    const updatedLibrary = await screen.findByRole('dialog', { name: 'Saved workflows' });
+    expect(within(updatedLibrary).getAllByText('Checkout recovery path')).toHaveLength(2);
+    expect(within(updatedLibrary).getAllByText('Covers retries before payment confirmation.')).toHaveLength(2);
+    expect(within(updatedLibrary).getAllByText('recovery')).toHaveLength(2);
+  });
+
+  it('deletes a workflow and keeps selection on the remaining item', async () => {
+    const user = userEvent.setup();
+
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return { sessions: [createSession('session-1')] };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return {
+            workflows: [
+              createSavedWorkflow('workflow-1'),
+              createSavedWorkflow('workflow-2', {
+                name: 'Billing retry',
+                description: 'Retries the declined-card path.',
+                tags: ['billing'],
+              }),
+            ],
+          };
+        case 'WORKFLOW_DELETE':
+          return { workflowId: 'workflow-1' };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Saved workflows' }));
+    const libraryDialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
+
+    await user.click(within(libraryDialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_DELETE', {
+        workflowId: 'workflow-1',
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText('Checkout smoke test')).not.toBeInTheDocument();
+    });
+
+    const updatedLibrary = await screen.findByRole('dialog', { name: 'Saved workflows' });
+    expect(within(updatedLibrary).getAllByText('Billing retry')).toHaveLength(2);
+    expect(within(updatedLibrary).getByRole('button', { name: 'Run' })).toBeEnabled();
   });
 
   it('uses the latest selected speed for playback start before session updates arrive', async () => {
@@ -848,10 +1033,13 @@ describe('Side panel App (U-15 integration)', () => {
 
     await user.click(startButton);
 
-    expect(sendExtensionRequest).toHaveBeenCalledTimes(2);
-    expect(sendExtensionRequest).toHaveBeenNthCalledWith(2, 'SESSION_RECORDING_START', {
+    const recordingStartCalls = sendExtensionRequest.mock.calls.filter(
+      ([type]) => type === 'SESSION_RECORDING_START',
+    );
+    expect(recordingStartCalls).toHaveLength(1);
+    expect(recordingStartCalls[0]).toEqual(['SESSION_RECORDING_START', {
       sessionId: 'session-1',
-    });
+    }]);
 
     deferred.resolve(undefined);
 
@@ -1008,7 +1196,7 @@ describe('Side panel App (U-15 integration)', () => {
     const file = new File(['hello'], 'note.txt', { type: 'text/plain', lastModified: 1700000000000 });
 
     await user.upload(fileInput, file);
-    await user.type(textbox, 'Run extraction');
+    fireEvent.change(textbox, { target: { value: 'Run extraction' } });
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
     await waitFor(() => {

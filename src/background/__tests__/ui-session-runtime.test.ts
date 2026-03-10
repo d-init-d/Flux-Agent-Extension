@@ -14,6 +14,7 @@ import type {
   ExtensionMessage,
   PageContext,
   RequestPayloadMap,
+  SavedWorkflow,
 } from '@shared/types';
 import type { IDeviceEmulationManager } from '../device-emulation-manager';
 import type { IGeolocationMockManager } from '../geolocation-mock-manager';
@@ -105,6 +106,33 @@ function createPageContext(): PageContext {
 function decodeDownloadTextUrl(url: string): string {
   const [, encodedContent = ''] = url.split(',', 2);
   return decodeURIComponent(encodedContent);
+}
+
+function createSavedWorkflow(id: string, overrides: Partial<SavedWorkflow> = {}): SavedWorkflow {
+  return {
+    id,
+    name: 'Checkout smoke test',
+    description: 'Replays the checkout journey up to payment confirmation.',
+    actions: [
+      {
+        action: { id: `${id}-click-1`, type: 'click', selector: { css: '[data-testid="continue"]' } },
+        timestamp: 100,
+      },
+      {
+        action: { id: `${id}-click-2`, type: 'click', selector: { css: '[data-testid="submit"]' } },
+        timestamp: 600,
+      },
+    ],
+    tags: ['qa', 'checkout'],
+    createdAt: 1_710_000_000_000,
+    updatedAt: 1_710_000_001_000,
+    source: {
+      sessionId: 'session-1',
+      sessionName: 'Regression pass',
+      recordedAt: 1_710_000_001_000,
+    },
+    ...overrides,
+  };
 }
 
 class MockProvider implements IAIProvider {
@@ -437,6 +465,159 @@ describe('UI session runtime', () => {
         type: 'EVENT_SESSION_UPDATE',
         payload: expect.objectContaining({ reason: 'created' }),
       }),
+    );
+  });
+
+  it('lists, updates, and deletes saved workflows through workflow messages', async () => {
+    await chrome.storage.local.set({
+      savedWorkflows: {
+        version: 1,
+        items: [createSavedWorkflow('workflow-1'), createSavedWorkflow('workflow-2', { name: 'Billing retry' })],
+      },
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const listResponse = await runtime.handleMessage(createExtensionMessage('WORKFLOW_LIST', undefined));
+    expect(listResponse.success).toBe(true);
+    expect(listResponse.data?.workflows.map((workflow) => workflow.id)).toEqual(['workflow-1', 'workflow-2']);
+
+    const updateResponse = await runtime.handleMessage(
+      createExtensionMessage('WORKFLOW_UPDATE', {
+        workflowId: 'workflow-1',
+        updates: {
+          name: 'Checkout regression',
+          description: 'Updated workflow metadata.',
+          tags: ['qa', 'edited'],
+        },
+      }),
+    );
+
+    expect(updateResponse.success).toBe(true);
+    expect(updateResponse.data?.workflow).toEqual(
+      expect.objectContaining({
+        id: 'workflow-1',
+        name: 'Checkout regression',
+        description: 'Updated workflow metadata.',
+        tags: ['qa', 'edited'],
+        actions: expect.arrayContaining([
+          expect.objectContaining({ action: expect.objectContaining({ type: 'click' }) }),
+        ]),
+        source: expect.objectContaining({ sessionName: 'Regression pass' }),
+      }),
+    );
+
+    const storedAfterUpdate = await chrome.storage.local.get('savedWorkflows');
+    expect(storedAfterUpdate.savedWorkflows.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'workflow-1',
+          name: 'Checkout regression',
+          description: 'Updated workflow metadata.',
+          tags: ['qa', 'edited'],
+        }),
+      ]),
+    );
+
+    const deleteResponse = await runtime.handleMessage(
+      createExtensionMessage('WORKFLOW_DELETE', { workflowId: 'workflow-2' }),
+    );
+    expect(deleteResponse.success).toBe(true);
+    expect(deleteResponse.data?.workflowId).toBe('workflow-2');
+
+    const storedAfterDelete = await chrome.storage.local.get('savedWorkflows');
+    expect(storedAfterDelete.savedWorkflows.items).toEqual([
+      expect.objectContaining({ id: 'workflow-1', name: 'Checkout regression' }),
+    ]);
+  });
+
+  it('loads a saved workflow into the session and starts playback immediately', async () => {
+    vi.useFakeTimers();
+
+    const workflow = createSavedWorkflow('workflow-run-1');
+    await chrome.storage.local.set({
+      savedWorkflows: {
+        version: 1,
+        items: [workflow],
+      },
+    });
+
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(actionHandler),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const runResponse = await runtime.handleMessage(
+      createExtensionMessage('WORKFLOW_RUN', {
+        workflowId: 'workflow-run-1',
+        sessionId: sessionId!,
+      }),
+    );
+
+    expect(runResponse.success).toBe(true);
+    expect(runResponse.data?.workflow.id).toBe('workflow-run-1');
+    expect(runResponse.data?.session.recording.actions).toEqual(workflow.actions);
+    expect(runResponse.data?.session.playback).toEqual(
+      expect.objectContaining({ status: 'playing', nextActionIndex: 0 }),
+    );
+
+    const sessionBroadcasts = vi
+      .mocked(chrome.runtime.sendMessage)
+      .mock.calls.map(([message]) => message)
+      .filter(
+        (message): message is ExtensionMessage =>
+          typeof message === 'object' &&
+          message !== null &&
+          'type' in message &&
+          (message as ExtensionMessage).type === 'EVENT_SESSION_UPDATE',
+      );
+    expect(sessionBroadcasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            sessionId: sessionId,
+            reason: 'updated',
+            session: expect.objectContaining({
+              recording: expect.objectContaining({ actions: workflow.actions }),
+              playback: expect.objectContaining({ status: 'playing' }),
+            }),
+          }),
+        }),
+      ]),
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(actionHandler).toHaveBeenCalledTimes(2);
+
+    const stateResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
+    );
+    expect(stateResponse.data?.session?.recording.actions).toEqual(workflow.actions);
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({ status: 'idle', nextActionIndex: 2 }),
     );
   });
 

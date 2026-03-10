@@ -250,6 +250,20 @@ export class SessionManager implements ISessionManager {
     session.lastActivityAt = action.timestamp;
   }
 
+  replaceRecordedActions(sessionId: string, actions: RecordedSessionAction[]): void {
+    const session = this.requireSession(sessionId);
+    const clonedActions = JSON.parse(JSON.stringify(actions)) as RecordedSessionAction[];
+    const now = Date.now();
+    const firstTimestamp = clonedActions[0]?.timestamp ?? null;
+    const lastTimestamp = clonedActions.at(-1)?.timestamp ?? null;
+
+    session.recording.status = 'idle';
+    session.recording.actions = clonedActions;
+    session.recording.startedAt = firstTimestamp;
+    session.recording.updatedAt = lastTimestamp ?? now;
+    session.lastActivityAt = now;
+  }
+
   startPlayback(sessionId: string, speed: 0.5 | 1 | 2 = 1): void {
     const session = this.requireSession(sessionId);
     const now = Date.now();

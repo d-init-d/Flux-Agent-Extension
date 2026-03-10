@@ -163,17 +163,23 @@ export function App() {
   const workflowItems = useWorkflowUIStore((state) => state.items);
   const workflowIsHydrating = useWorkflowUIStore((state) => state.isHydrating);
   const workflowIsSaving = useWorkflowUIStore((state) => state.isSaving);
+  const workflowSaveMode = useWorkflowUIStore((state) => state.saveMode);
+  const workflowRunningId = useWorkflowUIStore((state) => state.isRunningWorkflowId);
+  const workflowDeletingId = useWorkflowUIStore((state) => state.isDeletingWorkflowId);
   const workflowError = useWorkflowUIStore((state) => state.error);
   const workflowSaveDraft = useWorkflowUIStore((state) => state.saveDraft);
   const selectedWorkflowId = useWorkflowUIStore((state) => state.selectedWorkflowId);
   const hydrateWorkflows = useWorkflowUIStore((state) => state.hydrate);
   const openWorkflowLibrary = useWorkflowUIStore((state) => state.openLibrary);
   const openSaveWorkflowModal = useWorkflowUIStore((state) => state.openSaveModal);
+  const openEditWorkflowModal = useWorkflowUIStore((state) => state.openEditModal);
   const closeWorkflowModal = useWorkflowUIStore((state) => state.closeModal);
   const setWorkflowViewMode = useWorkflowUIStore((state) => state.setViewMode);
   const updateWorkflowSaveDraft = useWorkflowUIStore((state) => state.updateSaveDraft);
   const selectWorkflow = useWorkflowUIStore((state) => state.selectWorkflow);
   const saveWorkflow = useWorkflowUIStore((state) => state.saveWorkflow);
+  const deleteWorkflow = useWorkflowUIStore((state) => state.deleteWorkflow);
+  const runWorkflow = useWorkflowUIStore((state) => state.runWorkflow);
 
   const { sessions, activeSessionId, isHydrating, hydrate, createSession, switchSession, applySessionUpdate } =
     useSession();
@@ -303,6 +309,17 @@ export function App() {
     playbackRequest !== null;
   const canSaveWorkflow = Boolean(activeSessionId) && recordingActionCount > 0;
   const activeSessionName = getSessionDisplayName(activeSession);
+  const selectedWorkflow = useMemo(
+    () => workflowItems.find((workflow) => workflow.id === selectedWorkflowId) ?? null,
+    [selectedWorkflowId, workflowItems],
+  );
+  const workflowRunDisabled = !activeSessionId;
+  const saveModalActionCount = workflowSaveMode === 'edit'
+    ? selectedWorkflow?.actions.length ?? 0
+    : recordingActionCount;
+  const saveModalSourceSessionName = workflowSaveMode === 'edit'
+    ? selectedWorkflow?.source?.sessionName ?? selectedWorkflow?.name ?? 'Saved workflow'
+    : activeSessionName;
 
   useEffect(() => {
     setPlaybackSpeedDraft(playbackState.speed);
@@ -407,6 +424,11 @@ export function App() {
   };
 
   const handleSaveWorkflow = async () => {
+    if (workflowSaveMode === 'edit') {
+      await saveWorkflow();
+      return;
+    }
+
     if (!activeSession || recordingActionCount === 0) {
       return;
     }
@@ -415,6 +437,32 @@ export function App() {
       actions: activeSession.recording.actions,
       source: getWorkflowSource(activeSession),
     });
+  };
+
+  const handleRunWorkflow = async (workflowId: string) => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    setSubmitError(null);
+    const didRun = await runWorkflow(workflowId, activeSessionId);
+    if (!didRun) {
+      const message = useWorkflowUIStore.getState().error;
+      if (message) {
+        setSubmitError(message);
+      }
+    }
+  };
+
+  const handleDeleteWorkflow = async (workflowId: string) => {
+    setSubmitError(null);
+    const didDelete = await deleteWorkflow(workflowId);
+    if (!didDelete) {
+      const message = useWorkflowUIStore.getState().error;
+      if (message) {
+        setSubmitError(message);
+      }
+    }
   };
 
   const handleSend = async (value: string, uploads?: SerializedFileUpload[]) => {
@@ -845,17 +893,29 @@ export function App() {
         viewMode={workflowViewMode}
         selectedWorkflowId={selectedWorkflowId}
         canSaveCurrentSession={canSaveWorkflow}
+        canRunSelectedWorkflow={!workflowRunDisabled}
+        isRunningSelectedWorkflow={selectedWorkflowId !== null && workflowRunningId === selectedWorkflowId}
+        isDeletingSelectedWorkflow={selectedWorkflowId !== null && workflowDeletingId === selectedWorkflowId}
+        error={workflowError}
         onClose={closeWorkflowModal}
         onOpenSaveWorkflow={handleOpenSaveWorkflow}
+        onRunWorkflow={(workflowId) => {
+          void handleRunWorkflow(workflowId);
+        }}
+        onEditWorkflow={openEditWorkflowModal}
+        onDeleteWorkflow={(workflowId) => {
+          void handleDeleteWorkflow(workflowId);
+        }}
         onSelectWorkflow={selectWorkflow}
         onViewModeChange={setWorkflowViewMode}
       />
 
       <SaveWorkflowModal
         open={workflowModal === 'save'}
+        mode={workflowSaveMode}
         draft={workflowSaveDraft}
-        actionCount={recordingActionCount}
-        sourceSessionName={activeSessionName}
+        actionCount={saveModalActionCount}
+        sourceSessionName={saveModalSourceSessionName}
         isSaving={workflowIsSaving}
         error={workflowError}
         onClose={closeWorkflowModal}

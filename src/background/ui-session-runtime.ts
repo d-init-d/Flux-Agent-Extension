@@ -16,6 +16,7 @@ import { ActionOrchestrator } from '@core/orchestrator';
 import { TabManager, DebuggerAdapter } from '@core/browser-controller';
 import type { PrintToPDFParams } from '@core/browser-controller';
 import { ErrorCode, ExtensionError } from '@shared/errors';
+import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
 import type {
   Action,
   ActionLogEventEntry,
@@ -43,8 +44,11 @@ import type {
   RecordedClickPayload,
   RecordedInputPayload,
   RecordedNavigationPayload,
+  RecordedSessionAction,
   RequestPayloadMap,
   ResponsePayloadMap,
+  SavedWorkflow,
+  SavedWorkflowSource,
   Session,
   SessionConfig,
   SessionCreateRequest,
@@ -365,6 +369,16 @@ export class UISessionRuntime {
         return this.handleSessionPlaybackSetSpeed(
           message.payload as RequestPayloadMap['SESSION_PLAYBACK_SET_SPEED'],
         );
+      case 'WORKFLOW_LIST':
+        return this.handleWorkflowList();
+      case 'WORKFLOW_CREATE':
+        return this.handleWorkflowCreate(message.payload as RequestPayloadMap['WORKFLOW_CREATE']);
+      case 'WORKFLOW_UPDATE':
+        return this.handleWorkflowUpdate(message.payload as RequestPayloadMap['WORKFLOW_UPDATE']);
+      case 'WORKFLOW_DELETE':
+        return this.handleWorkflowDelete(message.payload as RequestPayloadMap['WORKFLOW_DELETE']);
+      case 'WORKFLOW_RUN':
+        return this.handleWorkflowRun(message.payload as RequestPayloadMap['WORKFLOW_RUN']);
       case 'SESSION_START':
         return this.handleSessionStart(message.payload as RequestPayloadMap['SESSION_START']);
       case 'SESSION_PAUSE':
@@ -597,6 +611,138 @@ export class UISessionRuntime {
     this.sessionManager.setPlaybackSpeed(payload.sessionId, this.normalizePlaybackSpeed(payload.speed));
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
     return { success: true };
+  }
+
+  private async handleWorkflowList(): RuntimeHandlerResponse<'WORKFLOW_LIST'> {
+    const workflows = (await getSavedWorkflows())
+      .map((workflow) => this.cloneWorkflow(workflow))
+      .sort((left, right) => right.updatedAt - left.updatedAt);
+
+    return {
+      success: true,
+      data: { workflows },
+    };
+  }
+
+  private async handleWorkflowCreate(
+    payload: RequestPayloadMap['WORKFLOW_CREATE'],
+  ): RuntimeHandlerResponse<'WORKFLOW_CREATE'> {
+    const name = this.normalizeWorkflowName(payload.name);
+    const actions = this.cloneRecordedActions(payload.actions);
+    if (actions.length === 0) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Workflow requires at least one recorded action', true);
+    }
+
+    const now = Date.now();
+    const workflow: SavedWorkflow = {
+      id: generateId(),
+      name,
+      description: this.normalizeWorkflowDescription(payload.description),
+      tags: this.normalizeWorkflowTags(payload.tags),
+      actions,
+      createdAt: now,
+      updatedAt: now,
+      source: this.normalizeWorkflowSource(payload.source),
+    };
+
+    const workflows = await getSavedWorkflows();
+    workflows.unshift(workflow);
+    await setSavedWorkflows(workflows);
+
+    return {
+      success: true,
+      data: { workflow: this.cloneWorkflow(workflow) },
+    };
+  }
+
+  private async handleWorkflowUpdate(
+    payload: RequestPayloadMap['WORKFLOW_UPDATE'],
+  ): RuntimeHandlerResponse<'WORKFLOW_UPDATE'> {
+    const name = this.normalizeWorkflowName(payload.updates.name);
+    const description = this.normalizeWorkflowDescription(payload.updates.description);
+    const tags = this.normalizeWorkflowTags(payload.updates.tags);
+    const workflows = await getSavedWorkflows();
+    const workflow = workflows.find((item) => item.id === payload.workflowId);
+
+    if (!workflow) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, `Workflow "${payload.workflowId}" was not found`, true);
+    }
+
+    workflow.name = name;
+    workflow.description = description;
+    workflow.tags = tags;
+    workflow.updatedAt = Date.now();
+
+    await setSavedWorkflows(workflows);
+
+    return {
+      success: true,
+      data: { workflow: this.cloneWorkflow(workflow) },
+    };
+  }
+
+  private async handleWorkflowDelete(
+    payload: RequestPayloadMap['WORKFLOW_DELETE'],
+  ): RuntimeHandlerResponse<'WORKFLOW_DELETE'> {
+    const workflows = await getSavedWorkflows();
+    const nextWorkflows = workflows.filter((workflow) => workflow.id !== payload.workflowId);
+
+    if (nextWorkflows.length === workflows.length) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, `Workflow "${payload.workflowId}" was not found`, true);
+    }
+
+    await setSavedWorkflows(nextWorkflows);
+
+    return {
+      success: true,
+      data: { workflowId: payload.workflowId },
+    };
+  }
+
+  private async handleWorkflowRun(
+    payload: RequestPayloadMap['WORKFLOW_RUN'],
+  ): RuntimeHandlerResponse<'WORKFLOW_RUN'> {
+    await this.syncSessionTabState(payload.sessionId);
+    const session = this.requireSession(payload.sessionId);
+    const workflow = await this.getSavedWorkflowById(payload.workflowId);
+
+    if (session.recording.status !== 'idle') {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Stop recording before running a saved workflow', true);
+    }
+
+    if (session.status === 'running') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Wait for the current automation run to finish before running a saved workflow',
+        true,
+      );
+    }
+
+    if (!session.targetTabId) {
+      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for workflow playback', true);
+    }
+
+    this.abortStream(payload.sessionId);
+    this.stopPlaybackExecution(payload.sessionId);
+    this.sessionManager.stopPlayback(payload.sessionId);
+    this.sessionManager.replaceRecordedActions(payload.sessionId, workflow.actions);
+    await this.broadcastCurrentSession(payload.sessionId, 'updated');
+
+    const speed = payload.speed !== undefined
+      ? this.normalizePlaybackSpeed(payload.speed)
+      : session.playback.speed;
+    this.sessionManager.startPlayback(payload.sessionId, speed);
+    await this.broadcastCurrentSession(payload.sessionId, 'updated');
+
+    void this.startPlaybackLoop(payload.sessionId);
+
+    return {
+      success: true,
+      data: {
+        workflow: this.cloneWorkflow(workflow),
+        session: this.cloneSession(this.requireSession(payload.sessionId)),
+      },
+    };
   }
 
   private async handleSessionStart(
@@ -1898,6 +2044,75 @@ export class UISessionRuntime {
     if (session.status === 'running') {
       throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Wait for the current automation run to finish before resuming playback', true);
     }
+  }
+
+  private async getSavedWorkflowById(workflowId: string): Promise<SavedWorkflow> {
+    const workflows = await getSavedWorkflows();
+    const workflow = workflows.find((item) => item.id === workflowId);
+
+    if (!workflow) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, `Workflow "${workflowId}" was not found`, true);
+    }
+
+    return workflow;
+  }
+
+  private normalizeWorkflowName(value: string): string {
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Workflow name is required.', true);
+    }
+
+    return normalized;
+  }
+
+  private normalizeWorkflowDescription(value: string | undefined): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  private normalizeWorkflowTags(tags: string[]): string[] {
+    return Array.from(
+      new Set(
+        tags
+          .map((tag) => tag.trim())
+          .filter((tag) => tag.length > 0),
+      ),
+    );
+  }
+
+  private normalizeWorkflowSource(source: SavedWorkflowSource | undefined): SavedWorkflowSource | undefined {
+    if (!source) {
+      return undefined;
+    }
+
+    const sessionId = source.sessionId?.trim();
+    const sessionName = source.sessionName?.trim();
+    const recordedAt = typeof source.recordedAt === 'number' && Number.isFinite(source.recordedAt)
+      ? Math.trunc(source.recordedAt)
+      : undefined;
+
+    if (!sessionId && !sessionName && recordedAt === undefined) {
+      return undefined;
+    }
+
+    return {
+      sessionId: sessionId || undefined,
+      sessionName: sessionName || undefined,
+      recordedAt,
+    };
+  }
+
+  private cloneRecordedActions(actions: RecordedSessionAction[]): RecordedSessionAction[] {
+    return JSON.parse(JSON.stringify(actions)) as RecordedSessionAction[];
+  }
+
+  private cloneWorkflow(workflow: SavedWorkflow): SavedWorkflow {
+    return JSON.parse(JSON.stringify(workflow)) as SavedWorkflow;
   }
 
   private requireSession(sessionId: string): Session {

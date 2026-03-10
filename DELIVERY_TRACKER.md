@@ -294,7 +294,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [ ] `A-11` Workflow manager
 - [x] `A-11a` Workflow schema
 - [x] `A-11b` Workflow list UI
-- [ ] `A-11c` Workflow CRUD/run
+- [x] `A-11c` Workflow CRUD/run
 - [ ] `A-12` Advanced prompt templates
 - [ ] `A-12a` Extract table template
 - [ ] `A-12b` Fill profile template

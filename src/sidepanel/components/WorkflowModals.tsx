@@ -1,6 +1,6 @@
 import { Badge, Button, Input, Modal } from '@/ui/components';
 import type { SavedWorkflow } from '@shared/types';
-import type { WorkflowSaveDraft, WorkflowViewMode } from '../store/workflowUIStore';
+import type { WorkflowSaveDraft, WorkflowSaveMode, WorkflowViewMode } from '../store/workflowUIStore';
 
 interface WorkflowLibraryModalProps {
   open: boolean;
@@ -9,14 +9,22 @@ interface WorkflowLibraryModalProps {
   viewMode: WorkflowViewMode;
   selectedWorkflowId: string | null;
   canSaveCurrentSession: boolean;
+  canRunSelectedWorkflow: boolean;
+  isRunningSelectedWorkflow: boolean;
+  isDeletingSelectedWorkflow: boolean;
+  error: string | null;
   onClose: () => void;
   onOpenSaveWorkflow: () => void;
+  onRunWorkflow: (workflowId: string) => void;
+  onEditWorkflow: (workflowId: string) => void;
+  onDeleteWorkflow: (workflowId: string) => void;
   onSelectWorkflow: (workflowId: string) => void;
   onViewModeChange: (mode: WorkflowViewMode) => void;
 }
 
 interface SaveWorkflowModalProps {
   open: boolean;
+  mode: WorkflowSaveMode;
   draft: WorkflowSaveDraft;
   actionCount: number;
   sourceSessionName: string;
@@ -120,7 +128,9 @@ function WorkflowCard({
         selected
           ? 'border-primary-500 bg-primary-50/60 shadow-sm'
           : 'border-border bg-surface-primary hover:border-primary-200 hover:shadow-lg',
-        viewMode === 'list' ? 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between' : 'flex h-full flex-col gap-3',
+        viewMode === 'list'
+          ? 'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'
+          : 'flex h-full flex-col gap-3',
       ].join(' ')}
       onClick={onSelect}
     >
@@ -177,8 +187,15 @@ export function WorkflowLibraryModal({
   viewMode,
   selectedWorkflowId,
   canSaveCurrentSession,
+  canRunSelectedWorkflow,
+  isRunningSelectedWorkflow,
+  isDeletingSelectedWorkflow,
+  error,
   onClose,
   onOpenSaveWorkflow,
+  onRunWorkflow,
+  onEditWorkflow,
+  onDeleteWorkflow,
   onSelectWorkflow,
   onViewModeChange,
 }: WorkflowLibraryModalProps) {
@@ -190,14 +207,12 @@ export function WorkflowLibraryModal({
       onClose={onClose}
       size="lg"
       title="Saved workflows"
-      description="Browse reusable recorded workflows, scan their metadata, and prep the next step from one place."
+      description="Browse reusable recorded workflows, scan their metadata, and run or refine them from one place."
     >
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-secondary/60 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold tracking-tight text-content-primary">
-              Workflow library
-            </p>
+            <p className="text-sm font-semibold tracking-tight text-content-primary">Workflow library</p>
             <p className="mt-1 text-sm leading-relaxed text-content-secondary">
               {workflows.length === 0
                 ? 'No saved workflows yet. Capture a recording and save it here to start building a reusable library.'
@@ -228,6 +243,12 @@ export function WorkflowLibraryModal({
             </Button>
           </div>
         </div>
+
+        {error ? (
+          <div className="rounded-2xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-500" role="status">
+            {error}
+          </div>
+        ) : null}
 
         {isHydrating ? (
           <div className="rounded-2xl border border-dashed border-border bg-surface-primary px-4 py-10 text-center text-sm text-content-secondary">
@@ -274,10 +295,7 @@ export function WorkflowLibraryModal({
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
             <div
-              className={[
-                'grid gap-3',
-                viewMode === 'grid' ? 'sm:grid-cols-2' : 'grid-cols-1',
-              ].join(' ')}
+              className={['grid gap-3', viewMode === 'grid' ? 'sm:grid-cols-2' : 'grid-cols-1'].join(' ')}
             >
               {workflows.map((workflow) => (
                 <WorkflowCard
@@ -327,9 +345,7 @@ export function WorkflowLibraryModal({
                   </div>
 
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-content-tertiary">
-                      Tags
-                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-content-tertiary">Tags</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {selectedWorkflow.tags.length > 0 ? (
                         selectedWorkflow.tags.map((tag) => (
@@ -356,9 +372,7 @@ export function WorkflowLibraryModal({
                           <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-surface-primary text-xs font-semibold text-content-primary">
                             {index + 1}
                           </span>
-                          <span className="min-w-0 break-words">
-                            {entry.action.type}
-                          </span>
+                          <span className="min-w-0 break-words">{entry.action.type}</span>
                         </li>
                       ))}
                     </ul>
@@ -370,18 +384,38 @@ export function WorkflowLibraryModal({
                   </div>
 
                   <div className="mt-auto rounded-2xl border border-border bg-surface-secondary/60 p-3">
-                    <p className="text-sm font-medium text-content-primary">Workflow actions continue in A-11c</p>
+                    <p className="text-sm font-medium text-content-primary">Use this workflow in the current session</p>
                     <p className="mt-1 text-sm leading-relaxed text-content-secondary">
-                      This release focuses on browsing and saving. Run, edit, and delete controls stay intentionally unavailable for now.
+                      Run loads these recorded steps into the selected session and starts playback immediately.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button type="button" variant="secondary" size="md" disabled>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        disabled={!canRunSelectedWorkflow || isDeletingSelectedWorkflow}
+                        loading={isRunningSelectedWorkflow}
+                        onClick={() => onRunWorkflow(selectedWorkflow.id)}
+                      >
                         Run
                       </Button>
-                      <Button type="button" variant="outline" size="md" disabled>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="md"
+                        disabled={isRunningSelectedWorkflow || isDeletingSelectedWorkflow}
+                        onClick={() => onEditWorkflow(selectedWorkflow.id)}
+                      >
                         Edit
                       </Button>
-                      <Button type="button" variant="danger" size="md" disabled>
+                      <Button
+                        type="button"
+                        variant="danger"
+                        size="md"
+                        disabled={isRunningSelectedWorkflow || isDeletingSelectedWorkflow}
+                        loading={isDeletingSelectedWorkflow}
+                        onClick={() => onDeleteWorkflow(selectedWorkflow.id)}
+                      >
                         Delete
                       </Button>
                     </div>
@@ -398,6 +432,7 @@ export function WorkflowLibraryModal({
 
 export function SaveWorkflowModal({
   open,
+  mode,
   draft,
   actionCount,
   sourceSessionName,
@@ -407,20 +442,26 @@ export function SaveWorkflowModal({
   onDraftChange,
   onSave,
 }: SaveWorkflowModalProps) {
+  const isEditing = mode === 'edit';
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       size="md"
-      title="Save workflow"
-      description="Turn the current recorded session into a reusable saved workflow card for the library."
+      title={isEditing ? 'Edit workflow' : 'Save workflow'}
+      description={
+        isEditing
+          ? 'Update the workflow name, description, and tags while keeping the recorded steps intact.'
+          : 'Turn the current recorded session into a reusable saved workflow card for the library.'
+      }
       footer={
         <>
           <Button type="button" variant="ghost" size="md" onClick={onClose}>
             Cancel
           </Button>
           <Button type="button" variant="primary" size="md" loading={isSaving} onClick={onSave}>
-            Save workflow
+            {isEditing ? 'Save changes' : 'Save workflow'}
           </Button>
         </>
       }
@@ -434,7 +475,9 @@ export function SaveWorkflowModal({
             <Badge size="sm">{sourceSessionName}</Badge>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-content-secondary">
-            The current recording snapshot becomes a saved workflow entry. You can review it in grid or list mode right after saving.
+            {isEditing
+              ? 'This updates the saved workflow metadata in place without replacing its recorded action sequence.'
+              : 'The current recording snapshot becomes a saved workflow entry. You can review it in grid or list mode right after saving.'}
           </p>
         </div>
 

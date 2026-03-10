@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
 import type { RecordedSessionAction, SavedWorkflow, SavedWorkflowSource } from '@shared/types';
-import { generateId } from '@shared/utils/id';
+import { sendExtensionRequest } from '../lib/extension-client';
 
 export type WorkflowModalState = 'library' | 'save' | null;
 export type WorkflowViewMode = 'grid' | 'list';
+export type WorkflowSaveMode = 'create' | 'edit';
 
 export interface WorkflowSaveDraft {
   name: string;
@@ -20,8 +20,12 @@ interface SaveWorkflowPayload {
 interface WorkflowUIStoreState {
   activeModal: WorkflowModalState;
   viewMode: WorkflowViewMode;
+  saveMode: WorkflowSaveMode;
+  editingWorkflowId: string | null;
   isHydrating: boolean;
   isSaving: boolean;
+  isRunningWorkflowId: string | null;
+  isDeletingWorkflowId: string | null;
   error: string | null;
   items: SavedWorkflow[];
   saveDraft: WorkflowSaveDraft;
@@ -29,11 +33,14 @@ interface WorkflowUIStoreState {
   hydrate: () => Promise<void>;
   openLibrary: () => void;
   openSaveModal: (draft: WorkflowSaveDraft) => void;
+  openEditModal: (workflowId: string) => void;
   closeModal: () => void;
   setViewMode: (mode: WorkflowViewMode) => void;
   updateSaveDraft: (patch: Partial<WorkflowSaveDraft>) => void;
   selectWorkflow: (workflowId: string) => void;
-  saveWorkflow: (payload: SaveWorkflowPayload) => Promise<SavedWorkflow | null>;
+  saveWorkflow: (payload?: SaveWorkflowPayload) => Promise<SavedWorkflow | null>;
+  deleteWorkflow: (workflowId: string) => Promise<boolean>;
+  runWorkflow: (workflowId: string, sessionId: string) => Promise<boolean>;
 }
 
 const DEFAULT_SAVE_DRAFT: WorkflowSaveDraft = {
@@ -47,23 +54,59 @@ function sortWorkflows(items: SavedWorkflow[]): SavedWorkflow[] {
 }
 
 function parseTags(value: string): string[] {
-  const tags = value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
-
-  return Array.from(new Set(tags));
+  return Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0),
+    ),
+  );
 }
 
-function cloneActions(actions: RecordedSessionAction[]): RecordedSessionAction[] {
-  return structuredClone(actions);
+function toDraft(workflow: SavedWorkflow): WorkflowSaveDraft {
+  return {
+    name: workflow.name,
+    description: workflow.description ?? '',
+    tags: workflow.tags.join(', '),
+  };
+}
+
+function getNextSelectedWorkflowId(
+  previousItems: SavedWorkflow[],
+  nextItems: SavedWorkflow[],
+  deletedWorkflowId: string,
+  currentSelection: string | null,
+): string | null {
+  if (nextItems.length === 0) {
+    return null;
+  }
+
+  if (
+    currentSelection !== deletedWorkflowId &&
+    currentSelection &&
+    nextItems.some((item) => item.id === currentSelection)
+  ) {
+    return currentSelection;
+  }
+
+  const deletedIndex = previousItems.findIndex((item) => item.id === deletedWorkflowId);
+  if (deletedIndex === -1) {
+    return nextItems[0]?.id ?? null;
+  }
+
+  return nextItems[deletedIndex]?.id ?? nextItems[deletedIndex - 1]?.id ?? nextItems[0]?.id ?? null;
 }
 
 export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
   activeModal: null,
   viewMode: 'grid',
+  saveMode: 'create',
+  editingWorkflowId: null,
   isHydrating: false,
   isSaving: false,
+  isRunningWorkflowId: null,
+  isDeletingWorkflowId: null,
   error: null,
   items: [],
   saveDraft: DEFAULT_SAVE_DRAFT,
@@ -72,7 +115,8 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
     set({ isHydrating: true, error: null });
 
     try {
-      const items = sortWorkflows(await getSavedWorkflows());
+      const response = await sendExtensionRequest('WORKFLOW_LIST', undefined);
+      const items = sortWorkflows(response.workflows);
       set((state) => ({
         items,
         isHydrating: false,
@@ -96,6 +140,8 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
   openSaveModal: (draft) => {
     set({
       activeModal: 'save',
+      saveMode: 'create',
+      editingWorkflowId: null,
       error: null,
       saveDraft: {
         name: draft.name,
@@ -104,8 +150,29 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
       },
     });
   },
+  openEditModal: (workflowId) => {
+    const workflow = get().items.find((item) => item.id === workflowId);
+    if (!workflow) {
+      return;
+    }
+
+    set({
+      activeModal: 'save',
+      saveMode: 'edit',
+      editingWorkflowId: workflowId,
+      selectedWorkflowId: workflowId,
+      error: null,
+      saveDraft: toDraft(workflow),
+    });
+  },
   closeModal: () => {
-    set({ activeModal: null, error: null });
+    set({
+      activeModal: null,
+      error: null,
+      saveMode: 'create',
+      editingWorkflowId: null,
+      saveDraft: DEFAULT_SAVE_DRAFT,
+    });
   },
   setViewMode: (mode) => {
     set({ viewMode: mode });
@@ -122,8 +189,8 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
   selectWorkflow: (workflowId) => {
     set({ selectedWorkflowId: workflowId });
   },
-  saveWorkflow: async ({ actions, source }) => {
-    const { isSaving, items, saveDraft } = get();
+  saveWorkflow: async (payload) => {
+    const { isSaving, saveDraft, saveMode, editingWorkflowId, items } = get();
 
     if (isSaving) {
       return null;
@@ -135,27 +202,61 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
       return null;
     }
 
-    const now = Date.now();
-    const nextWorkflow: SavedWorkflow = {
-      id: generateId(),
-      name,
-      description: saveDraft.description.trim() || undefined,
-      tags: parseTags(saveDraft.tags),
-      actions: cloneActions(actions),
-      createdAt: now,
-      updatedAt: now,
-      source,
-    };
+    const description = saveDraft.description.trim() || undefined;
+    const tags = parseTags(saveDraft.tags);
 
     set({ isSaving: true, error: null });
 
     try {
-      const nextItems = sortWorkflows([nextWorkflow, ...items]);
-      await setSavedWorkflows(nextItems);
+      if (saveMode === 'edit') {
+        if (!editingWorkflowId) {
+          throw new Error('No workflow selected for editing');
+        }
+
+        const response = await sendExtensionRequest('WORKFLOW_UPDATE', {
+          workflowId: editingWorkflowId,
+          updates: {
+            name,
+            description,
+            tags,
+          },
+        });
+        const updatedWorkflow = response.workflow;
+        const nextItems = sortWorkflows([
+          updatedWorkflow,
+          ...items.filter((item) => item.id !== updatedWorkflow.id),
+        ]);
+        set({
+          items: nextItems,
+          isSaving: false,
+          activeModal: 'library',
+          saveMode: 'create',
+          editingWorkflowId: null,
+          selectedWorkflowId: updatedWorkflow.id,
+          saveDraft: DEFAULT_SAVE_DRAFT,
+        });
+        return updatedWorkflow;
+      }
+
+      if (!payload || payload.actions.length === 0) {
+        throw new Error('Workflow save requires recorded actions');
+      }
+
+      const response = await sendExtensionRequest('WORKFLOW_CREATE', {
+        name,
+        description,
+        tags,
+        actions: JSON.parse(JSON.stringify(payload.actions)) as RecordedSessionAction[],
+        source: payload.source,
+      });
+      const nextWorkflow = response.workflow;
+      const nextItems = sortWorkflows([nextWorkflow, ...items.filter((item) => item.id !== nextWorkflow.id)]);
       set({
         items: nextItems,
         isSaving: false,
         activeModal: 'library',
+        saveMode: 'create',
+        editingWorkflowId: null,
         selectedWorkflowId: nextWorkflow.id,
         saveDraft: DEFAULT_SAVE_DRAFT,
       });
@@ -166,14 +267,59 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
       return null;
     }
   },
+  deleteWorkflow: async (workflowId) => {
+    const { isDeletingWorkflowId, items, selectedWorkflowId } = get();
+    if (isDeletingWorkflowId) {
+      return false;
+    }
+
+    set({ isDeletingWorkflowId: workflowId, error: null });
+
+    try {
+      await sendExtensionRequest('WORKFLOW_DELETE', { workflowId });
+      const nextItems = items.filter((item) => item.id !== workflowId);
+      set({
+        items: nextItems,
+        isDeletingWorkflowId: null,
+        selectedWorkflowId: getNextSelectedWorkflowId(items, nextItems, workflowId, selectedWorkflowId),
+      });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete workflow';
+      set({ isDeletingWorkflowId: null, error: message });
+      return false;
+    }
+  },
+  runWorkflow: async (workflowId, sessionId) => {
+    const { isRunningWorkflowId } = get();
+    if (isRunningWorkflowId) {
+      return false;
+    }
+
+    set({ isRunningWorkflowId: workflowId, error: null });
+
+    try {
+      await sendExtensionRequest('WORKFLOW_RUN', { workflowId, sessionId });
+      set({ isRunningWorkflowId: null, activeModal: null });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to run workflow';
+      set({ isRunningWorkflowId: null, error: message });
+      return false;
+    }
+  },
 }));
 
 export function resetWorkflowUIStore(): void {
   useWorkflowUIStore.setState({
     activeModal: null,
     viewMode: 'grid',
+    saveMode: 'create',
+    editingWorkflowId: null,
     isHydrating: false,
     isSaving: false,
+    isRunningWorkflowId: null,
+    isDeletingWorkflowId: null,
     error: null,
     items: [],
     saveDraft: DEFAULT_SAVE_DRAFT,

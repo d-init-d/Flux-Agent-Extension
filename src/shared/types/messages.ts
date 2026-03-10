@@ -1,7 +1,13 @@
 import type { Action, ElementSelector } from './actions';
 import type { ActionResult, PageContext } from './browser';
-import type { SessionConfig, Session, SessionRecordingExportFormat } from './session';
+import type {
+  RecordedSessionAction,
+  SessionConfig,
+  Session,
+  SessionRecordingExportFormat,
+} from './session';
 import type { SerializedFileUpload } from './uploads';
+import type { SavedWorkflow, SavedWorkflowSource } from './workflow';
 import type { ContextBuilderOptions } from '../../core/session/interfaces';
 
 /**
@@ -32,6 +38,13 @@ export type ExtensionMessageType =
   | 'SESSION_PLAYBACK_RESUME'
   | 'SESSION_PLAYBACK_STOP'
   | 'SESSION_PLAYBACK_SET_SPEED'
+
+  // Saved workflows
+  | 'WORKFLOW_LIST'
+  | 'WORKFLOW_CREATE'
+  | 'WORKFLOW_UPDATE'
+  | 'WORKFLOW_DELETE'
+  | 'WORKFLOW_RUN'
 
   // Action execution
   | 'ACTION_EXECUTE'
@@ -168,6 +181,54 @@ export interface SessionRecordingExportResponse {
   format: SessionRecordingExportFormat;
 }
 
+export interface WorkflowListResponse {
+  workflows: SavedWorkflow[];
+}
+
+export interface WorkflowCreateRequest {
+  name: string;
+  description?: string;
+  tags: string[];
+  actions: RecordedSessionAction[];
+  source?: SavedWorkflowSource;
+}
+
+export interface WorkflowCreateResponse {
+  workflow: SavedWorkflow;
+}
+
+export interface WorkflowUpdateRequest {
+  workflowId: string;
+  updates: {
+    name: string;
+    description?: string;
+    tags: string[];
+  };
+}
+
+export interface WorkflowUpdateResponse {
+  workflow: SavedWorkflow;
+}
+
+export interface WorkflowDeleteRequest {
+  workflowId: string;
+}
+
+export interface WorkflowDeleteResponse {
+  workflowId: string;
+}
+
+export interface WorkflowRunRequest {
+  workflowId: string;
+  sessionId: string;
+  speed?: 0.5 | 1 | 2;
+}
+
+export interface WorkflowRunResponse {
+  workflow: SavedWorkflow;
+  session: Session;
+}
+
 export interface SessionSendMessageRequest {
   sessionId: string;
   message: string;
@@ -224,6 +285,11 @@ export interface RequestPayloadMap {
   SESSION_PLAYBACK_RESUME: SessionPlaybackResumeRequest;
   SESSION_PLAYBACK_STOP: SessionPlaybackControlRequest;
   SESSION_PLAYBACK_SET_SPEED: SessionPlaybackSetSpeedRequest;
+  WORKFLOW_LIST: void;
+  WORKFLOW_CREATE: WorkflowCreateRequest;
+  WORKFLOW_UPDATE: WorkflowUpdateRequest;
+  WORKFLOW_DELETE: WorkflowDeleteRequest;
+  WORKFLOW_RUN: WorkflowRunRequest;
   ACTION_EXECUTE: ActionExecuteRequest;
   ACTION_EXECUTE_BATCH: { sessionId?: string; actions: Action[] };
   ACTION_ABORT: { sessionId?: string };
@@ -267,6 +333,11 @@ export interface ResponsePayloadMap {
   SESSION_PLAYBACK_RESUME: void;
   SESSION_PLAYBACK_STOP: void;
   SESSION_PLAYBACK_SET_SPEED: void;
+  WORKFLOW_LIST: WorkflowListResponse;
+  WORKFLOW_CREATE: WorkflowCreateResponse;
+  WORKFLOW_UPDATE: WorkflowUpdateResponse;
+  WORKFLOW_DELETE: WorkflowDeleteResponse;
+  WORKFLOW_RUN: WorkflowRunResponse;
   ACTION_EXECUTE: ActionExecuteResponse;
   ACTION_EXECUTE_BATCH: { results: ActionResult[] };
   ACTION_ABORT: void;
