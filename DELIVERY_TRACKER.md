@@ -293,7 +293,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-10` Script export
 - [ ] `A-11` Workflow manager
 - [x] `A-11a` Workflow schema
-- [ ] `A-11b` Workflow list UI
+- [x] `A-11b` Workflow list UI
 - [ ] `A-11c` Workflow CRUD/run
 - [ ] `A-12` Advanced prompt templates
 - [ ] `A-12a` Extract table template

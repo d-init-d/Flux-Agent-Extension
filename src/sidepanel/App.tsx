@@ -2,19 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActionLogPanel } from './components/ActionLogPanel';
 import { ChatContainer } from './components/ChatContainer';
 import { InputComposer } from './components/InputComposer';
+import { SaveWorkflowModal, WorkflowLibraryModal } from './components/WorkflowModals';
 import { useActionLog } from './hooks/useActionLog';
 import { useChat } from './hooks/useChat';
 import { useEscapeToStopShortcut } from './keyboard-shortcuts';
 import { useSession } from './hooks/useSession';
 import { sendExtensionRequest, subscribeToExtensionEvents } from './lib/extension-client';
+import { useWorkflowUIStore } from './store/workflowUIStore';
 import { Button } from '@/ui/components';
 import { ThemeToggle } from '@/ui/theme';
 import type {
   AIStreamEventPayload,
   ActionProgressEventPayload,
+  SavedWorkflowSource,
   SessionRecordingExportFormat,
   SessionPlaybackSpeed,
   SerializedFileUpload,
+  Session,
   SessionUpdateEventPayload,
 } from '@shared/types';
 
@@ -117,6 +121,32 @@ function getPlaybackErrorMessage(message: string): string {
   return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
 }
 
+function getSessionDisplayName(session: Session | null): string {
+  return session?.config.name?.trim() || 'Current session';
+}
+
+function getDefaultWorkflowDraft(session: Session | null, actionCount: number) {
+  const sessionName = getSessionDisplayName(session);
+
+  return {
+    name: `${sessionName} workflow`,
+    description: `Captured ${formatActionCount(actionCount)} from ${sessionName}.`,
+    tags: '',
+  };
+}
+
+function getWorkflowSource(session: Session | null): SavedWorkflowSource | undefined {
+  if (!session) {
+    return undefined;
+  }
+
+  return {
+    sessionId: session.config.id,
+    sessionName: session.config.name?.trim() || undefined,
+    recordedAt: session.recording.updatedAt ?? session.recording.startedAt ?? undefined,
+  };
+}
+
 export function App() {
   useEscapeToStopShortcut();
   const [initialSessionCount, setInitialSessionCount] = useState<number | null>(null);
@@ -128,6 +158,22 @@ export function App() {
   const [playbackSpeedDraft, setPlaybackSpeedDraft] = useState<SessionPlaybackSpeed>(1);
   const [recordingExportFormat, setRecordingExportFormat] =
     useState<SessionRecordingExportFormat>('json');
+  const workflowModal = useWorkflowUIStore((state) => state.activeModal);
+  const workflowViewMode = useWorkflowUIStore((state) => state.viewMode);
+  const workflowItems = useWorkflowUIStore((state) => state.items);
+  const workflowIsHydrating = useWorkflowUIStore((state) => state.isHydrating);
+  const workflowIsSaving = useWorkflowUIStore((state) => state.isSaving);
+  const workflowError = useWorkflowUIStore((state) => state.error);
+  const workflowSaveDraft = useWorkflowUIStore((state) => state.saveDraft);
+  const selectedWorkflowId = useWorkflowUIStore((state) => state.selectedWorkflowId);
+  const hydrateWorkflows = useWorkflowUIStore((state) => state.hydrate);
+  const openWorkflowLibrary = useWorkflowUIStore((state) => state.openLibrary);
+  const openSaveWorkflowModal = useWorkflowUIStore((state) => state.openSaveModal);
+  const closeWorkflowModal = useWorkflowUIStore((state) => state.closeModal);
+  const setWorkflowViewMode = useWorkflowUIStore((state) => state.setViewMode);
+  const updateWorkflowSaveDraft = useWorkflowUIStore((state) => state.updateSaveDraft);
+  const selectWorkflow = useWorkflowUIStore((state) => state.selectWorkflow);
+  const saveWorkflow = useWorkflowUIStore((state) => state.saveWorkflow);
 
   const { sessions, activeSessionId, isHydrating, hydrate, createSession, switchSession, applySessionUpdate } =
     useSession();
@@ -181,6 +227,10 @@ export function App() {
 
     return unsubscribe;
   }, [applyProgressEvent, applySessionUpdate, applyStreamChunk, hydrate, syncSession]);
+
+  useEffect(() => {
+    void hydrateWorkflows();
+  }, [hydrateWorkflows]);
 
   useEffect(() => {
     if (initialSessionCount !== 0 || isHydrating || sessions.length > 0) {
@@ -251,6 +301,8 @@ export function App() {
     !activeSessionId ||
     recordingStatus !== 'idle' ||
     playbackRequest !== null;
+  const canSaveWorkflow = Boolean(activeSessionId) && recordingActionCount > 0;
+  const activeSessionName = getSessionDisplayName(activeSession);
 
   useEffect(() => {
     setPlaybackSpeedDraft(playbackState.speed);
@@ -346,6 +398,25 @@ export function App() {
     }
   };
 
+  const handleOpenSaveWorkflow = () => {
+    if (!activeSession || recordingActionCount === 0) {
+      return;
+    }
+
+    openSaveWorkflowModal(getDefaultWorkflowDraft(activeSession, recordingActionCount));
+  };
+
+  const handleSaveWorkflow = async () => {
+    if (!activeSession || recordingActionCount === 0) {
+      return;
+    }
+
+    await saveWorkflow({
+      actions: activeSession.recording.actions,
+      source: getWorkflowSource(activeSession),
+    });
+  };
+
   const handleSend = async (value: string, uploads?: SerializedFileUpload[]) => {
     setSubmitError(null);
     let sessionId = activeSessionId;
@@ -373,7 +444,7 @@ export function App() {
         className="border-b border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary))] px-4 py-4 sm:px-6"
         data-testid="sidepanel-header"
       >
-        <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-3">
+          <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold leading-snug tracking-tight">Flux Agent</h1>
             <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
@@ -397,6 +468,15 @@ export function App() {
                 ))}
               </select>
             </label>
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              className="min-h-9 px-3"
+              onClick={openWorkflowLibrary}
+            >
+              Saved workflows
+            </Button>
             <Button
               type="button"
               variant="secondary"
@@ -626,6 +706,16 @@ export function App() {
                       </label>
                       <Button
                         type="button"
+                        variant="outline"
+                        size="md"
+                        className="min-h-11 px-4"
+                        disabled={!canSaveWorkflow}
+                        onClick={handleOpenSaveWorkflow}
+                      >
+                        Save workflow
+                      </Button>
+                      <Button
+                        type="button"
                         variant="secondary"
                         size="md"
                         className="min-h-11 px-4"
@@ -747,6 +837,33 @@ export function App() {
           onSend={(value, uploads) => handleSend(value, uploads)}
         />
       </footer>
+
+      <WorkflowLibraryModal
+        open={workflowModal === 'library'}
+        workflows={workflowItems}
+        isHydrating={workflowIsHydrating}
+        viewMode={workflowViewMode}
+        selectedWorkflowId={selectedWorkflowId}
+        canSaveCurrentSession={canSaveWorkflow}
+        onClose={closeWorkflowModal}
+        onOpenSaveWorkflow={handleOpenSaveWorkflow}
+        onSelectWorkflow={selectWorkflow}
+        onViewModeChange={setWorkflowViewMode}
+      />
+
+      <SaveWorkflowModal
+        open={workflowModal === 'save'}
+        draft={workflowSaveDraft}
+        actionCount={recordingActionCount}
+        sourceSessionName={activeSessionName}
+        isSaving={workflowIsSaving}
+        error={workflowError}
+        onClose={closeWorkflowModal}
+        onDraftChange={updateWorkflowSaveDraft}
+        onSave={() => {
+          void handleSaveWorkflow();
+        }}
+      />
     </div>
   );
 }

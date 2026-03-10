@@ -3,12 +3,14 @@ import { fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
+import { SAVED_WORKFLOWS_STORAGE_KEY } from '../../shared/storage/workflows';
 import { App } from '../App';
 import { resetActionLogStore } from '../store/actionLogStore';
 import { resetChatStore } from '../store/chatStore';
+import { resetWorkflowUIStore } from '../store/workflowUIStore';
 import { resetSessionStore } from '../store/sessionStore';
 
-import type { ExtensionMessage, Session } from '@shared/types';
+import type { ExtensionMessage, SavedWorkflow, Session } from '@shared/types';
 
 const listeners = new Set<(message: unknown) => void>();
 
@@ -79,6 +81,33 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+function createSavedWorkflow(id: string, overrides: Partial<SavedWorkflow> = {}): SavedWorkflow {
+  return {
+    id,
+    name: 'Checkout smoke test',
+    description: 'Replays the checkout journey up to payment confirmation.',
+    actions: [
+      {
+        action: { id: `${id}-navigate`, type: 'navigate', url: 'https://example.com/checkout' },
+        timestamp: Date.now() - 3000,
+      },
+      {
+        action: { id: `${id}-click`, type: 'click', selector: { css: '[data-testid="continue"]' } },
+        timestamp: Date.now() - 2000,
+      },
+    ],
+    tags: ['qa', 'checkout'],
+    createdAt: Date.now() - 4000,
+    updatedAt: Date.now() - 1000,
+    source: {
+      sessionId: 'session-1',
+      sessionName: 'Regression pass',
+      recordedAt: Date.now() - 1000,
+    },
+    ...overrides,
+  };
+}
+
 async function settleReactUpdates(iterations = 1): Promise<void> {
   for (let index = 0; index < iterations; index += 1) {
     await act(async () => {
@@ -123,6 +152,7 @@ describe('Side panel App (U-15 integration)', () => {
     resetSessionStore();
     resetChatStore();
     resetActionLogStore();
+    resetWorkflowUIStore();
   });
 
   it('renders the connected layout and bootstraps a session selector', async () => {
@@ -140,9 +170,138 @@ describe('Side panel App (U-15 integration)', () => {
     expect(screen.getByText('Playback recorded actions')).toBeInTheDocument();
     expect(screen.getByText('Playback is unavailable until this session has recorded actions.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Saved workflows' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
     expect(screen.getByText('Create or switch a session, then send a prompt to start a streamed response.')).toBeInTheDocument();
+  });
+
+  it('opens the saved workflows library and renders stored workflow metadata with a view toggle', async () => {
+    const user = userEvent.setup();
+
+    await chrome.storage.local.set({
+      [SAVED_WORKFLOWS_STORAGE_KEY]: {
+        version: 1,
+        items: [createSavedWorkflow('workflow-1')],
+      },
+    });
+
+    await renderApp();
+
+    await user.click(screen.getByRole('button', { name: 'Saved workflows' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
+    expect(within(dialog).getAllByText('Checkout smoke test')).toHaveLength(2);
+    expect(within(dialog).getAllByText('Replays the checkout journey up to payment confirmation.')).toHaveLength(2);
+    expect(within(dialog).getAllByText('qa')).toHaveLength(2);
+    expect(within(dialog).getAllByText('checkout')).toHaveLength(2);
+    expect(within(dialog).getByText('From Regression pass')).toBeInTheDocument();
+
+    const listToggle = within(dialog).getByRole('button', { name: 'List' });
+    expect(listToggle).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(listToggle);
+
+    expect(listToggle).toHaveAttribute('aria-pressed', 'true');
+    expect(within(dialog).getByRole('button', { name: 'Run' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeDisabled();
+  });
+
+  it('opens the save workflow modal and persists a saved workflow from recorded actions', async () => {
+    const user = userEvent.setup();
+
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-1', {
+                config: {
+                  id: 'session-1',
+                  provider: 'openai',
+                  model: 'gpt-4o-mini',
+                  name: 'Checkout recorder',
+                },
+                recording: {
+                  status: 'idle',
+                  actions: [
+                    {
+                      action: { id: 'recorded-nav', type: 'navigate', url: 'https://example.com/cart' },
+                      timestamp: Date.now() - 4000,
+                    },
+                    {
+                      action: { id: 'recorded-click', type: 'click', selector: { css: '#checkout' } },
+                      timestamp: Date.now() - 2000,
+                    },
+                  ],
+                  startedAt: Date.now() - 5000,
+                  updatedAt: Date.now() - 2000,
+                },
+              }),
+            ],
+          };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    const saveButton = await screen.findByRole('button', { name: 'Save workflow' });
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    const dialog = await screen.findByRole('dialog', { name: 'Save workflow' });
+    const nameInput = within(dialog).getByLabelText('Workflow name');
+    const descriptionInput = within(dialog).getByLabelText('Description');
+    const tagsInput = within(dialog).getByLabelText('Tags');
+
+    expect(nameInput).toHaveValue('Checkout recorder workflow');
+
+    fireEvent.change(nameInput, { target: { value: 'Checkout happy path' } });
+    fireEvent.change(descriptionInput, {
+      target: { value: 'Covers cart review through confirmation.' },
+    });
+    fireEvent.change(tagsInput, { target: { value: 'qa, smoke' } });
+    await user.click(within(dialog).getByRole('button', { name: 'Save workflow' }));
+
+    const libraryDialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
+    expect(within(libraryDialog).getAllByText('Checkout happy path')).toHaveLength(2);
+    expect(within(libraryDialog).getAllByText('Covers cart review through confirmation.')).toHaveLength(2);
+    expect(within(libraryDialog).getAllByText('smoke')).toHaveLength(2);
+
+    const stored = await chrome.storage.local.get(SAVED_WORKFLOWS_STORAGE_KEY);
+    expect(stored[SAVED_WORKFLOWS_STORAGE_KEY]).toEqual(
+      expect.objectContaining({
+        version: 1,
+        items: [
+          expect.objectContaining({
+            name: 'Checkout happy path',
+            description: 'Covers cart review through confirmation.',
+            tags: ['qa', 'smoke'],
+            actions: expect.arrayContaining([
+              expect.objectContaining({
+                action: expect.objectContaining({ type: 'navigate' }),
+              }),
+              expect.objectContaining({
+                action: expect.objectContaining({ type: 'click' }),
+              }),
+            ]),
+            source: expect.objectContaining({
+              sessionId: 'session-1',
+              sessionName: 'Checkout recorder',
+            }),
+          }),
+        ],
+      }),
+    );
   });
 
   it('uses the latest selected speed for playback start before session updates arrive', async () => {
