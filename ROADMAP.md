@@ -437,7 +437,7 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | A-14b | Script export security | 2h | A-10 | No sensitive data in exports |
 | A-14c | Workflow storage security | 2h | A-11 | Workflows can't contain secrets |
 
-> Live execution status: `A-03.1` through `A-03.9` PASS; `A-03.10` remains pending because commit/push requires an explicit user request. `A-05`, `A-07`, `A-08`, `A-09`, and `A-10` are PASS; `A-06` implementation is complete and still tracked against the same known audit baseline (`rollup` via `@crxjs/vite-plugin`). `A-11a`, `A-11b`, and `A-11c` are PASS. `A-11 QA` is now PASS after a test-only stability update in `src/options/__tests__/App.test.tsx`: `pnpm typecheck` passed, selective `pnpm vitest run src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/App.test.tsx` passed, `pnpm test` passed at `67 files / 1088 tests`, `pnpm build` passed, and `pnpm audit --audit-level=high` stayed on the known `rollup` baseline via `@crxjs/vite-plugin` with no new advisories. Parent `A-11` remains open until final PASS/closeout.
+> Live execution status: `A-03.1` through `A-03.9` PASS; `A-03.10` remains pending because commit/push requires an explicit user request. `A-05`, `A-07`, `A-08`, `A-09`, and `A-10` are PASS; `A-06` implementation is complete and still tracked against the same known audit baseline (`rollup` via `@crxjs/vite-plugin`). `A-11` is now PASS: `A-11a`, `A-11b`, `A-11c`, and `A-11 QA` are all complete, with gate evidence from commit `1a3ff94` (`pnpm typecheck`, selective Vitest, `pnpm test` at `67 files / 1088 tests`, `pnpm build`, and `pnpm audit --audit-level=high` on the known `rollup` baseline only).
 
 ### Phase 4 Milestone Checklist
 
@@ -452,7 +452,7 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 □ Action recording captures user actions accurately
 □ Action playback replays with correct timing
 ✅ Export to JSON/Playwright format working
-□ Workflow manager: save, load, run, delete
+✅ Workflow manager: save, load, run, delete
 □ Security review passed for all advanced features
 □ DEMO: Record filling a form → replay on different site
 ```
