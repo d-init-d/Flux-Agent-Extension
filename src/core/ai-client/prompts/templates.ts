@@ -291,6 +291,25 @@ export function buildConfirmationPrompt(
 }
 
 /**
+ * Build a focused prompt for extracting table data from the current page.
+ *
+ * Used by the sidepanel slash command flow as a ready-to-edit extraction prompt
+ * without changing the message payload contract.
+ */
+export function buildExtractTableDataPrompt(): string {
+  return [
+    'Extract the most relevant table data from the current page.',
+    'Return a structured result with:',
+    '- selected table name or context if clear',
+    '- original headers, units, and important text kept exactly as shown',
+    '- rows as structured data',
+    'Choose the single best matching table.',
+    'Do not invent or fill missing values.',
+    'If no table is present, say clearly: No table found.',
+  ].join('\n');
+}
+
+/**
  * Format an element selector for human-readable display.
  */
 export function formatSelector(selector: ElementSelector): string {

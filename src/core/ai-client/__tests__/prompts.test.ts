@@ -3,6 +3,7 @@ import {
   buildContinuationPrompt,
   buildEnrichedUserMessage,
   buildErrorRecoveryBlock,
+  buildExtractTableDataPrompt,
   buildPageContextBlock,
   buildSessionContextBlock,
   formatSelector,
@@ -186,6 +187,17 @@ describe('ai-client prompts', () => {
       expect(prompt).toContain('**click** [CRITICAL]: Submit payment form');
       expect(prompt).toContain('**navigate** [MEDIUM]: Open account settings');
       expect(prompt).toContain('Reply "yes" or "confirm"');
+    });
+
+    it('buildExtractTableDataPrompt emphasizes structured table extraction without hallucination', () => {
+      const prompt = buildExtractTableDataPrompt();
+
+      expect(prompt).toContain('Extract the most relevant table data from the current page.');
+      expect(prompt).toContain('Return a structured result with:');
+      expect(prompt).toContain('original headers, units, and important text kept exactly as shown');
+      expect(prompt).toContain('Choose the single best matching table.');
+      expect(prompt).toContain('Do not invent or fill missing values.');
+      expect(prompt).toContain('If no table is present, say clearly: No table found.');
     });
 
     it('formatSelector builds human-readable selector text', () => {

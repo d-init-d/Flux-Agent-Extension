@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
+import { buildExtractTableDataPrompt } from '@core/ai-client/prompts/templates';
 import { InputComposer } from '../InputComposer';
 
 describe('InputComposer', () => {
@@ -40,6 +41,7 @@ describe('InputComposer', () => {
 
     expect(screen.getByText('/screenshot')).toBeInTheDocument();
     expect(screen.getByText('/extract')).toBeInTheDocument();
+    expect(screen.getByText('/extract-table')).toBeInTheDocument();
     expect(screen.getByText('/settings')).toBeInTheDocument();
     expect(screen.getByText('/summarize')).toBeInTheDocument();
   });
@@ -123,6 +125,17 @@ describe('InputComposer', () => {
     expect(textbox).toHaveValue('/screenshot ');
   });
 
+  it('inserts the extract-table prompt template from autocomplete', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/extract-t');
+    await user.keyboard('{Enter}');
+
+    expect(textbox).toHaveValue(buildExtractTableDataPrompt());
+  });
+
   it('clears listbox relationships when slash mode closes', async () => {
     const user = userEvent.setup();
     render(<InputComposer />);
@@ -164,6 +177,21 @@ describe('InputComposer', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith('/ex');
+    expect(textbox).toHaveValue('');
+    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+  });
+
+  it('expands the literal extract-table slash command before sending', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<InputComposer onSend={onSend} />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/extract-table');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith(buildExtractTableDataPrompt());
     expect(textbox).toHaveValue('');
     expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
   });

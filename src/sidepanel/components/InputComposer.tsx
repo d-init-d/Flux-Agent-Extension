@@ -1,10 +1,12 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { buildExtractTableDataPrompt } from '@core/ai-client/prompts/templates';
 import { Button } from '@/ui/components';
 
 interface SlashCommand {
   id: string;
   command: string;
   description: string;
+  insertText?: string;
 }
 
 interface InputComposerProps {
@@ -23,6 +25,12 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     id: 'extract',
     command: '/extract',
     description: 'Extract structured data from current page.',
+  },
+  {
+    id: 'extract-table',
+    command: '/extract-table',
+    description: 'Insert a prompt for extracting table data.',
+    insertText: buildExtractTableDataPrompt(),
   },
   {
     id: 'settings',
@@ -45,6 +53,19 @@ function resizeTextarea(textarea: HTMLTextAreaElement): void {
   const nextHeight = Math.min(Math.max(textarea.scrollHeight, INPUT_MIN_HEIGHT_PX), INPUT_MAX_HEIGHT_PX);
   textarea.style.height = `${nextHeight}px`;
   textarea.style.overflowY = textarea.scrollHeight > INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
+}
+
+function getCommandInsertText(command: SlashCommand): string {
+  return command.insertText ?? `${command.command} `;
+}
+
+function expandSlashCommandValue(value: string, commands: SlashCommand[]): string {
+  const matchedCommand = commands.find((command) => command.command === value);
+  if (!matchedCommand || !matchedCommand.insertText) {
+    return value;
+  }
+
+  return matchedCommand.insertText;
 }
 
 export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = false }: InputComposerProps) {
@@ -100,8 +121,8 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
     resizeTextarea(inputRef.current);
   }, [inputValue]);
 
-  const applyCommand = (command: string) => {
-    setInputValue(`${command} `);
+  const applyCommand = (command: SlashCommand) => {
+    setInputValue(getCommandInsertText(command));
     setActiveCommandIndex(0);
     inputRef.current?.focus();
   };
@@ -111,7 +132,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
       return;
     }
 
-    onSend?.(normalizedValue);
+    onSend?.(expandSlashCommandValue(normalizedValue, commands));
     setInputValue('');
   };
 
@@ -158,7 +179,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
     if ((isAutocompleteEnter || isAutocompleteTab) && filteredCommands.length > 0) {
       event.preventDefault();
       const selected = filteredCommands[activeCommandIndex] ?? filteredCommands[0];
-      applyCommand(selected.command);
+      applyCommand(selected);
     }
   };
 
@@ -208,7 +229,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
                   aria-selected={index === activeCommandIndex}
                   onMouseDown={(event) => event.preventDefault()}
                   onMouseEnter={() => setActiveCommandIndex(index)}
-                  onClick={() => applyCommand(item.command)}
+                  onClick={() => applyCommand(item)}
                   className={`cursor-pointer px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] transition-colors ${
                     index === activeCommandIndex
                       ? 'bg-[rgb(var(--color-border-default)/0.35)]'
