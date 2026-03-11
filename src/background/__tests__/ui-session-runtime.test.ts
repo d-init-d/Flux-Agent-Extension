@@ -3385,6 +3385,7 @@ describe('UI session runtime', () => {
       mode: 'documentId',
       documentId: 'frame-doc-7',
     });
+    expect(jsonExport.actions[2].action.value).toBe('[REDACTED_EMAIL]');
 
     const playwrightResponse = await runtime.handleMessage(
       createExtensionMessage('SESSION_RECORDING_EXPORT', { sessionId: sessionId!, format: 'playwright' }),
@@ -3408,7 +3409,8 @@ describe('UI session runtime', () => {
     const playwrightScript = decodeDownloadTextUrl(playwrightDownloadCall?.url ?? '');
     expect(playwrightScript).toContain("const { chromium } = require('playwright');");
     expect(playwrightScript).toContain('await page.waitForTimeout(delayMs);');
-    expect(playwrightScript).toContain('alice@example.com');
+    expect(playwrightScript).toContain('[REDACTED_EMAIL]');
+    expect(playwrightScript).not.toContain('alice@example.com');
     expect(playwrightScript).toContain('frame-doc-7');
     expect(playwrightScript).toContain('recording.actions[index]');
 
@@ -3434,7 +3436,8 @@ describe('UI session runtime', () => {
     const puppeteerScript = decodeDownloadTextUrl(puppeteerDownloadCall?.url ?? '');
     expect(puppeteerScript).toContain("const puppeteer = require('puppeteer');");
     expect(puppeteerScript).toContain('await new Promise((resolve) => setTimeout(resolve, delayMs));');
-    expect(puppeteerScript).toContain('alice@example.com');
+    expect(puppeteerScript).toContain('[REDACTED_EMAIL]');
+    expect(puppeteerScript).not.toContain('alice@example.com');
     expect(puppeteerScript).toContain('frame-doc-7');
     expect(puppeteerScript).toContain('recording.actions[index]');
   });

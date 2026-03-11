@@ -61,7 +61,9 @@ interface NetworkInterceptionManagerOptions {
 }
 
 const DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES: NetworkResourceType[] = ['XHR', 'Fetch'];
+const ALLOWED_INTERCEPTION_RESOURCE_TYPES = new Set(DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES);
 const BLOCKED_RESPONSE_HEADERS = new Set(['set-cookie', 'cookie', 'authorization']);
+const SENSITIVE_INTERCEPTION_HINTS = ['login', 'signin', 'sign-in', 'signup', 'sign-up', 'auth', 'oauth', 'token', 'session', 'password', 'passcode', 'credential', 'mfa', 'otp'];
 
 export class NetworkInterceptionManager implements INetworkInterceptionManager {
   private readonly debuggerAdapter: DebuggerAdapter;
@@ -359,9 +361,18 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
 
   private createRule(sessionId: string, tabId: number, action: NetworkRuleAction): NetworkRule {
     const compiledPatterns = action.urlPatterns.map((pattern) => this.compilePattern(pattern));
-    const resourceTypes = action.resourceTypes?.length
-      ? new Set<NetworkResourceType>(action.resourceTypes)
-      : undefined;
+    const requestedResourceTypes = action.resourceTypes?.length ? action.resourceTypes : DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES;
+    for (const resourceType of requestedResourceTypes) {
+      if (!ALLOWED_INTERCEPTION_RESOURCE_TYPES.has(resourceType)) {
+        throw new ExtensionError(
+          ErrorCode.ACTION_BLOCKED,
+          'Network interception can only target XHR or Fetch requests',
+          true,
+        );
+      }
+    }
+
+    const resourceTypes = new Set(requestedResourceTypes as NetworkResourceType[]);
 
     if (action.type === 'interceptNetwork') {
       return {
@@ -382,7 +393,7 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
       kind: 'mock',
       urlPatterns: [...action.urlPatterns],
       compiledPatterns,
-      resourceTypes: resourceTypes ?? new Set<NetworkResourceType>(DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES),
+      resourceTypes,
       mockedResponse: {
         responseCode: action.response.status,
         responseHeaders: this.buildResponseHeaders(action),
@@ -446,6 +457,17 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
         'Network interception URL patterns must target an exact host',
         true,
       );
+    }
+
+    const pathWithQuery = trimmed.replace(/https?:\/\/[/]+/i, '').toLowerCase();
+    for (const hint of SENSITIVE_INTERCEPTION_HINTS) {
+      if (pathWithQuery.includes(hint)) {
+        throw new ExtensionError(
+          ErrorCode.ACTION_BLOCKED,
+          'Network interception cannot target authentication or credential endpoints',
+          true,
+        );
+      }
     }
 
     const escaped = trimmed.replace(/[|\\{}()[\]^$+?.]/g, '\\$&').replace(/\*/g, '.*');

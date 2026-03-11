@@ -306,10 +306,10 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-13b` Upload tests
 - [x] `A-13c` Recording/playback tests
 - [x] `A-13d` Multi-tab tests
-- [ ] `A-14` Advanced security review
-- [ ] `A-14a` Intercept security
-- [ ] `A-14b` Export security
-- [ ] `A-14c` Workflow secret safety
+- [x] `A-14` Advanced security review
+- [x] `A-14a` Intercept security
+- [x] `A-14b` Export security
+- [x] `A-14c` Workflow secret safety
 
 ---
 

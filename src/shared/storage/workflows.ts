@@ -5,6 +5,7 @@ import type {
   SavedWorkflowSource,
 } from '@shared/types';
 
+import { redactPII } from '@shared/security';
 import { generateId } from '@shared/utils/id';
 
 export const SAVED_WORKFLOWS_STORAGE_KEY = 'savedWorkflows' as const;
@@ -70,7 +71,7 @@ function normalizeRecordedSessionAction(value: unknown): RecordedSessionAction |
   }
 
   return {
-    action: candidate.action,
+    action: JSON.parse(redactPII(JSON.stringify(candidate.action))) as RecordedSessionAction['action'],
     timestamp: Math.trunc(candidate.timestamp),
   };
 }

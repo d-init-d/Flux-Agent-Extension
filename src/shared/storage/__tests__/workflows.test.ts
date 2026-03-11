@@ -120,6 +120,61 @@ describe('workflow storage helpers', () => {
     });
   });
 
+  it('redacts sensitive workflow action data before persistence', async () => {
+    const stored = await setSavedWorkflowCollection({
+      version: SAVED_WORKFLOWS_VERSION,
+      items: [
+        {
+          id: 'workflow-sensitive',
+          name: 'Sensitive workflow',
+          tags: ['security'],
+          actions: [
+            createRecordedAction({
+              action: {
+                id: 'navigate-sensitive',
+                type: 'navigate',
+                url: 'https://example.com/users/alice@example.com',
+              },
+            }),
+            createRecordedAction({
+              action: {
+                id: 'fill-email',
+                type: 'fill',
+                selector: { placeholder: 'Email address' },
+                value: 'alice@example.com',
+              },
+              timestamp: 1_700_000_000_100,
+            }),
+          ],
+          createdAt: 10,
+          updatedAt: 20,
+        },
+      ],
+    });
+
+    expect(stored.items[0]?.actions).toEqual([
+      {
+        action: {
+          id: 'navigate-sensitive',
+          type: 'navigate',
+          url: 'https://example.com/users/[REDACTED_EMAIL]',
+        },
+        timestamp: 1_700_000_000_000,
+      },
+      {
+        action: {
+          id: 'fill-email',
+          type: 'fill',
+          selector: { placeholder: 'Email address' },
+          value: '[REDACTED_EMAIL]',
+        },
+        timestamp: 1_700_000_000_100,
+      },
+    ]);
+
+    await expect(readStorage(SAVED_WORKFLOWS_STORAGE_KEY)).resolves.toEqual(stored);
+  });
+
   it('persists normalized collections under the versioned savedWorkflows key', async () => {
     const value: SavedWorkflowCollection = {
       version: SAVED_WORKFLOWS_VERSION,

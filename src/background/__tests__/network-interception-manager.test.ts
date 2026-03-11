@@ -40,20 +40,20 @@ describe('NetworkInterceptionManager', () => {
       type: 'interceptNetwork',
       urlPatterns: ['https://ads.example.com/*'],
       operation: 'block',
-      resourceTypes: ['Script'],
+      resourceTypes: ['XHR'],
     });
 
     const onEvent = chrome.debugger.onEvent as unknown as DebuggerOnEventMock;
     onEvent.dispatch({ tabId: 1 }, 'Fetch.requestPaused', {
       requestId: 'req-1',
       request: { url: 'https://ads.example.com/tracker.js' },
-      resourceType: 'Script',
+      resourceType: 'XHR',
     });
 
     await flushAsyncWork();
 
     expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.enable', {
-      patterns: [{ urlPattern: 'https://ads.example.com/*', resourceType: 'Script', requestStage: 'Request' }],
+      patterns: [{ urlPattern: 'https://ads.example.com/*', resourceType: 'XHR', requestStage: 'Request' }],
     });
     expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.failRequest', {
       requestId: 'req-1',
@@ -171,6 +171,37 @@ describe('NetworkInterceptionManager', () => {
 
     expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.continueRequest', {
       requestId: 'req-session-2',
+    });
+  });
+
+  it('rejects non-XHR and non-Fetch resource types', async () => {
+    await expect(
+      manager.registerAction('session-5', 1, {
+        id: 'rule-document-response',
+        type: 'mockResponse',
+        urlPatterns: ['https://app.example.com/*'],
+        resourceTypes: ['Document'],
+        response: {
+          status: 200,
+          body: 'ok',
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 'ACTION_BLOCKED',
+    });
+  });
+
+  it('rejects authentication endpoint patterns', async () => {
+    await expect(
+      manager.registerAction('session-5', 1, {
+        id: 'rule-auth-endpoint',
+        type: 'interceptNetwork',
+        urlPatterns: ['https://accounts.example.com/oauth/token'],
+        operation: 'block',
+        resourceTypes: ['XHR'],
+      }),
+    ).rejects.toMatchObject({
+      code: 'ACTION_BLOCKED',
     });
   });
 

@@ -1241,7 +1241,7 @@ describe('Full pipeline E2E (U-16)', () => {
         id: 'export-fill-1',
         type: 'fill',
         selector: { placeholder: 'Email' },
-        value: 'qa@example.com',
+        value: '[REDACTED_EMAIL]',
       }),
     ]);
     expect(jsonExport.actions.map((entry) => entry.timestamp)).toEqual([

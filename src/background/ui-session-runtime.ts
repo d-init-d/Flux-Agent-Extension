@@ -647,11 +647,12 @@ export class UISessionRuntime {
 
     const workflows = await getSavedWorkflows();
     workflows.unshift(workflow);
-    await setSavedWorkflows(workflows);
+    const stored = await setSavedWorkflows(workflows);
+    const savedWorkflow = stored.items.find(function (item) { return item.id === workflow.id; }) ?? workflow;
 
     return {
       success: true,
-      data: { workflow: this.cloneWorkflow(workflow) },
+      data: { workflow: this.cloneWorkflow(savedWorkflow) },
     };
   }
 

@@ -4,6 +4,7 @@ import type {
   Session,
   SessionRecordingExportFormat,
 } from '@shared/types';
+import { redactPII } from '@shared/security';
 
 export interface SessionRecordingExportArtifact {
   filename: string;
@@ -60,7 +61,7 @@ export function buildSessionRecordingExportArtifact(
 }
 
 function buildJsonExport(session: Session, exportedAt: Date): SessionRecordingJsonExport {
-  return {
+  return sanitizeRecordingExport({
     schemaVersion: 1,
     exportedAt: exportedAt.toISOString(),
     sessionId: session.config.id,
@@ -73,7 +74,14 @@ function buildJsonExport(session: Session, exportedAt: Date): SessionRecordingJs
       action: JSON.parse(JSON.stringify(entry.action)) as Action,
       timestamp: entry.timestamp,
     })),
-  };
+  });
+}
+
+function sanitizeRecordingExport(recording: SessionRecordingJsonExport): SessionRecordingJsonExport {
+  return JSON.parse(
+    JSON.stringify(recording),
+    (_key, value: unknown) => (typeof value === 'string' ? redactPII(value) : value),
+  ) as SessionRecordingJsonExport;
 }
 
 function buildExportFilename(
