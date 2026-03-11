@@ -8,11 +8,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
-import { ClaudeProvider } from '@core/ai-client/providers/claude';
-import { GeminiProvider } from '@core/ai-client/providers/gemini';
-import { OllamaProvider } from '@core/ai-client/providers/ollama';
-import { OpenAIProvider } from '@core/ai-client/providers/openai';
-import { OpenRouterProvider } from '@core/ai-client/providers/openrouter';
+import { createProvider } from '@core/ai-client/provider-loader';
 import { createDefaultOnboardingState, normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@shared/storage/onboarding';
 import type { AIModelConfig, AIProviderType, ExtensionSettings, OnboardingState, ProviderConfig } from '@shared/types';
 import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Switch } from '@ui/components';
@@ -398,36 +394,9 @@ async function validateProviderConnection(
   }
 
   const config = buildValidationConfig(providerType, providerConfig, apiKey);
-
-  switch (providerType) {
-    case 'claude': {
-      const provider = new ClaudeProvider();
-      await provider.initialize(config);
-      return provider.validateApiKey(apiKey);
-    }
-    case 'openai': {
-      const provider = new OpenAIProvider();
-      await provider.initialize(config);
-      return provider.validateApiKey(apiKey);
-    }
-    case 'gemini': {
-      const provider = new GeminiProvider();
-      await provider.initialize(config);
-      return provider.validateApiKey(apiKey);
-    }
-    case 'ollama': {
-      const provider = new OllamaProvider();
-      await provider.initialize(config);
-      return provider.validateApiKey(apiKey);
-    }
-    case 'openrouter': {
-      const provider = new OpenRouterProvider();
-      await provider.initialize(config);
-      return provider.validateApiKey(apiKey);
-    }
-    default:
-      return false;
-  }
+  const provider = await createProvider(providerType);
+  await provider.initialize(config);
+  return provider.validateApiKey(apiKey);
 }
 
 export function App() {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IServiceWorkerBridge } from '@core/bridge';
 import { AIClientManager } from '@core/ai-client';
 import type { IAIProvider } from '@core/ai-client';
+import * as providerLoader from '@core/ai-client/provider-loader';
 import { CommandParser } from '@core/command-parser';
 import { Logger } from '@shared/utils';
 import type {
@@ -179,6 +180,27 @@ function createAIManager(responseText: string | string[]): {
   const provider = new MockProvider(responseText);
   manager.registerProvider(provider);
   return { manager, provider };
+}
+
+function createLazyLoadedProvider(type: IAIProvider['name'], responseText = '{"summary":"noop","actions":[]}'): IAIProvider {
+  return {
+    name: type,
+    supportsVision: false,
+    supportsStreaming: true,
+    supportsFunctionCalling: false,
+    async initialize(): Promise<void> {
+      return undefined;
+    },
+    async *chat(): AsyncGenerator<AIStreamChunk, void, unknown> {
+      yield { type: 'text', content: responseText };
+    },
+    async validateApiKey(): Promise<boolean> {
+      return true;
+    },
+    abort(): void {
+      // no-op
+    },
+  };
 }
 
 function createBridge(
@@ -831,12 +853,57 @@ describe('UI session runtime', () => {
       expect.objectContaining({ role: 'assistant', content: 'Click the Submit button' }),
     );
     expect(stateResponse.data?.session?.actionHistory).toHaveLength(1);
-  expect(stateResponse.data?.session?.actionHistory[0]).toEqual(
+    expect(stateResponse.data?.session?.actionHistory[0]).toEqual(
       expect.objectContaining({
         action: expect.objectContaining({ type: 'click' }),
         result: expect.objectContaining({ success: true }),
       }),
     );
+  });
+
+  it('lazy-registers only the active provider when using the default AI client manager', async () => {
+    const createProviderSpy = vi
+      .spyOn(providerLoader, 'createProvider')
+      .mockImplementation(async (type) => createLazyLoadedProvider(type));
+
+    try {
+      const runtime = new UISessionRuntime({
+        bridge: createBridge(async (action) => ({
+          actionId: action.id,
+          success: true,
+          duration: 5,
+        })),
+        logger: new Logger('FluxSW:test', 'debug'),
+      });
+
+      const createResponse = await runtime.handleMessage(
+        createExtensionMessage('SESSION_CREATE', {
+          config: { provider: 'openai', model: 'gpt-4o-mini' },
+        }),
+      );
+      const sessionId = createResponse.data?.session.config.id;
+
+      const firstResponse = await runtime.handleMessage(
+        createExtensionMessage('SESSION_SEND_MESSAGE', {
+          sessionId: sessionId!,
+          message: 'Say hi',
+        }),
+      );
+      expect(firstResponse.success).toBe(true);
+
+      const secondResponse = await runtime.handleMessage(
+        createExtensionMessage('SESSION_SEND_MESSAGE', {
+          sessionId: sessionId!,
+          message: 'Say hi again',
+        }),
+      );
+      expect(secondResponse.success).toBe(true);
+
+      expect(createProviderSpy).toHaveBeenCalledTimes(1);
+      expect(createProviderSpy).toHaveBeenCalledWith('openai');
+    } finally {
+      createProviderSpy.mockRestore();
+    }
   });
 
   it('routes iframe DOM actions to the resolved frame target when selector.frame uses url matching', async () => {

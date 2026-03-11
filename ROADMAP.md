@@ -480,6 +480,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | P-05a | README.md | 4h | — | Installation, usage, features |
 | P-05b | CONTRIBUTING.md | 2h | — | Dev setup, PR process |
 
+> Live execution status: `P-01a` is PASS via direct subpath imports for runtime/options/background manager dependencies. `P-01b` is now PASS: runtime and options provider paths lazy-load only the active provider through `src/core/ai-client/provider-loader.ts`, the injected `aiClientManager` test path remains unchanged, and build output now emits provider-specific chunks (`claude`, `openai`, `gemini`, `ollama`, `openrouter`, plus `provider-loader`). Verification passed with `pnpm typecheck`, targeted Vitest (`src/background/__tests__/ui-session-runtime.test.ts` and `src/options/__tests__/App.test.tsx` at `2 files / 72 tests`), full `pnpm test` at `67 files / 1107 tests`, `pnpm build`, and the same known `rollup` audit baseline only.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |

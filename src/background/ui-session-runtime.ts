@@ -1,13 +1,9 @@
 import { SessionManager } from '@core/session';
 import type { IServiceWorkerBridge } from '@core/bridge';
 import { AIClientManager } from '@core/ai-client/manager';
-import { ClaudeProvider } from '@core/ai-client/providers/claude';
-import { GeminiProvider } from '@core/ai-client/providers/gemini';
-import { OllamaProvider } from '@core/ai-client/providers/ollama';
-import { OpenAIProvider } from '@core/ai-client/providers/openai';
-import { OpenRouterProvider } from '@core/ai-client/providers/openrouter';
+import { createProvider } from '@core/ai-client/provider-loader';
 import { getSystemPrompt } from '@core/ai-client/prompts/system';
-import type { IAIClientManager } from '@core/ai-client/interfaces';
+import type { IAIClientManager, IAIProvider } from '@core/ai-client/interfaces';
 import { CommandParser } from '@core/command-parser';
 import type { ParserConfig } from '@core/command-parser';
 import { ActionOrchestrator } from '@core/orchestrator';
@@ -121,10 +117,6 @@ type RuntimeHandlerResponse<T extends keyof ResponsePayloadMap> = Promise<Extens
 
 type AbortableAIClientManager = IAIClientManager & { abort?: () => void };
 
-class CustomOpenAICompatibleProvider extends OpenAIProvider {
-  override readonly name = 'custom' as const;
-}
-
 interface UISessionRuntimeOptions {
   bridge: IServiceWorkerBridge;
   logger: Logger;
@@ -168,6 +160,9 @@ export class UISessionRuntime {
   private readonly deviceEmulationManager: IDeviceEmulationManager;
   private readonly geolocationMockManager: IGeolocationMockManager;
   private readonly fileUploadManager: IFileUploadManager;
+  private readonly usesDefaultAIClientManager: boolean;
+  private readonly defaultProviderRegistrations = new Map<SessionConfig['provider'], Promise<void>>();
+  private readonly registeredDefaultProviders = new Set<SessionConfig['provider']>();
   private readonly frameRegistry: FrameRegistry = new Map();
   private readonly bridgeFrameUnsubscribers: Array<() => void> = [];
   private readonly streamControllers = new Map<string, AbortController>();
@@ -181,6 +176,7 @@ export class UISessionRuntime {
   constructor(options: UISessionRuntimeOptions) {
     this.bridge = options.bridge;
     this.logger = options.logger.child('UISessionRuntime');
+    this.usesDefaultAIClientManager = !options.aiClientManager;
     this.aiClientManager = options.aiClientManager ?? this.createDefaultAIClientManager();
     this.parserFactory = options.parserFactory;
     this.tabManager = options.tabManager ?? new TabManager();
@@ -1405,14 +1401,44 @@ export class UISessionRuntime {
   }
 
   private createDefaultAIClientManager(): AbortableAIClientManager {
-    const manager = new AIClientManager();
-    manager.registerProvider(new ClaudeProvider());
-    manager.registerProvider(new OpenAIProvider());
-    manager.registerProvider(new GeminiProvider());
-    manager.registerProvider(new OllamaProvider());
-    manager.registerProvider(new OpenRouterProvider());
-    manager.registerProvider(new CustomOpenAICompatibleProvider());
-    return manager;
+    return new AIClientManager();
+  }
+
+  private async ensureDefaultProviderRegistered(type: SessionConfig['provider']): Promise<void> {
+    if (!this.usesDefaultAIClientManager || this.registeredDefaultProviders.has(type)) {
+      return;
+    }
+
+    const existingRegistration = this.defaultProviderRegistrations.get(type);
+    if (existingRegistration) {
+      await existingRegistration;
+      return;
+    }
+
+    const registration = this.registerDefaultProvider(type);
+    this.defaultProviderRegistrations.set(type, registration);
+
+    try {
+      await registration;
+      this.registeredDefaultProviders.add(type);
+    } finally {
+      this.defaultProviderRegistrations.delete(type);
+    }
+  }
+
+  private async registerDefaultProvider(type: SessionConfig['provider']): Promise<void> {
+    const provider = type === 'custom' ? await this.createCustomProvider() : await createProvider(type);
+    this.aiClientManager.registerProvider(provider);
+  }
+
+  private async createCustomProvider(): Promise<IAIProvider> {
+    const { OpenAIProvider } = await import('@core/ai-client/providers/openai');
+
+    class CustomOpenAICompatibleProvider extends OpenAIProvider {
+      override readonly name = 'custom' as const;
+    }
+
+    return new CustomOpenAICompatibleProvider();
   }
 
   private async loadRuntimeState(): Promise<RuntimeState> {
@@ -1537,6 +1563,7 @@ export class UISessionRuntime {
     }
 
     const providerConfig = this.resolveProviderConfig(session.config.provider, runtimeState);
+    await this.ensureDefaultProviderRegistered(session.config.provider);
     await this.aiClientManager.switchProvider(session.config.provider, {
       provider: session.config.provider,
       model: session.config.model,
