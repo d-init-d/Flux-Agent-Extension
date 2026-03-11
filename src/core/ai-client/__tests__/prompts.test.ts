@@ -6,6 +6,7 @@ import {
   buildErrorRecoveryBlock,
   buildExtractTableDataPrompt,
   buildFillFormFromProfilePrompt,
+  buildMonitorPageChangesPrompt,
   buildPageContextBlock,
   buildSessionContextBlock,
   formatSelector,
@@ -222,6 +223,17 @@ describe('ai-client prompts', () => {
       expect(prompt).toContain('Keep pricing text, units, and qualifiers exactly as shown');
       expect(prompt).toContain('finish with the cheapest clear option plus any notable trade-offs.');
       expect(prompt).toContain('If fewer than two relevant pricing sources are available, say that clearly before continuing.');
+    });
+
+    it('buildMonitorPageChangesPrompt frames monitoring as an in-session or manual workflow', () => {
+      const prompt = buildMonitorPageChangesPrompt();
+
+      expect(prompt).toContain('Monitor the current page for meaningful changes using only the actions available in this active Flux session.');
+      expect(prompt).toContain('capture a clear baseline from what is visible now.');
+      expect(prompt).toContain('keep the plan finite and explicit instead of implying background or scheduled monitoring.');
+      expect(prompt).toContain('frame the workflow as a manual re-run or guided revisit');
+      expect(prompt).toContain('Alert me only when a meaningful change is found');
+      expect(prompt).toContain('without claiming you will keep watching automatically.');
     });
 
     it('formatSelector builds human-readable selector text', () => {

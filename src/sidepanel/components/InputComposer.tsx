@@ -3,6 +3,7 @@ import {
   buildComparePricesPrompt,
   buildExtractTableDataPrompt,
   buildFillFormFromProfilePrompt,
+  buildMonitorPageChangesPrompt,
 } from '@core/ai-client/prompts/templates';
 import { Button } from '@/ui/components';
 
@@ -47,6 +48,12 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     command: '/fill-from-profile',
     description: 'Insert a prompt for filling a form from saved profile data.',
     insertText: buildFillFormFromProfilePrompt(),
+  },
+  {
+    id: 'monitor-page-changes',
+    command: '/monitor-page-changes',
+    description: 'Insert a prompt for checking the current page for meaningful changes.',
+    insertText: buildMonitorPageChangesPrompt(),
   },
   {
     id: 'settings',

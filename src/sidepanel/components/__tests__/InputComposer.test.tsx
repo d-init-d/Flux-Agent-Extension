@@ -5,6 +5,7 @@ import {
   buildComparePricesPrompt,
   buildExtractTableDataPrompt,
   buildFillFormFromProfilePrompt,
+  buildMonitorPageChangesPrompt,
 } from '@core/ai-client/prompts/templates';
 import { InputComposer } from '../InputComposer';
 
@@ -48,6 +49,7 @@ describe('InputComposer', () => {
     expect(screen.getByText('/extract-table')).toBeInTheDocument();
     expect(screen.getByText('/compare-prices')).toBeInTheDocument();
     expect(screen.getByText('/fill-from-profile')).toBeInTheDocument();
+    expect(screen.getByText('/monitor-page-changes')).toBeInTheDocument();
     expect(screen.getByText('/settings')).toBeInTheDocument();
     expect(screen.getByText('/summarize')).toBeInTheDocument();
   });
@@ -164,6 +166,17 @@ describe('InputComposer', () => {
     expect(textbox).toHaveValue(buildComparePricesPrompt());
   });
 
+  it('inserts the monitor-page-changes prompt template from autocomplete', async () => {
+    const user = userEvent.setup();
+    render(<InputComposer />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/monitor-p');
+    await user.keyboard('{Enter}');
+
+    expect(textbox).toHaveValue(buildMonitorPageChangesPrompt());
+  });
+
   it('clears listbox relationships when slash mode closes', async () => {
     const user = userEvent.setup();
     render(<InputComposer />);
@@ -250,6 +263,21 @@ describe('InputComposer', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith(buildComparePricesPrompt());
+    expect(textbox).toHaveValue('');
+    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+  });
+
+  it('expands the literal monitor-page-changes slash command before sending', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    render(<InputComposer onSend={onSend} />);
+
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+    await user.type(textbox, '/monitor-page-changes');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend).toHaveBeenCalledWith(buildMonitorPageChangesPrompt());
     expect(textbox).toHaveValue('');
     expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
   });

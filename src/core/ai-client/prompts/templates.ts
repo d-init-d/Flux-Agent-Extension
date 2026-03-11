@@ -344,6 +344,23 @@ export function buildComparePricesPrompt(): string {
 }
 
 /**
+ * Build a focused prompt for checking the current page for meaningful changes.
+ *
+ * Used by the sidepanel slash command flow as a ready-to-edit monitoring prompt
+ * without changing the message payload contract or promising unsupported background scheduling.
+ */
+export function buildMonitorPageChangesPrompt(): string {
+  return [
+    'Monitor the current page for meaningful changes using only the actions available in this active Flux session.',
+    'Start by identifying the specific page areas, values, or status text that matter most and capture a clear baseline from what is visible now.',
+    'Use waits, reloads, extracts, screenshots, or tab switches only as needed for an in-session re-check, and keep the plan finite and explicit instead of implying background or scheduled monitoring.',
+    'If long-running periodic monitoring would be needed, say that clearly and frame the workflow as a manual re-run or guided revisit using the available actions.',
+    'Alert me only when a meaningful change is found by explaining exactly what changed, where it changed on the page, and the evidence that supports it; ignore cosmetic or irrelevant differences.',
+    'If nothing meaningful has changed yet, say so clearly, summarize the latest check, and recommend the next manual revisit step or interval without claiming you will keep watching automatically.',
+  ].join('\n');
+}
+
+/**
  * Format an element selector for human-readable display.
  */
 export function formatSelector(selector: ElementSelector): string {
