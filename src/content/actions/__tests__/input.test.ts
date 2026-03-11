@@ -1,5 +1,5 @@
 import { ErrorCode } from '@shared/errors';
-import type { CheckAction, FillAction, SelectAction, TypeAction } from '@shared/types';
+import type { CheckAction, FillAction, SelectAction, SerializedFileUpload, TypeAction, UploadFileAction } from '@shared/types';
 import { SelectorEngine } from '../../dom/selector-engine';
 import { executeInputAction } from '../input';
 
@@ -127,6 +127,68 @@ describe('executeInputAction', () => {
     const uncheckResult = await executeInputAction(uncheckAction, selectorEngine);
     expect(uncheckResult.success).toBe(true);
     expect(input.checked).toBe(false);
+  });
+
+  it('uploads staged files into a file input', async () => {
+    document.body.innerHTML = '<input id="resume" type="file" multiple />';
+    const action: UploadFileAction = {
+      id: 'upload-1',
+      type: 'uploadFile',
+      selector: { css: '#resume' },
+      fileIds: ['file-1'],
+    };
+    const uploads: SerializedFileUpload[] = [
+      {
+        id: 'file-1',
+        name: 'resume.txt',
+        mimeType: 'text/plain',
+        size: 4,
+        lastModified: 1700000000000,
+        base64Data: 'dGVzdA==',
+      },
+    ];
+
+    const result = await executeInputAction(action, selectorEngine, uploads);
+    const input = document.getElementById('resume') as HTMLInputElement;
+
+    expect(result.success).toBe(true);
+    expect(input.files).toHaveLength(1);
+    expect(input.files?.[0]?.name).toBe('resume.txt');
+    expect(result.data).toEqual({ uploadedFileCount: 1, fileIds: ['file-1'] });
+  });
+
+  it('returns FILE_UPLOAD_INVALID when uploading multiple files into a single-file input', async () => {
+    document.body.innerHTML = '<input id="resume" type="file" />';
+    const action: UploadFileAction = {
+      id: 'upload-invalid',
+      type: 'uploadFile',
+      selector: { css: '#resume' },
+      fileIds: ['file-1', 'file-2'],
+    };
+    const uploads: SerializedFileUpload[] = [
+      {
+        id: 'file-1',
+        name: 'resume.txt',
+        mimeType: 'text/plain',
+        size: 4,
+        lastModified: 1700000000000,
+        base64Data: 'dGVzdA==',
+      },
+      {
+        id: 'file-2',
+        name: 'cover.txt',
+        mimeType: 'text/plain',
+        size: 5,
+        lastModified: 1700000000001,
+        base64Data: 'aGVsbG8=',
+      },
+    ];
+
+    const result = await executeInputAction(action, selectorEngine, uploads);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ACTION_FAILED);
+    expect(result.error?.message).toContain('Failed to execute action');
   });
 
   it('returns error for invalid select option', async () => {

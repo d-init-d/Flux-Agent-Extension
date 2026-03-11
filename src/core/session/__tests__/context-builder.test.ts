@@ -6,6 +6,13 @@ function createPageContext(count = 3): PageContext {
     url: 'https://app.example.com/dashboard',
     title: 'Dashboard',
     summary: 'Main dashboard with widgets',
+    frame: {
+      frameId: 0,
+      parentFrameId: null,
+      url: 'https://app.example.com/dashboard',
+      origin: 'https://app.example.com',
+      isTop: true,
+    },
     interactiveElements: Array.from({ length: count }, (_, index) => ({
       index,
       tag: 'button',
@@ -50,6 +57,32 @@ function createSession(): Session {
     },
     status: 'running',
     targetTabId: 12,
+    recording: {
+      status: 'idle',
+      actions: [],
+      startedAt: null,
+      updatedAt: null,
+    },
+    tabSnapshot: [
+      {
+        tabIndex: 0,
+        id: 12,
+        url: 'https://app.example.com/dashboard?token=secret#billing',
+        title: 'Dashboard - Internal Workspace Alpha',
+        status: 'complete',
+        isActive: true,
+        isTarget: true,
+      },
+      {
+        tabIndex: 1,
+        id: 18,
+        url: 'https://docs.example.com/guide?draft=phoenix#private-notes',
+        title: 'Guide | Confidential Project Phoenix',
+        status: 'loading',
+        isActive: false,
+        isTarget: false,
+      },
+    ],
     messages: [
       { role: 'user', content: 'Open dashboard', timestamp: now - 3_000 },
       { role: 'assistant', content: 'Dashboard is open', timestamp: now - 2_000 },
@@ -79,9 +112,39 @@ describe('ContextBuilder', () => {
 
     expect(context).toContain('## Page Context');
     expect(context).toContain('## Session State');
+    expect(context).toContain('## Tabs');
     expect(context).toContain('## Recent Messages');
     expect(context).toContain('## Action History');
     expect(context).toContain('## DOM Snapshot');
+  });
+
+  it('renders synchronized tab mappings with zero-based tabIndex markers', () => {
+    const builder = new ContextBuilder();
+    const context = builder.buildContext(createPageContext(), createSession(), {
+      includeDOM: false,
+    });
+
+    expect(context).toContain('Target Tab: 12 (tabIndex 0)');
+    expect(context).toContain('Use these zero-based tabIndex values for switchTab and closeTab.');
+    expect(context).toContain('[0] id=12 markers=target, active, complete');
+    expect(context).toContain('[1] id=18 markers=loading');
+  });
+
+  it('never exposes raw tab titles and only keeps redacted tab locations in the AI tabs block', () => {
+    const builder = new ContextBuilder();
+    const context = builder.buildContext(createPageContext(), createSession(), {
+      includeDOM: false,
+    });
+
+    expect(context).toContain('location="app.example.com/dashboard"');
+    expect(context).toContain('location="docs.example.com/guide"');
+    expect(context).not.toContain('label="');
+    expect(context).not.toContain('token=secret');
+    expect(context).not.toContain('#billing');
+    expect(context).not.toContain('Dashboard - Internal Workspace Alpha');
+    expect(context).not.toContain('Guide | Confidential Project Phoenix');
+    expect(context).not.toContain('Confidential Project Phoenix');
+    expect(context).not.toContain('Internal Workspace Alpha');
   });
 
   it('respects includeDOM/includeScreenshot/includeNetwork options', () => {

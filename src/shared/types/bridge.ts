@@ -1,6 +1,13 @@
-import type { Action } from './actions';
-import type { ElementSelector } from './actions';
-import type { PageContext } from './browser';
+import type {
+  ClickAction,
+  FillAction,
+  NavigateAction,
+  Action,
+  ElementSelector,
+  FrameTarget,
+} from './actions';
+import type { FrameDescriptor, PageContext } from './browser';
+import type { SerializedFileUpload } from './uploads';
 
 /**
  * Message types for content script communication
@@ -11,6 +18,7 @@ export type MessageType =
   | 'GET_PAGE_CONTEXT'
   | 'HIGHLIGHT_ELEMENT'
   | 'CLEAR_HIGHLIGHTS'
+  | 'SET_RECORDING_STATE'
   | 'PING'
 
   // Responses (Content Script -> Service Worker)
@@ -23,6 +31,9 @@ export type MessageType =
   | 'PAGE_LOADED'
   | 'PAGE_UNLOAD'
   | 'DOM_MUTATION'
+  | 'RECORDED_CLICK'
+  | 'RECORDED_INPUT'
+  | 'RECORDED_NAVIGATION'
   | 'NETWORK_REQUEST'
   | 'CONSOLE_LOG';
 
@@ -36,6 +47,15 @@ export interface BridgeMessage<T = unknown> {
   payload: T;
 }
 
+export interface BridgeSendTarget {
+  frameId?: number;
+  documentId?: string;
+}
+
+export interface BridgeFrameContext extends FrameDescriptor {
+  tabId?: number;
+}
+
 /**
  * Message payloads
  */
@@ -43,6 +63,7 @@ export interface ExecuteActionPayload {
   action: Action;
   context: {
     variables: Record<string, unknown>; // Variable store
+    uploads?: SerializedFileUpload[];
   };
 }
 
@@ -58,6 +79,11 @@ export interface ActionResultPayload {
   duration: number;
 }
 
+export interface GetPageContextPayload {
+  frame?: FrameTarget;
+  includeChildFrames?: boolean;
+}
+
 export interface PageContextPayload {
   context: PageContext;
 }
@@ -66,4 +92,20 @@ export interface HighlightPayload {
   selector: ElementSelector;
   color?: string;
   duration?: number; // Auto-clear after ms
+}
+
+export interface SetRecordingStatePayload {
+  active: boolean;
+}
+
+export interface RecordedClickPayload {
+  action: ClickAction;
+}
+
+export interface RecordedInputPayload {
+  action: FillAction;
+}
+
+export interface RecordedNavigationPayload {
+  action: NavigateAction;
 }

@@ -71,6 +71,37 @@ export type TouchEmulationParams = {
   maxTouchPoints?: number;
 } & CDPParams;
 
+export type GeolocationOverrideParams = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+} & CDPParams;
+
+export type SetFileInputFilesParams = {
+  files: string[];
+  nodeId?: number;
+  backendNodeId?: number;
+  objectId?: string;
+} & CDPParams;
+
+export type PrintToPDFParams = {
+  landscape?: boolean;
+  displayHeaderFooter?: boolean;
+  printBackground?: boolean;
+  scale?: number;
+  paperWidth?: number;
+  paperHeight?: number;
+  marginTop?: number;
+  marginRight?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  pageRanges?: string;
+  headerTemplate?: string;
+  footerTemplate?: string;
+  preferCSSPageSize?: boolean;
+  transferMode?: 'ReturnAsBase64' | 'ReturnAsStream';
+} & CDPParams;
+
 export type DebuggerEvent = {
   tabId: number;
   method: string;
@@ -278,6 +309,36 @@ export class DebuggerAdapter {
 
   async setTouchEmulationEnabled(tabId: number, params: TouchEmulationParams): Promise<void> {
     await this.sendCommand(tabId, 'Emulation.setTouchEmulationEnabled', params);
+  }
+
+  async setGeolocationOverride(tabId: number, params: GeolocationOverrideParams): Promise<void> {
+    await this.sendCommand(tabId, 'Emulation.setGeolocationOverride', params);
+  }
+
+  async clearGeolocationOverride(tabId: number): Promise<void> {
+    await this.sendCommand(tabId, 'Emulation.clearGeolocationOverride');
+  }
+
+  async setFileInputFiles(tabId: number, params: SetFileInputFilesParams): Promise<void> {
+    await this.sendCommand(tabId, 'DOM.setFileInputFiles', params);
+  }
+
+  async printToPDF(tabId: number, params?: PrintToPDFParams): Promise<string> {
+    const result = await this.sendCommand<PrintToPDFParams | undefined, { data?: unknown }>(
+      tabId,
+      'Page.printToPDF',
+      params,
+    );
+
+    if (typeof result.data !== 'string' || result.data.length === 0) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_FAILED,
+        `Failed to generate PDF for tab ${tabId}: response did not include base64 PDF data`,
+        false,
+      );
+    }
+
+    return result.data;
   }
 
   onEvent(listener: DebuggerEventListener): () => void {

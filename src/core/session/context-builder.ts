@@ -35,6 +35,7 @@ export class ContextBuilder {
     const sections: string[] = [
       this.buildPageSection(pageContext),
       this.buildSessionSection(session),
+      this.buildTabsSection(session),
       this.buildMessagesSection(session),
       this.buildVariablesSection(session),
       this.buildActionHistorySection(session),
@@ -84,6 +85,7 @@ export class ContextBuilder {
       '## Page Context',
       `- URL: ${this.sanitize(pageContext.url)}`,
       `- Title: ${this.sanitize(pageContext.title)}`,
+      `- Frame: ${pageContext.frame.isTop ? 'main frame' : `iframe ${pageContext.frame.frameId}`} (${this.sanitize(pageContext.frame.url)})`,
       `- Summary: ${summary}`,
       `- Viewport: ${viewport.width}x${viewport.height} @ (${viewport.scrollX}, ${viewport.scrollY})`,
       `- Scroll Height: ${viewport.scrollHeight}`,
@@ -91,10 +93,13 @@ export class ContextBuilder {
       `- Headings: ${pageContext.headings.length}`,
       `- Links: ${pageContext.links.length}`,
       `- Forms: ${pageContext.forms.length}`,
+      `- Child Frames: ${pageContext.childFrames?.length ?? 0}`,
     ].join('\n');
   }
 
   private buildSessionSection(session: Session): string {
+    const targetTab = session.tabSnapshot.find((tab) => tab.isTarget);
+
     return [
       '## Session State',
       `- Session ID: ${this.sanitize(session.config.id)}`,
@@ -103,11 +108,57 @@ export class ContextBuilder {
       `- Provider: ${session.config.provider}`,
       `- Model: ${this.sanitize(session.config.model)}`,
       `- Current Turn: ${session.currentTurn}`,
-      `- Target Tab: ${session.targetTabId ?? 'none'}`,
+      `- Target Tab: ${session.targetTabId ?? 'none'}${targetTab ? ` (tabIndex ${targetTab.tabIndex})` : ''}`,
       `- Error Count: ${session.errorCount}`,
       `- Started At: ${new Date(session.startedAt).toISOString()}`,
       `- Last Activity: ${new Date(session.lastActivityAt).toISOString()}`,
     ].join('\n');
+  }
+
+  private buildTabsSection(session: Session): string {
+    if (session.tabSnapshot.length === 0) {
+      return '## Tabs\n- (none)';
+    }
+
+    const lines: string[] = [
+      '## Tabs',
+      '- Use these zero-based tabIndex values for switchTab and closeTab.',
+      '- Markers: target = session target/current page context, active = browser-focused tab.',
+      '- Privacy: tab titles are never included here; use markers plus redacted location hints only.',
+    ];
+
+    for (const tab of session.tabSnapshot) {
+      const markers = [
+        tab.isTarget ? 'target' : null,
+        tab.isActive ? 'active' : null,
+        tab.status,
+      ]
+        .filter((value): value is string => value !== null)
+        .join(', ');
+      const tabLocation = this.summarizeTabLocation(tab.url);
+
+      lines.push(
+        `- [${tab.tabIndex}] id=${tab.id} markers=${markers} location="${tabLocation}"`,
+      );
+    }
+
+    return lines.join('\n');
+  }
+
+  private summarizeTabLocation(url: string): string {
+    const sanitized = this.sanitize(url);
+    if (sanitized.length === 0) {
+      return '(unknown)';
+    }
+
+    try {
+      const parsed = new URL(sanitized);
+      const host = parsed.host || parsed.protocol.replace(/:$/u, '');
+      const path = parsed.pathname && parsed.pathname.length > 0 ? parsed.pathname : '/';
+      return this.truncate(`${host}${path}`, 120);
+    } catch {
+      return this.truncate(sanitized.split(/[?#]/u, 1)[0] ?? sanitized, 120);
+    }
   }
 
   private buildMessagesSection(session: Session): string {
@@ -225,6 +276,17 @@ export class ContextBuilder {
       for (const form of forms) {
         lines.push(
           `  - action="${this.truncate(this.sanitize(form.action), 100)}" method=${this.sanitize(form.method)} fields=${form.fields.length}`,
+        );
+      }
+    }
+
+    const childFrames = pageContext.childFrames ?? [];
+    if (childFrames.length > 0) {
+      lines.push('- Child Frames:');
+      for (const childFrame of childFrames.slice(0, 12)) {
+        const descriptor = childFrame.frame;
+        lines.push(
+          `  - frameId=${descriptor.frameId} url="${this.truncate(this.sanitize(descriptor.url), 140)}" title="${this.truncate(this.sanitize(childFrame.title ?? ''), 80)}" interactive=${childFrame.interactiveElementCount ?? 0}`,
         );
       }
     }

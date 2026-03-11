@@ -12,7 +12,7 @@
  */
 
 import { ContentScriptBridge } from '@core/bridge';
-import { Logger } from '@shared/utils';
+import { generateId, Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
 import { DOMInspector } from './dom/inspector';
 import { AutoWaitEngine } from './dom/auto-wait-engine';
@@ -25,8 +25,17 @@ import { ActionStatusOverlay } from './action-status-overlay';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
+  FillAction,
+  GetPageContextPayload,
   PageContextPayload,
   HighlightPayload,
+  SetRecordingStatePayload,
+  RecordedClickPayload,
+  RecordedInputPayload,
+  RecordedNavigationPayload,
+  ClickAction,
+  ElementSelector,
+  NavigateAction,
 } from '@shared/types';
 
 // ============================================================================
@@ -57,6 +66,37 @@ const HIGHLIGHT_Z_INDEX = '2147483647';
 const DEFAULT_HIGHLIGHT_COLOR = '#FF6B35';
 const HIGHLIGHT_DATA_ATTR = 'data-flux-highlight';
 const HIGHLIGHT_STYLE_ID = 'flux-highlight-styles';
+const RECORDED_INPUT_DEBOUNCE_MS = 600;
+const NAVIGATION_ACTIVITY_EVENT_NAME = '__flux_navigation_activity__';
+const RECORDABLE_CLICK_SELECTOR = [
+  'button',
+  'a[href]',
+  'input',
+  'select',
+  'textarea',
+  'label',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[data-testid]',
+  '[aria-label]',
+].join(', ');
+const RECORDABLE_TEXT_INPUT_TYPES = new Set([
+  'text',
+  'search',
+  'email',
+  'url',
+  'tel',
+  'number',
+]);
+const SENSITIVE_INPUT_AUTOCOMPLETE_TOKENS = new Set([
+  'current-password',
+  'new-password',
+  'one-time-code',
+]);
+const SENSITIVE_INPUT_HINT_PATTERN =
+  /\b(?:password|passcode|otp|one[\s_-]*time[\s_-]*code|token|secret|api[\s_-]*key)\b/i;
 
 interface ActiveHighlight {
   element: HTMLElement;
@@ -90,6 +130,21 @@ export class ContentScriptManager {
 
   private unloadHandler: (() => void) | null = null;
   private commandUnsubscribers: (() => void)[] = [];
+  private recordingActive = false;
+  private readonly pendingRecordedInputTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
+  private readonly lastRecordedInputValues = new Map<HTMLElement, string>();
+  private readonly boundClickCapture = (event: MouseEvent) => {
+    this.handleRecordedClick(event);
+  };
+  private readonly boundInputCapture = (event: Event) => {
+    this.handleRecordedInputEvent(event);
+  };
+  private readonly boundInputCommitCapture = (event: Event) => {
+    this.commitRecordedInputEvent(event);
+  };
+  private readonly boundNavigationActivityCapture = (event: Event) => {
+    this.handleRecordedNavigationEvent(event);
+  };
 
   constructor() {
     this.bridge = new ContentScriptBridge();
@@ -153,6 +208,10 @@ export class ContentScriptManager {
       this.unloadHandler = null;
     }
 
+    if (this.recordingActive) {
+      this.teardownRecordingListeners();
+    }
+
     this.autoWaitEngine.destroy();
 
     this.bridge.destroy();
@@ -172,9 +231,9 @@ export class ContentScriptManager {
     );
 
     this.commandUnsubscribers.push(
-      this.bridge.onCommand<undefined>(
+      this.bridge.onCommand<GetPageContextPayload | undefined>(
         'GET_PAGE_CONTEXT',
-        () => this.handleGetPageContext(),
+        (payload) => this.handleGetPageContext(payload),
       ),
     );
 
@@ -189,6 +248,13 @@ export class ContentScriptManager {
       this.bridge.onCommand<undefined>(
         'CLEAR_HIGHLIGHTS',
         () => this.handleClearHighlights(),
+      ),
+    );
+
+    this.commandUnsubscribers.push(
+      this.bridge.onCommand<SetRecordingStatePayload>(
+        'SET_RECORDING_STATE',
+        (payload) => this.handleSetRecordingState(payload),
       ),
     );
   }
@@ -213,7 +279,7 @@ export class ContentScriptManager {
     }
 
     try {
-      const result = await this.executeAction(action);
+      const result = await this.executeAction(payload);
 
       if (this.shouldUpdateActionOverlay(actionRunId, showFloatingBar)) {
         this.actionStatusOverlay.showResult(action, result);
@@ -233,7 +299,9 @@ export class ContentScriptManager {
     return showFloatingBar && !this.isDestroyed && this.latestActionRunId === actionRunId;
   }
 
-  private async executeAction(action: ExecuteActionPayload['action']): Promise<ActionResultPayload> {
+  private async executeAction(payload: ExecuteActionPayload): Promise<ActionResultPayload> {
+    const { action } = payload;
+
     switch (action.type) {
       case 'click':
       case 'doubleClick':
@@ -244,10 +312,11 @@ export class ContentScriptManager {
       case 'fill':
       case 'type':
       case 'clear':
+      case 'uploadFile':
       case 'select':
       case 'check':
       case 'uncheck':
-        return executeInputAction(action, this.selectorEngine);
+        return executeInputAction(action, this.selectorEngine, payload.context.uploads ?? []);
       case 'scroll':
       case 'scrollIntoView':
         return executeScrollAction(action, this.selectorEngine);
@@ -299,7 +368,9 @@ export class ContentScriptManager {
   // GET_PAGE_CONTEXT (Full implementation)
   // --------------------------------------------------------------------------
 
-  private async handleGetPageContext(): Promise<PageContextPayload> {
+  private async handleGetPageContext(
+    _payload?: GetPageContextPayload,
+  ): Promise<PageContextPayload> {
     this.logger.debug('GET_PAGE_CONTEXT received');
     return { context: this.domInspector.buildPageContext() };
   }
@@ -367,6 +438,417 @@ export class ContentScriptManager {
     this.logger.debug('CLEAR_HIGHLIGHTS received');
     const cleared = this.removeAllHighlights();
     return { cleared };
+  }
+
+  private async handleSetRecordingState(
+    payload: SetRecordingStatePayload,
+  ): Promise<{ active: boolean }> {
+    const active = payload.active === true;
+    if (active === this.recordingActive) {
+      return { active };
+    }
+
+    this.recordingActive = active;
+
+    if (active) {
+      this.setupRecordingListeners();
+    } else {
+      this.teardownRecordingListeners();
+    }
+
+    this.logger.debug('Recording state updated', { active });
+    return { active };
+  }
+
+  private handleRecordedClick(event: MouseEvent): void {
+    if (!this.recordingActive || !event.isTrusted) {
+      return;
+    }
+
+    const action = this.buildRecordedClickAction(event);
+    if (!action) {
+      return;
+    }
+
+    this.bridge.emit('RECORDED_CLICK', { action } satisfies RecordedClickPayload);
+  }
+
+  private handleRecordedInputEvent(event: Event): void {
+    if (!this.recordingActive || !event.isTrusted) {
+      return;
+    }
+
+    const target = this.resolveRecordedInputTarget(event);
+    if (!target) {
+      return;
+    }
+
+    const existingTimer = this.pendingRecordedInputTimers.get(target);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      this.pendingRecordedInputTimers.delete(target);
+      this.emitRecordedInputAction(target);
+    }, RECORDED_INPUT_DEBOUNCE_MS);
+
+    this.pendingRecordedInputTimers.set(target, timeoutId);
+  }
+
+  private commitRecordedInputEvent(event: Event): void {
+    if (!this.recordingActive || !event.isTrusted) {
+      return;
+    }
+
+    const target = this.resolveRecordedInputTarget(event);
+    if (!target) {
+      return;
+    }
+
+    const existingTimer = this.pendingRecordedInputTimers.get(target);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+      this.pendingRecordedInputTimers.delete(target);
+    }
+
+    this.emitRecordedInputAction(target);
+  }
+
+  private emitRecordedInputAction(target: HTMLElement): void {
+    const action = this.buildRecordedInputAction(target);
+    if (!action) {
+      return;
+    }
+
+    const currentValue = this.getRecordableInputValue(target);
+    if (currentValue === null || this.lastRecordedInputValues.get(target) === currentValue) {
+      return;
+    }
+
+    this.lastRecordedInputValues.set(target, currentValue);
+    this.bridge.emit('RECORDED_INPUT', { action } satisfies RecordedInputPayload);
+  }
+
+  private buildRecordedClickAction(event: MouseEvent): ClickAction | null {
+    const element = this.resolveRecordedClickElement(event);
+    if (!element) {
+      return null;
+    }
+
+    const selector = this.buildRecordedSelector(element);
+    if (!selector) {
+      return null;
+    }
+
+    const rect = element.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    return {
+      id: `recorded-click-${generateId(10)}`,
+      type: 'click',
+      selector,
+      position: {
+        x: Math.round(event.clientX - centerX),
+        y: Math.round(event.clientY - centerY),
+      },
+    };
+  }
+
+  private resolveRecordedClickElement(event: MouseEvent): HTMLElement | null {
+    for (const candidate of event.composedPath()) {
+      if (!(candidate instanceof Element)) {
+        continue;
+      }
+
+      const resolved = candidate.closest(RECORDABLE_CLICK_SELECTOR) ?? candidate;
+      if (resolved instanceof HTMLElement) {
+        return resolved;
+      }
+    }
+
+    return event.target instanceof HTMLElement ? event.target : null;
+  }
+
+  private resolveRecordedInputTarget(event: Event): HTMLElement | null {
+    for (const candidate of event.composedPath()) {
+      if (!(candidate instanceof HTMLElement)) {
+        continue;
+      }
+
+      if (this.isRecordableInputTarget(candidate)) {
+        return candidate;
+      }
+    }
+
+    return event.target instanceof HTMLElement && this.isRecordableInputTarget(event.target)
+      ? event.target
+      : null;
+  }
+
+  private isRecordableInputTarget(element: HTMLElement): boolean {
+    if (element instanceof HTMLTextAreaElement) {
+      return !element.disabled && !element.readOnly && !this.isSensitiveRecordedInputTarget(element);
+    }
+
+    if (element instanceof HTMLInputElement) {
+      const type = (element.type || 'text').toLowerCase();
+      return (
+        !element.disabled &&
+        !element.readOnly &&
+        RECORDABLE_TEXT_INPUT_TYPES.has(type) &&
+        !this.isSensitiveRecordedInputTarget(element)
+      );
+    }
+
+    return element.isContentEditable && !this.isSensitiveRecordedInputTarget(element);
+  }
+
+  private isSensitiveRecordedInputTarget(element: HTMLElement): boolean {
+    if (element instanceof HTMLInputElement && element.type.toLowerCase() === 'password') {
+      return true;
+    }
+
+    const autocomplete = element.getAttribute('autocomplete');
+    if (autocomplete) {
+      const autocompleteTokens = autocomplete
+        .toLowerCase()
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0);
+
+      if (
+        autocompleteTokens.some((token) => SENSITIVE_INPUT_AUTOCOMPLETE_TOKENS.has(token))
+      ) {
+        return true;
+      }
+    }
+
+    const hintCandidates = [
+      element.getAttribute('name'),
+      element.getAttribute('id'),
+      element.getAttribute('aria-label'),
+      element.getAttribute('placeholder'),
+    ];
+
+    return hintCandidates.some(
+      (candidate) => typeof candidate === 'string' && SENSITIVE_INPUT_HINT_PATTERN.test(candidate),
+    );
+  }
+
+  private buildRecordedInputAction(target: HTMLElement): FillAction | null {
+    if (!this.isRecordableInputTarget(target)) {
+      return null;
+    }
+
+    const selector = this.buildRecordedSelector(target);
+    const value = this.getRecordableInputValue(target);
+    if (!selector || value === null) {
+      return null;
+    }
+
+    return {
+      id: `recorded-input-${generateId(10)}`,
+      type: 'fill',
+      selector,
+      value,
+    };
+  }
+
+  private getRecordableInputValue(target: HTMLElement): string | null {
+    if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+      return target.value ?? '';
+    }
+
+    if (target.isContentEditable) {
+      return target.textContent ?? '';
+    }
+
+    return null;
+  }
+
+  private setupRecordingListeners(): void {
+    document.addEventListener('click', this.boundClickCapture, true);
+    document.addEventListener('input', this.boundInputCapture, true);
+    document.addEventListener('change', this.boundInputCommitCapture, true);
+    document.addEventListener('blur', this.boundInputCommitCapture, true);
+    window.addEventListener(NAVIGATION_ACTIVITY_EVENT_NAME, this.boundNavigationActivityCapture);
+  }
+
+  private teardownRecordingListeners(): void {
+    document.removeEventListener('click', this.boundClickCapture, true);
+    document.removeEventListener('input', this.boundInputCapture, true);
+    document.removeEventListener('change', this.boundInputCommitCapture, true);
+    document.removeEventListener('blur', this.boundInputCommitCapture, true);
+    window.removeEventListener(NAVIGATION_ACTIVITY_EVENT_NAME, this.boundNavigationActivityCapture);
+
+    this.flushPendingRecordedInputs();
+
+    for (const timer of this.pendingRecordedInputTimers.values()) {
+      clearTimeout(timer);
+    }
+
+    this.pendingRecordedInputTimers.clear();
+    this.lastRecordedInputValues.clear();
+    this.recordingActive = false;
+  }
+
+  private handleRecordedNavigationEvent(_event: Event): void {
+    if (!this.recordingActive || window.top !== window) {
+      return;
+    }
+
+    const action = this.buildRecordedNavigationAction();
+    if (!action) {
+      return;
+    }
+
+    this.bridge.emit('RECORDED_NAVIGATION', { action } satisfies RecordedNavigationPayload);
+  }
+
+  private buildRecordedNavigationAction(): NavigateAction | null {
+    const url = this.extractRecordedNavigationUrl();
+    if (!url) {
+      return null;
+    }
+
+    return {
+      id: `recorded-navigation-${generateId(10)}`,
+      type: 'navigate',
+      url,
+    };
+  }
+
+  private extractRecordedNavigationUrl(): string | null {
+    return location.href || null;
+  }
+
+  private flushPendingRecordedInputs(): void {
+    const pendingTargets = Array.from(this.pendingRecordedInputTimers.keys());
+    for (const target of pendingTargets) {
+      const timer = this.pendingRecordedInputTimers.get(target);
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+      this.pendingRecordedInputTimers.delete(target);
+      this.emitRecordedInputAction(target);
+    }
+  }
+
+  private buildRecordedSelector(element: HTMLElement): ElementSelector | null {
+    const testId = element.getAttribute('data-testid')?.trim();
+    if (testId) {
+      const selector = { testId } satisfies ElementSelector;
+      if (this.isUniqueRecordedSelector(selector, element)) {
+        return selector;
+      }
+    }
+
+    const id = element.id.trim();
+    if (id) {
+      const selector = { css: `#${CSS.escape(id)}` } satisfies ElementSelector;
+      if (this.isUniqueRecordedSelector(selector, element)) {
+        return selector;
+      }
+    }
+
+    const ariaLabel = element.getAttribute('aria-label')?.trim();
+    if (ariaLabel) {
+      const selector = { ariaLabel } satisfies ElementSelector;
+      if (this.isUniqueRecordedSelector(selector, element)) {
+        return selector;
+      }
+    }
+
+    const placeholder = element.getAttribute('placeholder')?.trim();
+    if (placeholder) {
+      const selector = { placeholder } satisfies ElementSelector;
+      if (this.isUniqueRecordedSelector(selector, element)) {
+        return selector;
+      }
+    }
+
+    const textExact = this.getRecordedElementText(element);
+    if (textExact) {
+      const selector = { textExact } satisfies ElementSelector;
+      if (this.isUniqueRecordedSelector(selector, element)) {
+        return selector;
+      }
+    }
+
+    const css = this.buildCssPath(element);
+    return css ? { css } : null;
+  }
+
+  private isUniqueRecordedSelector(selector: ElementSelector, element: HTMLElement): boolean {
+    const matches = this.selectorEngine.findElements(selector);
+    return matches.length === 1 && matches[0] === element;
+  }
+
+  private getRecordedElementText(element: HTMLElement): string | null {
+    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (text.length === 0 || text.length > 120) {
+      return null;
+    }
+
+    return text;
+  }
+
+  private buildCssPath(element: HTMLElement): string | null {
+    const segments: string[] = [];
+    let current: HTMLElement | null = element;
+
+    while (current && current !== document.body && segments.length < 6) {
+      const tag = current.tagName.toLowerCase();
+      if (!tag) {
+        break;
+      }
+
+      const className = this.getStableClassName(current);
+      const segmentBase = className ? `${tag}.${className}` : tag;
+      const parent: HTMLElement | null = current.parentElement;
+      const currentTagName = current.tagName;
+
+      if (!parent) {
+        segments.unshift(segmentBase);
+        break;
+      }
+
+      const siblings = Array.from(parent.children).filter(
+        (candidate: Element) => candidate.tagName === currentTagName,
+      );
+      const siblingIndex = siblings.indexOf(current) + 1;
+      segments.unshift(
+        siblings.length > 1 ? `${segmentBase}:nth-of-type(${siblingIndex})` : segmentBase,
+      );
+
+      const selector = segments.join(' > ');
+      try {
+        if (document.querySelectorAll(selector).length === 1) {
+          return selector;
+        }
+      } catch {
+        break;
+      }
+
+      current = parent;
+    }
+
+    return segments.length > 0 ? segments.join(' > ') : null;
+  }
+
+  private getStableClassName(element: HTMLElement): string | null {
+    for (const token of Array.from(element.classList)) {
+      const trimmed = token.trim();
+      if (!trimmed || /(^ng-|^ember-|^css-|^jsx-|^react-)|\d{4,}/i.test(trimmed)) {
+        continue;
+      }
+
+      return CSS.escape(trimmed);
+    }
+
+    return null;
   }
 
   /**

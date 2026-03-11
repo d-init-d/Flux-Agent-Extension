@@ -86,6 +86,15 @@ interface MockSession {
   };
   status: SessionStatus;
   targetTabId: number | null;
+  tabSnapshot: Array<{
+    tabIndex: number;
+    id: number;
+    url: string;
+    title: string;
+    status: 'loading' | 'complete';
+    isActive: boolean;
+    isTarget: boolean;
+  }>;
   messages: Array<{ role: string; content: string }>;
   currentTurn: number;
   actionHistory: Array<{
@@ -119,6 +128,17 @@ export function createMockSession(
     },
     status: 'idle',
     targetTabId: 1,
+    tabSnapshot: [
+      {
+        tabIndex: 0,
+        id: 1,
+        url: 'https://example.com',
+        title: 'Example Page',
+        status: 'complete',
+        isActive: true,
+        isTarget: true,
+      },
+    ],
     messages: [],
     currentTurn: 0,
     actionHistory: [],

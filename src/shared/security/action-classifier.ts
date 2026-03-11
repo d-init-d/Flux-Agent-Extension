@@ -53,6 +53,7 @@ const BASE_SENSITIVITY: Record<ActionType, SensitivityLevel> = {
   goBack: 'safe',
   goForward: 'safe',
   reload: 'safe',
+  savePdf: 'safe',
 
   // LOW: minor interactions
   click: 'low',
@@ -67,6 +68,7 @@ const BASE_SENSITIVITY: Record<ActionType, SensitivityLevel> = {
   fill: 'medium',
   type: 'medium',
   clear: 'medium',
+  uploadFile: 'medium',
   select: 'medium',
   check: 'medium',
   uncheck: 'medium',
@@ -74,6 +76,7 @@ const BASE_SENSITIVITY: Record<ActionType, SensitivityLevel> = {
   closeTab: 'medium',
   switchTab: 'medium',
   emulateDevice: 'medium',
+  mockGeolocation: 'medium',
 
   // HIGH: advanced / code execution
   evaluate: 'high',

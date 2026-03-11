@@ -17,6 +17,7 @@ const VALID_MESSAGE_TYPES: ReadonlySet<string> = new Set<string>([
   'GET_PAGE_CONTEXT',
   'HIGHLIGHT_ELEMENT',
   'CLEAR_HIGHLIGHTS',
+  'SET_RECORDING_STATE',
   'PING',
   'ACTION_RESULT',
   'PAGE_CONTEXT',
@@ -25,6 +26,9 @@ const VALID_MESSAGE_TYPES: ReadonlySet<string> = new Set<string>([
   'PAGE_LOADED',
   'PAGE_UNLOAD',
   'DOM_MUTATION',
+  'RECORDED_CLICK',
+  'RECORDED_INPUT',
+  'RECORDED_NAVIGATION',
   'NETWORK_REQUEST',
   'CONSOLE_LOG',
 ]);

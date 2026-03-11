@@ -23,6 +23,8 @@ describe('ai-client prompts', () => {
       expect(prompt).toContain('## Available Actions');
       expect(prompt).toContain('## Response Format');
       expect(prompt).toContain('## Safety & Sensitivity Rules');
+      expect(prompt).toContain('zero-based and must match that list exactly');
+      expect(prompt).toContain('never includes raw tab titles');
     });
 
     it('compact prompt is shorter than full prompt', () => {
@@ -31,15 +33,20 @@ describe('ai-client prompts', () => {
 
       expect(compact.length).toBeLessThan(full.length);
       expect(compact).toContain('Available action types:');
+      expect(compact).toContain('zero-based tabIndex values from the ## Tabs block');
+      expect(compact).toContain('markers plus redacted location hints');
     });
 
     it('exports supported action types list', () => {
-      expect(SUPPORTED_ACTION_TYPES.length).toBe(34);
+      expect(SUPPORTED_ACTION_TYPES.length).toBe(37);
       expect(SUPPORTED_ACTION_TYPES).toContain('navigate');
       expect(SUPPORTED_ACTION_TYPES).toContain('click');
       expect(SUPPORTED_ACTION_TYPES).toContain('fullPageScreenshot');
+      expect(SUPPORTED_ACTION_TYPES).toContain('uploadFile');
       expect(SUPPORTED_ACTION_TYPES).toContain('emulateDevice');
       expect(SUPPORTED_ACTION_TYPES).toContain('mockResponse');
+      expect(SUPPORTED_ACTION_TYPES).toContain('mockGeolocation');
+      expect(SUPPORTED_ACTION_TYPES).toContain('savePdf');
     });
   });
 

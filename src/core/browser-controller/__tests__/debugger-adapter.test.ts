@@ -161,6 +161,12 @@ describe('DebuggerAdapter', () => {
       platform: 'iPhone',
     });
     await adapter.setTouchEmulationEnabled(1, { enabled: true, maxTouchPoints: 5 });
+    await adapter.setGeolocationOverride(1, {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      accuracy: 25,
+    });
+    await adapter.clearGeolocationOverride(1);
     await adapter.clearDeviceMetricsOverride(1);
 
     expect(sendSpy).toHaveBeenNthCalledWith(1, { tabId: 1 }, 'Emulation.setDeviceMetricsOverride', {
@@ -178,7 +184,13 @@ describe('DebuggerAdapter', () => {
       enabled: true,
       maxTouchPoints: 5,
     });
-    expect(sendSpy).toHaveBeenNthCalledWith(4, { tabId: 1 }, 'Emulation.clearDeviceMetricsOverride', undefined);
+    expect(sendSpy).toHaveBeenNthCalledWith(4, { tabId: 1 }, 'Emulation.setGeolocationOverride', {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      accuracy: 25,
+    });
+    expect(sendSpy).toHaveBeenNthCalledWith(5, { tabId: 1 }, 'Emulation.clearGeolocationOverride', undefined);
+    expect(sendSpy).toHaveBeenNthCalledWith(6, { tabId: 1 }, 'Emulation.clearDeviceMetricsOverride', undefined);
   });
 
   it('subscribes to debugger events with tab ids only', async () => {
@@ -212,6 +224,48 @@ describe('DebuggerAdapter', () => {
     unsubscribe();
     onEvent.dispatch({ tabId: 1 }, 'Fetch.requestPaused', { requestId: 'req-3' });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('generates PDF using CDP Page.printToPDF wrapper', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({ data: 'base64-pdf-data' });
+
+    const pdfData = await adapter.printToPDF(1, { landscape: true, printBackground: true });
+
+    expect(pdfData).toBe('base64-pdf-data');
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 1 },
+      'Page.printToPDF',
+      { landscape: true, printBackground: true },
+    );
+  });
+
+  it('generates PDF with default params when none are provided', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({ data: 'default-pdf' });
+
+    const pdfData = await adapter.printToPDF(1);
+
+    expect(pdfData).toBe('default-pdf');
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 1 },
+      'Page.printToPDF',
+      undefined,
+    );
+  });
+
+  it('throws ACTION_FAILED when printToPDF response has no data', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({});
+
+    await expect(adapter.printToPDF(1)).rejects.toMatchObject({
+      code: ErrorCode.ACTION_FAILED,
+    } satisfies Partial<ExtensionError>);
+  });
+
+  it('throws ACTION_FAILED when printToPDF response data is empty string', async () => {
+    vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValueOnce({ data: '' });
+
+    await expect(adapter.printToPDF(1)).rejects.toMatchObject({
+      code: ErrorCode.ACTION_FAILED,
+    } satisfies Partial<ExtensionError>);
   });
 
   it('maps missing tab to TAB_NOT_FOUND on attach', async () => {

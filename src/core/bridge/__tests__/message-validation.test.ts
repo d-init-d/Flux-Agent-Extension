@@ -43,6 +43,7 @@ describe('validateMessage', () => {
         'GET_PAGE_CONTEXT',
         'HIGHLIGHT_ELEMENT',
         'CLEAR_HIGHLIGHTS',
+        'SET_RECORDING_STATE',
         'PING',
         'ACTION_RESULT',
         'PAGE_CONTEXT',
@@ -51,6 +52,9 @@ describe('validateMessage', () => {
         'PAGE_LOADED',
         'PAGE_UNLOAD',
         'DOM_MUTATION',
+        'RECORDED_CLICK',
+        'RECORDED_INPUT',
+        'RECORDED_NAVIGATION',
         'NETWORK_REQUEST',
         'CONSOLE_LOG',
       ];

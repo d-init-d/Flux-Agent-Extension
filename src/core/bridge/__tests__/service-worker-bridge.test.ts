@@ -145,6 +145,7 @@ describe('ServiceWorkerBridge', () => {
           type: 'EXECUTE_ACTION',
           payload: { action: 'click' },
         }),
+        undefined,
       );
     });
 
@@ -255,6 +256,7 @@ describe('ServiceWorkerBridge', () => {
           type: 'CLEAR_HIGHLIGHTS',
           payload: null,
         }),
+        undefined,
       );
     });
 
@@ -285,7 +287,15 @@ describe('ServiceWorkerBridge', () => {
         1,
       );
 
-      expect(handler).toHaveBeenCalledWith(1, { url: 'https://example.com' });
+      expect(handler).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          frameId: 0,
+          isTop: true,
+          url: 'https://example.com',
+        }),
+        { url: 'https://example.com' },
+      );
     });
 
     it('should not invoke handler for non-matching event type', () => {
@@ -483,7 +493,7 @@ describe('ServiceWorkerBridge', () => {
 
       expect(getScriptingExecuteScript()).toHaveBeenCalledWith(
         expect.objectContaining({
-          target: { tabId: 1 },
+          target: { tabId: 1, allFrames: true },
           files: ['content/index.js'],
         }),
       );

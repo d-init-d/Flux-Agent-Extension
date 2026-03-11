@@ -5,6 +5,7 @@ const bridgeInitialize = vi.fn();
 const bridgeDestroy = vi.fn();
 const bridgeEmit = vi.fn();
 const findElement = vi.fn();
+const findElements = vi.fn();
 
 const executeInteractionAction = vi.fn();
 const executeInputAction = vi.fn();
@@ -46,6 +47,7 @@ vi.mock('../actions/wait', () => ({
 vi.mock('../dom/selector-engine', () => {
   class MockSelectorEngine {
     findElement = findElement;
+    findElements = findElements;
   }
 
   return { SelectorEngine: MockSelectorEngine };
@@ -53,7 +55,29 @@ vi.mock('../dom/selector-engine', () => {
 
 vi.mock('../dom/inspector', () => {
   class MockDOMInspector {
-    buildPageContext = vi.fn(() => ({ url: 'https://example.com' }));
+    buildPageContext = vi.fn(() => ({
+      url: 'https://example.com',
+      title: 'Example',
+      frame: {
+        frameId: 0,
+        parentFrameId: null,
+        url: 'https://example.com',
+        origin: 'https://example.com',
+        name: 'main',
+        isTop: true,
+      },
+      interactiveElements: [],
+      headings: [],
+      links: [],
+      forms: [],
+      viewport: {
+        width: 1280,
+        height: 720,
+        scrollX: 0,
+        scrollY: 0,
+        scrollHeight: 720,
+      },
+    }));
   }
 
   return { DOMInspector: MockDOMInspector };
@@ -68,6 +92,8 @@ vi.mock('../dom/auto-wait-engine', () => {
 });
 
 describe('ContentScriptManager command routing', () => {
+  const initialLocationHref = window.location.href;
+
   beforeEach(() => {
     document.head.innerHTML = '';
     document.body.innerHTML = '';
@@ -77,6 +103,7 @@ describe('ContentScriptManager command routing', () => {
     bridgeDestroy.mockReset();
     bridgeEmit.mockReset();
     findElement.mockReset();
+    findElements.mockReset();
 
     executeInteractionAction.mockReset();
     executeInputAction.mockReset();
@@ -95,6 +122,7 @@ describe('ContentScriptManager command routing', () => {
     vi.spyOn(chrome.storage.local, 'get').mockResolvedValue({
       settings: { showFloatingBar: true },
     });
+    window.history.replaceState({}, '', initialLocationHref);
   });
 
   afterEach(() => {
@@ -136,6 +164,15 @@ describe('ContentScriptManager command routing', () => {
         called: executeInputAction,
       },
       {
+        action: {
+          id: 'a2-upload',
+          type: 'uploadFile',
+          selector: { css: '#upload' },
+          fileIds: ['file-1'],
+        },
+        called: executeInputAction,
+      },
+      {
         action: { id: 'a3', type: 'scroll', direction: 'down' },
         called: executeScrollAction,
       },
@@ -150,8 +187,12 @@ describe('ContentScriptManager command routing', () => {
     ];
 
     for (const testCase of actionCases) {
-      await executeHandler?.({ action: testCase.action });
-      expect(testCase.called).toHaveBeenCalledWith(testCase.action, expect.anything());
+      await executeHandler?.({ action: testCase.action, context: { variables: {}, uploads: [] } });
+      if (testCase.called === executeInputAction) {
+        expect(testCase.called).toHaveBeenCalledWith(testCase.action, expect.anything(), expect.anything());
+      } else {
+        expect(testCase.called).toHaveBeenCalledWith(testCase.action, expect.anything());
+      }
     }
 
     manager.destroy();
@@ -533,6 +574,443 @@ describe('ContentScriptManager command routing', () => {
 
     await expect(clearHandler?.(undefined)).resolves.toEqual({ cleared: 1 });
     expect(document.querySelectorAll('[data-flux-highlight="true"]')).toHaveLength(0);
+
+    manager.destroy();
+  });
+
+  it('captures click actions only while recording is active', async () => {
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    const button = document.createElement('button');
+    button.setAttribute('data-testid', 'save-action');
+    button.textContent = 'Save';
+    document.body.appendChild(button);
+
+    Object.defineProperty(button, 'getBoundingClientRect', {
+      value: vi.fn(() => new DOMRect(10, 20, 100, 40)),
+    });
+
+    findElements.mockImplementation((selector: { testId?: string }) =>
+      selector.testId === 'save-action' ? [button] : [],
+    );
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+
+    await setRecordingHandler?.({ active: true });
+
+    const managerInternals = manager as unknown as {
+      handleRecordedClick: (event: MouseEvent) => void;
+    };
+
+    managerInternals.handleRecordedClick({
+      isTrusted: true,
+      clientX: 80,
+      clientY: 55,
+      target: button,
+      composedPath: () => [button],
+    } as unknown as MouseEvent);
+
+    expect(bridgeEmit).toHaveBeenCalledWith(
+      'RECORDED_CLICK',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          type: 'click',
+          selector: { testId: 'save-action' },
+          position: { x: 20, y: 15 },
+        }),
+      }),
+    );
+
+    bridgeEmit.mockClear();
+    await setRecordingHandler?.({ active: false });
+
+    managerInternals.handleRecordedClick({
+      isTrusted: true,
+      clientX: 80,
+      clientY: 55,
+      target: button,
+      composedPath: () => [button],
+    } as unknown as MouseEvent);
+    expect(bridgeEmit).not.toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it('captures one debounced fill action with the final typed value only while recording is active', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    const input = document.createElement('input');
+    input.type = 'email';
+    input.setAttribute('data-testid', 'email-field');
+    document.body.appendChild(input);
+
+    findElements.mockImplementation((selector: { testId?: string }) =>
+      selector.testId === 'email-field' ? [input] : [],
+    );
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+    await setRecordingHandler?.({ active: true });
+
+    const managerInternals = manager as unknown as {
+      handleRecordedInputEvent: (event: Event) => void;
+    };
+
+    input.value = 'a';
+    managerInternals.handleRecordedInputEvent({
+      isTrusted: true,
+      target: input,
+      composedPath: () => [input],
+    } as unknown as Event);
+
+    input.value = 'alice@example.com';
+    managerInternals.handleRecordedInputEvent({
+      isTrusted: true,
+      target: input,
+      composedPath: () => [input],
+    } as unknown as Event);
+
+    vi.advanceTimersByTime(599);
+    expect(bridgeEmit).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(bridgeEmit).toHaveBeenCalledTimes(1);
+    expect(bridgeEmit).toHaveBeenCalledWith(
+      'RECORDED_INPUT',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          type: 'fill',
+          selector: { testId: 'email-field' },
+          value: 'alice@example.com',
+        }),
+      }),
+    );
+
+    bridgeEmit.mockClear();
+    await setRecordingHandler?.({ active: false });
+
+    input.value = 'ignored@example.com';
+    managerInternals.handleRecordedInputEvent({
+      isTrusted: true,
+      target: input,
+      composedPath: () => [input],
+    } as unknown as Event);
+    vi.runAllTimers();
+
+    expect(bridgeEmit).not.toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it('does not record password inputs or emit RECORDED_INPUT events for them', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'password';
+    passwordInput.id = 'account-password';
+    passwordInput.value = 'super-secret-password';
+    document.body.appendChild(passwordInput);
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+    await setRecordingHandler?.({ active: true });
+
+    const managerInternals = manager as unknown as {
+      handleRecordedInputEvent: (event: Event) => void;
+      commitRecordedInputEvent: (event: Event) => void;
+    };
+
+    const inputEvent = {
+      isTrusted: true,
+      target: passwordInput,
+      composedPath: () => [passwordInput],
+    } as unknown as Event;
+
+    managerInternals.handleRecordedInputEvent(inputEvent);
+    vi.runAllTimers();
+    managerInternals.commitRecordedInputEvent(inputEvent);
+
+    expect(bridgeEmit).not.toHaveBeenCalledWith('RECORDED_INPUT', expect.anything());
+
+    await setRecordingHandler?.({ active: false });
+    vi.runAllTimers();
+
+    expect(bridgeEmit).not.toHaveBeenCalledWith('RECORDED_INPUT', expect.anything());
+
+    manager.destroy();
+  });
+
+  it('does not record text inputs with obvious sensitive hints', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    const otpInput = document.createElement('input');
+    otpInput.type = 'text';
+    otpInput.setAttribute('data-testid', 'otp-field');
+    otpInput.setAttribute('autocomplete', 'one-time-code');
+    otpInput.setAttribute('placeholder', 'Enter OTP code');
+    otpInput.value = '123456';
+    document.body.appendChild(otpInput);
+
+    findElements.mockImplementation((selector: { testId?: string }) =>
+      selector.testId === 'otp-field' ? [otpInput] : [],
+    );
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+    await setRecordingHandler?.({ active: true });
+
+    const managerInternals = manager as unknown as {
+      handleRecordedInputEvent: (event: Event) => void;
+    };
+
+    managerInternals.handleRecordedInputEvent({
+      isTrusted: true,
+      target: otpInput,
+      composedPath: () => [otpInput],
+    } as unknown as Event);
+
+    vi.runAllTimers();
+
+    expect(bridgeEmit).not.toHaveBeenCalledWith('RECORDED_INPUT', expect.anything());
+
+    manager.destroy();
+  });
+
+  it('captures top-frame navigation events only while recording is active', async () => {
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+
+    window.dispatchEvent(
+      new CustomEvent('__flux_navigation_activity__', {
+        detail: { url: 'https://example.com/ignored', timestamp: Date.now() },
+      }),
+    );
+    expect(bridgeEmit).not.toHaveBeenCalled();
+
+    await setRecordingHandler?.({ active: true });
+
+    window.history.replaceState({}, '', '/dashboard#details');
+
+    window.dispatchEvent(
+      new CustomEvent('__flux_navigation_activity__', {
+        detail: { url: 'https://example.com/dashboard#details', timestamp: Date.now() },
+      }),
+    );
+
+    expect(bridgeEmit).toHaveBeenCalledTimes(1);
+    expect(bridgeEmit).toHaveBeenCalledWith(
+      'RECORDED_NAVIGATION',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          type: 'navigate',
+          url: window.location.href,
+        }),
+      }),
+    );
+
+    bridgeEmit.mockClear();
+    await setRecordingHandler?.({ active: false });
+
+    window.dispatchEvent(
+      new CustomEvent('__flux_navigation_activity__', {
+        detail: { url: 'https://example.com/ignored-after-stop', timestamp: Date.now() },
+      }),
+    );
+
+    expect(bridgeEmit).not.toHaveBeenCalled();
+
+    manager.destroy();
+  });
+
+  it('ignores forged custom-event navigation detail URLs and records the real location instead', async () => {
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+
+    await setRecordingHandler?.({ active: true });
+    window.history.replaceState({}, '', '/real-destination');
+
+    window.dispatchEvent(
+      new CustomEvent('__flux_navigation_activity__', {
+        detail: { url: 'https://attacker.example/spoofed', timestamp: Date.now() },
+      }),
+    );
+
+    expect(bridgeEmit).toHaveBeenCalledTimes(1);
+    expect(bridgeEmit).toHaveBeenCalledWith(
+      'RECORDED_NAVIGATION',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          type: 'navigate',
+          url: 'http://localhost:3000/real-destination',
+        }),
+      }),
+    );
+    expect(bridgeEmit).not.toHaveBeenCalledWith(
+      'RECORDED_NAVIGATION',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          url: 'https://attacker.example/spoofed',
+        }),
+      }),
+    );
+
+    manager.destroy();
+  });
+
+  it('flushes the final typed value once when recording stops before debounce expiry', async () => {
+    vi.useFakeTimers();
+
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.setAttribute('data-testid', 'name-field');
+    document.body.appendChild(input);
+
+    findElements.mockImplementation((selector: { testId?: string }) =>
+      selector.testId === 'name-field' ? [input] : [],
+    );
+
+    manager.initialize();
+
+    const setRecordingHandler = handlers.get('SET_RECORDING_STATE');
+    expect(setRecordingHandler).toBeDefined();
+    await setRecordingHandler?.({ active: true });
+
+    const managerInternals = manager as unknown as {
+      handleRecordedInputEvent: (event: Event) => void;
+    };
+
+    input.value = 'Alice';
+    managerInternals.handleRecordedInputEvent({
+      isTrusted: true,
+      target: input,
+      composedPath: () => [input],
+    } as unknown as Event);
+
+    await setRecordingHandler?.({ active: false });
+
+    expect(bridgeEmit).toHaveBeenCalledTimes(1);
+    expect(bridgeEmit).toHaveBeenCalledWith(
+      'RECORDED_INPUT',
+      expect.objectContaining({
+        action: expect.objectContaining({
+          type: 'fill',
+          selector: { testId: 'name-field' },
+          value: 'Alice',
+        }),
+      }),
+    );
+
+    vi.runAllTimers();
+    expect(bridgeEmit).toHaveBeenCalledTimes(1);
 
     manager.destroy();
   });

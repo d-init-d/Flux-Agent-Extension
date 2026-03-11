@@ -132,6 +132,10 @@ export class ContentScriptBridge implements IContentScriptBridge {
     // Signal readiness to the service worker.
     this.emit('PAGE_LOADED', {
       url: globalThis.location.href,
+      title: document.title,
+      origin: globalThis.location.origin,
+      name: window.name || undefined,
+      isTop: window.top === window,
       timestamp: Date.now(),
     });
   }

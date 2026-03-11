@@ -6,16 +6,19 @@ import type {
   FillAction,
   SelectAction,
   TypeAction,
+  UploadFileAction,
+  SerializedFileUpload,
 } from '@shared/types';
 import { SelectorEngine } from '../dom/selector-engine';
 
-export type InputAction = FillAction | TypeAction | ClearAction | SelectAction | CheckAction;
+export type InputAction = FillAction | TypeAction | ClearAction | UploadFileAction | SelectAction | CheckAction;
 
 type InputTarget = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
 export async function executeInputAction(
   action: InputAction,
   selectorEngine: SelectorEngine,
+  uploads: SerializedFileUpload[] = [],
 ): Promise<ActionResultPayload> {
   const startedAt = performance.now();
 
@@ -39,7 +42,7 @@ export async function executeInputAction(
     }
 
     try {
-      await performInputAction(action, element);
+      await performInputAction(action, element, uploads);
     } catch (error) {
       throw new ExtensionError(
         ErrorCode.ACTION_FAILED,
@@ -52,7 +55,7 @@ export async function executeInputAction(
     return {
       actionId: action.id,
       success: true,
-      data: null,
+      data: buildInputActionResultData(action),
       duration: getDurationMs(startedAt),
     };
   } catch (error: unknown) {
@@ -80,7 +83,7 @@ export async function executeInputAction(
   }
 }
 
-async function performInputAction(action: InputAction, element: HTMLElement): Promise<void> {
+async function performInputAction(action: InputAction, element: HTMLElement, uploads: SerializedFileUpload[]): Promise<void> {
   switch (action.type) {
     case 'fill': {
       fillElement(element, action.value, action.clearFirst !== false);
@@ -92,6 +95,10 @@ async function performInputAction(action: InputAction, element: HTMLElement): Pr
     }
     case 'clear': {
       clearElement(element);
+      return;
+    }
+    case 'uploadFile': {
+      uploadFilesIntoInput(element, uploads, action.clearFirst !== false);
       return;
     }
     case 'select': {
@@ -155,6 +162,42 @@ function clearElement(element: HTMLElement): void {
   }
 
   setValueReactSafe(target, '');
+}
+
+function uploadFilesIntoInput(element: HTMLElement, uploads: SerializedFileUpload[], clearFirst: boolean): void {
+  if (!(element instanceof HTMLInputElement) || element.type !== 'file') {
+    throw new ExtensionError(
+      ErrorCode.ELEMENT_NOT_INTERACTIVE,
+      'uploadFile action requires an <input type="file"> element',
+      true,
+    );
+  }
+
+  if (element.disabled) {
+    throw new ExtensionError(
+      ErrorCode.ELEMENT_NOT_INTERACTIVE,
+      'File input is disabled',
+      true,
+    );
+  }
+
+  if (uploads.length === 0) {
+    throw new ExtensionError(ErrorCode.FILE_UPLOAD_NOT_FOUND, 'No staged uploads were provided to the content script', true);
+  }
+
+  const existingFiles = clearFirst ? [] : Array.from(element.files ?? []);
+  const nextFiles = [...existingFiles, ...uploads.map(createFileFromUpload)];
+
+  if (!element.multiple && nextFiles.length > 1) {
+    throw new ExtensionError(
+      ErrorCode.FILE_UPLOAD_INVALID,
+      'Target file input does not accept multiple files',
+      true,
+    );
+  }
+
+  setInputFiles(element, nextFiles);
+  dispatchInputEvents(element);
 }
 
 function selectOption(element: HTMLElement, action: SelectAction): void {
@@ -297,6 +340,70 @@ function setValueReactSafe(element: HTMLInputElement | HTMLTextAreaElement, valu
   }
 
   dispatchInputEvents(element);
+}
+
+function createFileFromUpload(upload: SerializedFileUpload): File {
+  const byteString = atob(upload.base64Data);
+  const byteNumbers = new Array<number>(byteString.length);
+
+  for (let index = 0; index < byteString.length; index += 1) {
+    byteNumbers[index] = byteString.charCodeAt(index);
+  }
+
+  return new File([new Uint8Array(byteNumbers)], upload.name, {
+    type: upload.mimeType || 'application/octet-stream',
+    lastModified: upload.lastModified,
+  });
+}
+
+function setInputFiles(element: HTMLInputElement, files: File[]): void {
+  const fileList = createFileList(files);
+
+  try {
+    element.files = fileList;
+    return;
+  } catch {
+    Object.defineProperty(element, 'files', {
+      configurable: true,
+      value: fileList,
+    });
+  }
+}
+
+function createFileList(files: File[]): FileList {
+  if (typeof DataTransfer !== 'undefined') {
+    const dataTransfer = new DataTransfer();
+    for (const file of files) {
+      dataTransfer.items.add(file);
+    }
+
+    return dataTransfer.files;
+  }
+
+  const fileList = {
+    length: files.length,
+    item: (index: number) => files[index] ?? null,
+    [Symbol.iterator]: function* iterator() {
+      yield* files;
+    },
+  } as FileList & { [index: number]: File };
+
+  files.forEach((file, index) => {
+    fileList[index] = file;
+  });
+
+  return fileList;
+}
+
+function buildInputActionResultData(action: InputAction): unknown {
+  if (action.type !== 'uploadFile') {
+    return null;
+  }
+
+  return {
+    uploadedFileCount: action.fileIds.length,
+    fileIds: [...action.fileIds],
+  };
 }
 
 function dispatchInputEvents(element: HTMLElement): void {

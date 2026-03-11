@@ -124,6 +124,56 @@ describe('NetworkInterceptionManager', () => {
     });
   });
 
+  it('applies only the active session rules for a shared tab', async () => {
+    const sendSpy = vi.spyOn(chrome.debugger, 'sendCommand');
+
+    await manager.registerAction('session-1', 1, {
+      id: 'rule-block-session-1',
+      type: 'interceptNetwork',
+      urlPatterns: ['https://api.example.com/*'],
+      operation: 'block',
+      resourceTypes: ['XHR'],
+    });
+    await manager.registerAction('session-2', 1, {
+      id: 'rule-continue-session-2',
+      type: 'interceptNetwork',
+      urlPatterns: ['https://api.example.com/*'],
+      operation: 'continue',
+      resourceTypes: ['XHR'],
+    });
+
+    const onEvent = chrome.debugger.onEvent as unknown as DebuggerOnEventMock;
+
+    manager.activateSession('session-1', 1);
+    onEvent.dispatch({ tabId: 1 }, 'Fetch.requestPaused', {
+      requestId: 'req-session-1',
+      request: { url: 'https://api.example.com/orders' },
+      resourceType: 'XHR',
+    });
+
+    await flushAsyncWork();
+
+    expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.failRequest', {
+      requestId: 'req-session-1',
+      errorReason: 'BlockedByClient',
+    });
+
+    sendSpy.mockClear();
+
+    manager.activateSession('session-2', 1);
+    onEvent.dispatch({ tabId: 1 }, 'Fetch.requestPaused', {
+      requestId: 'req-session-2',
+      request: { url: 'https://api.example.com/orders' },
+      resourceType: 'XHR',
+    });
+
+    await flushAsyncWork();
+
+    expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.continueRequest', {
+      requestId: 'req-session-2',
+    });
+  });
+
   it('rejects sensitive response headers in mock responses', async () => {
     await expect(
       manager.registerAction('session-5', 1, {

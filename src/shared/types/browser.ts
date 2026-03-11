@@ -11,6 +11,16 @@ export interface TabState {
   lastUpdated: number;
 }
 
+export interface SessionTabSummary {
+  tabIndex: number;
+  id: number;
+  url: string;
+  title: string;
+  status: 'loading' | 'complete';
+  isActive: boolean;
+  isTarget: boolean;
+}
+
 /**
  * Execution result from an action
  */
@@ -37,6 +47,23 @@ export interface BrowserControllerOptions {
   enableDebugger: boolean; // Use chrome.debugger API
 }
 
+export interface FrameDescriptor {
+  frameId: number;
+  documentId?: string;
+  parentFrameId?: number | null;
+  url: string;
+  origin: string;
+  name?: string;
+  isTop: boolean;
+}
+
+export interface FrameContextSummary {
+  frame: FrameDescriptor;
+  title?: string;
+  summary?: string;
+  interactiveElementCount?: number;
+}
+
 /**
  * Page context sent to AI for decision making
  */
@@ -44,6 +71,7 @@ export interface PageContext {
   url: string;
   title: string;
   summary?: string;
+  frame: FrameDescriptor;
 
   // Simplified DOM representation
   interactiveElements: InteractiveElement[];
@@ -64,6 +92,9 @@ export interface PageContext {
 
   // Screenshot (optional, base64)
   screenshot?: string;
+
+  // Child frame snapshots (top frame only, optional)
+  childFrames?: FrameContextSummary[];
 }
 
 /**

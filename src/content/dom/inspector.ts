@@ -1,4 +1,4 @@
-import type { FormInfo, InteractiveElement, PageContext } from '@shared/types';
+import type { FormInfo, FrameContextSummary, InteractiveElement, PageContext } from '@shared/types';
 
 const INTERACTIVE_CANDIDATE_SELECTOR = [
   'button',
@@ -73,6 +73,14 @@ export class DOMInspector {
       url: location.href,
       title: document.title,
       summary: this.buildSummary(document.title, headings, forms, interactiveElements),
+      frame: {
+        frameId: 0,
+        parentFrameId: window.top === window ? null : undefined,
+        url: location.href,
+        origin: location.origin,
+        name: window.name || undefined,
+        isTop: window.top === window,
+      },
       interactiveElements,
       headings,
       links,
@@ -84,7 +92,54 @@ export class DOMInspector {
         scrollY: window.scrollY,
         scrollHeight: document.documentElement.scrollHeight,
       },
+      childFrames: this.gatherChildFrames(),
     };
+  }
+
+  private gatherChildFrames(): FrameContextSummary[] {
+    if (window.top !== window) {
+      return [];
+    }
+
+    const results: FrameContextSummary[] = [];
+
+    try {
+      const frames = document.querySelectorAll('iframe, frame');
+      for (const [index, node] of frames.entries()) {
+        if (!(node instanceof HTMLIFrameElement || node instanceof HTMLFrameElement)) {
+          continue;
+        }
+
+        const rawUrl = node.src || node.getAttribute('src') || 'about:blank';
+        let normalizedUrl = rawUrl;
+        let origin = 'null';
+
+        try {
+          const parsed = new URL(rawUrl, location.href);
+          normalizedUrl = parsed.href;
+          origin = parsed.origin;
+        } catch {
+          // Keep best-effort values
+        }
+
+        results.push({
+          frame: {
+            frameId: index + 1,
+            parentFrameId: 0,
+            url: normalizedUrl,
+            origin,
+            name: node.name || undefined,
+            isTop: false,
+          },
+          title: node.title || undefined,
+          summary: node.getAttribute('aria-label') || undefined,
+        });
+      }
+    } catch (error) {
+      this.logger?.warn('Failed to gather child frames', error);
+    }
+
+    return results;
   }
 
   private gatherInteractiveElements(): InteractiveElement[] {

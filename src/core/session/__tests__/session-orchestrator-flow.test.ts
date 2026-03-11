@@ -8,6 +8,13 @@ function createPageContext(): PageContext {
     url: 'https://example.com/checkout',
     title: 'Checkout',
     summary: 'Checkout form with email and place order button.',
+    frame: {
+      frameId: 0,
+      parentFrameId: null,
+      url: 'https://example.com/checkout',
+      origin: 'https://example.com',
+      isTop: true,
+    },
     interactiveElements: [
       {
         index: 1,

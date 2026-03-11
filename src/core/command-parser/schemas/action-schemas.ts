@@ -25,6 +25,7 @@ const ACTION_TYPES = [
   'fill',
   'type',
   'clear',
+  'uploadFile',
   'select',
   'check',
   'uncheck',
@@ -47,6 +48,8 @@ const ACTION_TYPES = [
   'emulateDevice',
   'interceptNetwork',
   'mockResponse',
+  'mockGeolocation',
+  'savePdf',
 ] as const satisfies readonly ActionType[];
 
 const actionTypeSchema = z.enum(ACTION_TYPES);
@@ -66,6 +69,14 @@ const elementSelectorSchema = z
     nth: z.number().int().min(0).optional(),
     nearText: z.string().min(1).optional(),
     withinSection: z.string().min(1).optional(),
+    frame: z
+      .object({
+        mode: z.enum(['main', 'auto', 'frameId', 'documentId', 'url']).optional(),
+        frameId: z.number().int().min(0).optional(),
+        documentId: z.string().min(1).optional(),
+        urlPattern: z.string().min(1).optional(),
+      })
+      .optional(),
   })
   .refine((selector) => Object.keys(selector).length > 0, {
     message: 'selector must include at least one selector strategy',
@@ -118,6 +129,12 @@ const selectorRequiredSchema = {
     delay: z.number().int().nonnegative().optional(),
   }),
   clear: baseActionSchema.extend({ type: z.literal('clear'), selector: elementSelectorSchema }),
+  uploadFile: baseActionSchema.extend({
+    type: z.literal('uploadFile'),
+    selector: elementSelectorSchema,
+    fileIds: z.array(z.string().min(1)).min(1),
+    clearFirst: z.boolean().optional(),
+  }),
   select: baseActionSchema.extend({
     type: z.literal('select'),
     selector: elementSelectorSchema,
@@ -230,6 +247,30 @@ const actionSchemas = {
       contentType: z.string().min(1).optional(),
     }),
   }),
+  mockGeolocation: baseActionSchema.extend({
+    type: z.literal('mockGeolocation'),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracy: z.number().positive().optional(),
+  }),
+  savePdf: baseActionSchema.extend({
+    type: z.literal('savePdf'),
+    filename: z.string().min(1).optional(),
+    landscape: z.boolean().optional(),
+    printBackground: z.boolean().optional(),
+    scale: z.number().min(0.1).max(2).optional(),
+    paperWidth: z.number().positive().optional(),
+    paperHeight: z.number().positive().optional(),
+    marginTop: z.number().min(0).optional(),
+    marginRight: z.number().min(0).optional(),
+    marginBottom: z.number().min(0).optional(),
+    marginLeft: z.number().min(0).optional(),
+    pageRanges: z.string().optional(),
+    headerTemplate: z.string().optional(),
+    footerTemplate: z.string().optional(),
+    displayHeaderFooter: z.boolean().optional(),
+    preferCSSPageSize: z.boolean().optional(),
+  }),
 };
 
 const orderedActionSchemas = [
@@ -245,6 +286,7 @@ const orderedActionSchemas = [
   actionSchemas.fill,
   actionSchemas.type,
   actionSchemas.clear,
+  actionSchemas.uploadFile,
   actionSchemas.select,
   actionSchemas.check,
   actionSchemas.uncheck,
@@ -267,6 +309,8 @@ const orderedActionSchemas = [
   actionSchemas.emulateDevice,
   actionSchemas.interceptNetwork,
   actionSchemas.mockResponse,
+  actionSchemas.mockGeolocation,
+  actionSchemas.savePdf,
 ] as const;
 
 export const actionSchema = z.discriminatedUnion('type', orderedActionSchemas);

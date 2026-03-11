@@ -865,6 +865,39 @@ function createMockAlarms() {
 }
 
 // ============================================================================
+// chrome.downloads
+// ============================================================================
+
+let nextDownloadId = 1;
+
+function createMockDownloads() {
+  const onChanged = createMockEvent<
+    (downloadDelta: chrome.downloads.DownloadDelta) => void
+  >();
+
+  return {
+    download: vi.fn(
+      (options: chrome.downloads.DownloadOptions): Promise<number> => {
+        const id = nextDownloadId++;
+        return Promise.resolve(id);
+      },
+    ),
+
+    search: vi.fn(
+      (query: chrome.downloads.DownloadQuery): Promise<chrome.downloads.DownloadItem[]> => {
+        return Promise.resolve([]);
+      },
+    ),
+
+    cancel: vi.fn((downloadId: number): Promise<void> => {
+      return Promise.resolve();
+    }),
+
+    onChanged,
+  };
+}
+
+// ============================================================================
 // Main Factory
 // ============================================================================
 
@@ -887,6 +920,7 @@ export function createChromeMock() {
     notifications: createMockNotifications(),
     action: createMockAction(),
     alarms: createMockAlarms(),
+    downloads: createMockDownloads(),
   };
 }
 
@@ -950,6 +984,9 @@ export function resetAllMocks(): void {
 
   // Clear debugger targets
   debuggerTargets.clear();
+
+  // Reset download counter
+  nextDownloadId = 1;
 
   currentMock = null;
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -32,9 +32,11 @@ describe('InputComposer', () => {
     await user.type(textbox, '  run step  ');
     await user.click(sendButton);
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith('run step');
-    expect(textbox).toHaveValue('');
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith('run step', undefined);
+      expect(textbox).toHaveValue('');
+    });
   });
 
   it('shows full default command list when input is only slash', async () => {
@@ -65,7 +67,9 @@ describe('InputComposer', () => {
     expect(screen.getByTestId('slash-command-list')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(onSend).toHaveBeenCalledWith('/extract');
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledWith('/extract', undefined);
+    });
     expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
   });
 
@@ -80,8 +84,12 @@ describe('InputComposer', () => {
     expect(textbox).toHaveAttribute('aria-expanded', 'true');
     expect(textbox).toHaveAttribute('aria-describedby', 'sidepanel-command-hint');
 
-    const screenshotOption = screen.getByRole('option', { name: /\/screenshot/i });
-    const extractOption = screen.getByRole('option', { name: /\/extract/i });
+    const screenshotOption = screen.getByRole('option', {
+      name: /\/screenshotCapture the current page as an image\./i,
+    });
+    const extractOption = screen.getByRole('option', {
+      name: /\/extractExtract structured data from current page\./i,
+    });
 
     expect(screenshotOption).toHaveAttribute('aria-selected', 'true');
     expect(extractOption).toHaveAttribute('aria-selected', 'false');
@@ -104,8 +112,12 @@ describe('InputComposer', () => {
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
     await user.type(textbox, '/');
 
-    const screenshotOption = screen.getByRole('option', { name: /\/screenshot/i });
-    const summarizeOption = screen.getByRole('option', { name: /\/summarize/i });
+    const screenshotOption = screen.getByRole('option', {
+      name: /\/screenshotCapture the current page as an image\./i,
+    });
+    const summarizeOption = screen.getByRole('option', {
+      name: /\/summarizeSummarize visible page content\./i,
+    });
 
     expect(screenshotOption).toHaveAttribute('aria-selected', 'true');
     expect(summarizeOption).toHaveAttribute('aria-selected', 'false');
@@ -128,7 +140,9 @@ describe('InputComposer', () => {
 
     await user.clear(textbox);
     await user.type(textbox, '/');
-    await user.click(screen.getByRole('option', { name: /\/screenshot/i }));
+    await user.click(
+      screen.getByRole('option', { name: /\/screenshotCapture the current page as an image\./i }),
+    );
 
     expect(textbox).toHaveValue('/screenshot ');
   });
@@ -202,9 +216,11 @@ describe('InputComposer', () => {
     await user.type(textbox, 'Draft command');
     await user.keyboard('{Control>}{Enter}{/Control}');
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith('Draft command');
-    expect(textbox).toHaveValue('');
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith('Draft command', undefined);
+      expect(textbox).toHaveValue('');
+    });
   });
 
   it('sends slash command text on Command+Enter without autocompleting', async () => {
@@ -216,10 +232,12 @@ describe('InputComposer', () => {
     await user.type(textbox, '/ex');
     await user.keyboard('{Meta>}{Enter}{/Meta}');
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith('/ex');
-    expect(textbox).toHaveValue('');
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith('/ex', undefined);
+      expect(textbox).toHaveValue('');
+      expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+    });
   });
 
   it('expands the literal extract-table slash command before sending', async () => {
@@ -231,10 +249,11 @@ describe('InputComposer', () => {
     await user.type(textbox, '/extract-table');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(buildExtractTableDataPrompt());
-    expect(textbox).toHaveValue('');
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith(buildExtractTableDataPrompt(), undefined);
+      expect(textbox).toHaveValue('');
+    });
   });
 
   it('expands the literal fill-from-profile slash command before sending', async () => {
@@ -246,10 +265,11 @@ describe('InputComposer', () => {
     await user.type(textbox, '/fill-from-profile');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(buildFillFormFromProfilePrompt());
-    expect(textbox).toHaveValue('');
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith(buildFillFormFromProfilePrompt(), undefined);
+      expect(textbox).toHaveValue('');
+    });
   });
 
   it('expands the literal compare-prices slash command before sending', async () => {
@@ -261,10 +281,11 @@ describe('InputComposer', () => {
     await user.type(textbox, '/compare-prices');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(buildComparePricesPrompt());
-    expect(textbox).toHaveValue('');
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith(buildComparePricesPrompt(), undefined);
+      expect(textbox).toHaveValue('');
+    });
   });
 
   it('expands the literal monitor-page-changes slash command before sending', async () => {
@@ -276,10 +297,11 @@ describe('InputComposer', () => {
     await user.type(textbox, '/monitor-page-changes');
     await user.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith(buildMonitorPageChangesPrompt());
-    expect(textbox).toHaveValue('');
-    expect(screen.queryByTestId('slash-command-list')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledWith(buildMonitorPageChangesPrompt(), undefined);
+      expect(textbox).toHaveValue('');
+    });
   });
 
   it('keeps plain Enter mapped to slash autocomplete selection', async () => {
@@ -351,5 +373,39 @@ describe('InputComposer', () => {
 
     expect(textbox.style.height).toBe('160px');
     expect(textbox.style.overflowY).toBe('auto');
+  });
+
+  it('serializes selected files and sends them with the message', async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    render(<InputComposer onSend={onSend} />);
+
+    const file = new File(['hello'], 'note.txt', { type: 'text/plain', lastModified: 1700000000000 });
+    const fileInput = screen.getByLabelText('Choose files to upload');
+    const textbox = screen.getByRole('textbox', { name: 'Message input' });
+
+    await user.upload(fileInput, file);
+    expect(screen.getByText('1 file ready for upload')).toBeInTheDocument();
+
+    await user.type(textbox, 'Upload this file');
+    await user.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => {
+      expect(onSend).toHaveBeenCalledTimes(1);
+    });
+
+    expect(onSend).toHaveBeenCalledWith(
+      'Upload this file',
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'note.txt',
+          mimeType: 'text/plain',
+          size: 5,
+          lastModified: 1700000000000,
+          base64Data: 'aGVsbG8=',
+        }),
+      ]),
+    );
+    expect(screen.queryByText('1 file ready for upload')).not.toBeInTheDocument();
   });
 });

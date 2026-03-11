@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-10
+> Last updated: 2026-03-11
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
 
@@ -301,11 +301,11 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-12b` Fill profile template
 - [x] `A-12c` Compare prices template
 - [x] `A-12d` Monitor changes template
-- [ ] `A-13` Advanced feature test suite
-- [ ] `A-13a` Interception tests
-- [ ] `A-13b` Upload tests
-- [ ] `A-13c` Recording/playback tests
-- [ ] `A-13d` Multi-tab tests
+- [x] `A-13` Advanced feature test suite
+- [x] `A-13a` Interception tests
+- [x] `A-13b` Upload tests
+- [x] `A-13c` Recording/playback tests
+- [x] `A-13d` Multi-tab tests
 - [ ] `A-14` Advanced security review
 - [ ] `A-14a` Intercept security
 - [ ] `A-14b` Export security

@@ -17,6 +17,7 @@ export type ActionType =
   | 'fill'
   | 'type'
   | 'clear'
+  | 'uploadFile'
   | 'select' // Select dropdown option
   | 'check' // Checkbox
   | 'uncheck'
@@ -44,7 +45,9 @@ export type ActionType =
   | 'evaluate' // Run custom JS
   | 'emulateDevice'
   | 'interceptNetwork'
-  | 'mockResponse';
+  | 'mockResponse'
+  | 'mockGeolocation'
+  | 'savePdf';
 
 export type NetworkResourceType =
   | 'Document'
@@ -58,6 +61,13 @@ export type NetworkResourceType =
 
 export type InterceptNetworkOperation = 'continue' | 'block';
 export type DevicePreset = 'iphone' | 'pixel' | 'ipad';
+
+export interface FrameTarget {
+  mode?: 'main' | 'auto' | 'frameId' | 'documentId' | 'url';
+  frameId?: number;
+  documentId?: string;
+  urlPattern?: string;
+}
 
 /**
  * Element selector - multiple strategies
@@ -77,6 +87,9 @@ export interface ElementSelector {
   // Visual selectors (for AI-generated)
   nearText?: string; // Element near this text
   withinSection?: string; // Section heading or landmark
+
+  // Optional frame targeting when the element lives inside an iframe
+  frame?: FrameTarget;
 }
 
 /**
@@ -153,6 +166,13 @@ export interface TypeAction extends BaseAction {
 export interface ClearAction extends BaseAction {
   type: 'clear';
   selector: ElementSelector;
+}
+
+export interface UploadFileAction extends BaseAction {
+  type: 'uploadFile';
+  selector: ElementSelector;
+  fileIds: string[];
+  clearFirst?: boolean;
 }
 
 export interface SelectAction extends BaseAction {
@@ -304,6 +324,32 @@ export interface MockResponseAction extends BaseAction {
   response: MockResponseDefinition;
 }
 
+export interface MockGeolocationAction extends BaseAction {
+  type: 'mockGeolocation';
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+}
+
+export interface SavePdfAction extends BaseAction {
+  type: 'savePdf';
+  filename?: string;
+  landscape?: boolean;
+  printBackground?: boolean;
+  scale?: number;
+  paperWidth?: number;
+  paperHeight?: number;
+  marginTop?: number;
+  marginRight?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  pageRanges?: string;
+  headerTemplate?: string;
+  footerTemplate?: string;
+  displayHeaderFooter?: boolean;
+  preferCSSPageSize?: boolean;
+}
+
 /**
  * Union type for all actions
  */
@@ -318,6 +364,7 @@ export type Action =
   | FillAction
   | TypeAction
   | ClearAction
+  | UploadFileAction
   | SelectAction
   | CheckAction
   | PressAction
@@ -337,7 +384,9 @@ export type Action =
   | EvaluateAction
   | EmulateDeviceAction
   | InterceptNetworkAction
-  | MockResponseAction;
+  | MockResponseAction
+  | MockGeolocationAction
+  | SavePdfAction;
 
 /**
  * Parsed AI response containing actions

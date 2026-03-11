@@ -1,4 +1,4 @@
-import type { MessageType } from '@shared/types';
+import type { BridgeFrameContext, BridgeSendTarget, MessageType } from '@shared/types';
 
 /**
  * Service Worker side of the bridge.
@@ -6,22 +6,22 @@ import type { MessageType } from '@shared/types';
  */
 export interface IServiceWorkerBridge {
   /** Send command to content script and wait for response */
-  send<T, R>(tabId: number, type: MessageType, payload: T): Promise<R>;
+  send<T, R>(tabId: number, type: MessageType, payload: T, target?: BridgeSendTarget): Promise<R>;
 
   /** Send command without waiting for response */
-  sendOneWay<T>(tabId: number, type: MessageType, payload: T): void;
+  sendOneWay<T>(tabId: number, type: MessageType, payload: T, target?: BridgeSendTarget): void;
 
   /** Listen for events from content scripts */
   onEvent(
     type: MessageType,
-    handler: (tabId: number, payload: unknown) => void,
+    handler: (tabId: number, frame: BridgeFrameContext, payload: unknown) => void,
   ): () => void;
 
   /** Check if content script is ready */
-  isReady(tabId: number): Promise<boolean>;
+  isReady(tabId: number, target?: BridgeSendTarget): Promise<boolean>;
 
   /** Inject content script if not present */
-  ensureContentScript(tabId: number): Promise<void>;
+  ensureContentScript(tabId: number, target?: BridgeSendTarget): Promise<void>;
 }
 
 /**

@@ -11,7 +11,12 @@
  */
 
 import type { IServiceWorkerBridge } from './interfaces';
-import type { BridgeMessage, MessageType } from '@shared/types';
+import type {
+  BridgeFrameContext,
+  BridgeMessage,
+  BridgeSendTarget,
+  MessageType,
+} from '@shared/types';
 import { generateId } from '@shared/utils';
 import { Logger } from '@shared/utils';
 import { ExtensionError } from '@shared/errors';
@@ -47,7 +52,7 @@ interface PendingRequest<R = unknown> {
   timer: ReturnType<typeof setTimeout>;
 }
 
-type EventHandler = (tabId: number, payload: unknown) => void;
+type EventHandler = (tabId: number, frame: BridgeFrameContext, payload: unknown) => void;
 
 // ============================================================================
 // ServiceWorkerBridge
@@ -87,7 +92,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
    * returns a Promise that resolves when the content script replies with a
    * message whose `id` matches the original, or rejects on timeout / error.
    */
-  send<T, R>(tabId: number, type: MessageType, payload: T): Promise<R> {
+  send<T, R>(tabId: number, type: MessageType, payload: T, target?: BridgeSendTarget): Promise<R> {
     return new Promise<R>((resolve, reject) => {
       const message: BridgeMessage<T> = {
         id: generateId(),
@@ -119,7 +124,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
       // If the content script responds synchronously via sendResponse(),
       // the promise resolves with that response.
       chrome.tabs
-        .sendMessage(tabId, message)
+        .sendMessage(tabId, message, this.toSendMessageOptions(target))
         .then((response: any) => {
           const pending = this.pendingRequests.get(message.id);
           if (!pending) {
@@ -164,7 +169,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
    * Send a command to a content script without waiting for a response.
    * Fire-and-forget: errors are logged but not thrown.
    */
-  sendOneWay<T>(tabId: number, type: MessageType, payload: T): void {
+  sendOneWay<T>(tabId: number, type: MessageType, payload: T, target?: BridgeSendTarget): void {
     const message: BridgeMessage<T> = {
       id: generateId(),
       type,
@@ -173,7 +178,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     };
 
     // Fire and forget — swallow any errors
-    chrome.tabs.sendMessage(tabId, message).catch((error: unknown) => {
+    chrome.tabs.sendMessage(tabId, message, this.toSendMessageOptions(target)).catch((error: unknown) => {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.warn(`sendOneWay failed for tab ${tabId}: ${errorMessage}`);
@@ -217,9 +222,9 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
    * Check if the content script in the given tab is alive and responding.
    * Sends a PING and expects a PONG within 2 seconds.
    */
-  async isReady(tabId: number): Promise<boolean> {
+  async isReady(tabId: number, target?: BridgeSendTarget): Promise<boolean> {
     try {
-      await this.sendWithTimeout<null, unknown>(tabId, 'PING', null, PING_TIMEOUT_MS);
+      await this.sendWithTimeout<null, unknown>(tabId, 'PING', null, PING_TIMEOUT_MS, target);
       return true;
     } catch {
       return false;
@@ -235,9 +240,9 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
    *    between attempts.
    * 4. Throws `ExtensionError(CONTENT_SCRIPT_INJECTION_FAILED)` if all retries fail.
    */
-  async ensureContentScript(tabId: number): Promise<void> {
+  async ensureContentScript(tabId: number, target?: BridgeSendTarget): Promise<void> {
     // Quick check: maybe it's already running
-    const alreadyReady = await this.isReady(tabId);
+    const alreadyReady = await this.isReady(tabId, target);
     if (alreadyReady) {
       this.logger.debug(`Content script already ready in tab ${tabId}`);
       return;
@@ -247,7 +252,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     this.logger.info(`Injecting content script into tab ${tabId}`);
     try {
       await chrome.scripting.executeScript({
-        target: { tabId },
+        target: this.toInjectionTarget(tabId, target),
         files: [CONTENT_SCRIPT_PATH],
       });
     } catch (error: unknown) {
@@ -264,7 +269,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     for (let attempt = 1; attempt <= MAX_INJECTION_RETRIES; attempt++) {
       await this.delay(RETRY_DELAY_MS);
 
-      const ready = await this.isReady(tabId);
+      const ready = await this.isReady(tabId, target);
       if (ready) {
         this.logger.info(
           `Content script ready in tab ${tabId} after ${attempt} retry attempt(s)`,
@@ -335,6 +340,8 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
       return undefined;
     }
 
+    const frame = this.extractFrameContext(sender, bridgeMessageLikeUrl(message));
+
     // Structural validation
     const validation = validateMessage(message);
     if (!validation.valid) {
@@ -377,7 +384,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     if (handlers && handlers.size > 0) {
       for (const handler of handlers) {
         try {
-          handler(tabId, bridgeMessage.payload);
+            handler(tabId, frame, bridgeMessage.payload);
         } catch (error: unknown) {
           this.logger.error(
             `Event handler error for type="${bridgeMessage.type}" from tab ${tabId}`,
@@ -402,6 +409,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     type: MessageType,
     payload: T,
     timeoutMs: number,
+    target?: BridgeSendTarget,
   ): Promise<R> {
     return new Promise<R>((resolve, reject) => {
       const message: BridgeMessage<T> = {
@@ -429,7 +437,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
       });
 
       chrome.tabs
-        .sendMessage(tabId, message)
+        .sendMessage(tabId, message, this.toSendMessageOptions(target))
         .then((response: any) => {
           const pending = this.pendingRequests.get(message.id);
           if (!pending) {
@@ -488,4 +496,75 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+
+  private toSendMessageOptions(target?: BridgeSendTarget): { frameId?: number; documentId?: string } | undefined {
+    if (!target?.documentId && target?.frameId === undefined) {
+      return undefined;
+    }
+
+    return {
+      documentId: target.documentId,
+      frameId: target.frameId,
+    };
+  }
+
+  private toInjectionTarget(
+    tabId: number,
+    target?: BridgeSendTarget,
+  ): chrome.scripting.InjectionTarget {
+    if (target?.frameId !== undefined) {
+      return { tabId, frameIds: [target.frameId] };
+    }
+
+    return { tabId, allFrames: true };
+  }
+
+  private extractFrameContext(
+    sender: chrome.runtime.MessageSender,
+    fallbackUrl: string | undefined,
+  ): BridgeFrameContext {
+    const senderWithFrame = sender as chrome.runtime.MessageSender & {
+      frameId?: number;
+      documentId?: string;
+      documentLifecycle?: string;
+      url?: string;
+      origin?: string;
+    };
+
+    const url = senderWithFrame.url ?? fallbackUrl ?? sender.tab?.url ?? 'about:blank';
+    const origin = this.extractOrigin(url);
+    const frameId = senderWithFrame.frameId ?? 0;
+
+    return {
+      tabId: sender.tab?.id,
+      frameId,
+      documentId: senderWithFrame.documentId,
+      parentFrameId: frameId === 0 ? null : undefined,
+      url,
+      origin,
+      isTop: frameId === 0,
+    };
+  }
+
+  private extractOrigin(url: string): string {
+    try {
+      return new URL(url).origin;
+    } catch {
+      return 'null';
+    }
+  }
+}
+
+function bridgeMessageLikeUrl(message: unknown): string | undefined {
+  if (typeof message !== 'object' || message === null) {
+    return undefined;
+  }
+
+  const payload = (message as { payload?: unknown }).payload;
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined;
+  }
+
+  const url = (payload as { url?: unknown }).url;
+  return typeof url === 'string' ? url : undefined;
 }

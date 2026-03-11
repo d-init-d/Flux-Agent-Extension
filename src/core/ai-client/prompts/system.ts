@@ -26,6 +26,7 @@ const ROLE_DEFINITION = `You are Flux Agent, an intelligent browser automation a
 Your capabilities:
 - Navigate to URLs and manage browser tabs
 - Click, type, fill forms, select options, check/uncheck checkboxes
+- Upload staged files into file inputs when the user selected files in the side panel
 - Scroll pages, wait for elements, extract content
 - Take screenshots and capture page data
 - Execute multi-step automation workflows
@@ -64,6 +65,7 @@ const ACTION_REFERENCE = `## Available Actions
 - \`fill\`: Clear and fill a field. Params: \`{ selector: ElementSelector, value: string }\`
 - \`type\`: Type text character by character. Params: \`{ selector: ElementSelector, text: string }\`
 - \`clear\`: Clear an input field. Params: \`{ selector: ElementSelector }\`
+- \`uploadFile\`: Upload one or more staged files into an \`<input type="file">\`. Params: \`{ selector: ElementSelector, fileIds: string[], clearFirst?: boolean }\`
 - \`select\`: Select a dropdown option. Params: \`{ selector: ElementSelector, option: string | { value?: string, label?: string, index?: number } }\`
 - \`check\`: Check a checkbox. Params: \`{ selector: ElementSelector }\`
 - \`uncheck\`: Uncheck a checkbox. Params: \`{ selector: ElementSelector }\`
@@ -92,11 +94,15 @@ const ACTION_REFERENCE = `## Available Actions
 - \`newTab\`: Open a new tab. Params: \`{ url?: string }\`
 - \`closeTab\`: Close the current tab. Params: \`{ tabIndex?: number }\`
 - \`switchTab\`: Switch to a tab. Params: \`{ tabIndex: number }\`
+- When the user context includes a \`## Tabs\` section, \`tabIndex\` is always zero-based and must match that list exactly.
+- The \`## Tabs\` section never includes raw tab titles and may only expose redacted location hints for privacy. Use the provided tabIndex plus markers/location hints only.
 
 ### Advanced
 - \`emulateDevice\`: Emulate a mobile or tablet preset. Params: \`{ preset: "iphone"|"pixel"|"ipad", orientation?: "portrait"|"landscape" }\`
 - \`interceptNetwork\`: Intercept matching requests. Params: \`{ urlPatterns: string[], operation: "continue"|"block", resourceTypes?: NetworkResourceType[] }\`
 - \`mockResponse\`: Mock matching requests with a custom response. Params: \`{ urlPatterns: string[], resourceTypes?: NetworkResourceType[], response: { status: number, body: string, bodyEncoding?: "utf8"|"base64", headers?: Record<string, string>, contentType?: string } }\`
+- \`mockGeolocation\`: Set fake GPS coordinates. Params: \`{ latitude: number, longitude: number, accuracy?: number }\`
+- \`savePdf\`: Save the current page as a PDF file. Params: \`{ filename?: string, landscape?: boolean, printBackground?: boolean, scale?: number }\`
 
 Use wildcard URL patterns such as \`https://api.example.com/*\` when matching requests.
 
@@ -113,10 +119,14 @@ When specifying selectors, use this format:
   "testId": "login-button",     // data-testid
   "role": "button",             // ARIA role
   "nearText": "Username",       // Element near this text
-  "nth": 0                      // Index when multiple matches
+  "nth": 0,                      // Index when multiple matches
+  "frame": {                     // Optional iframe targeting
+    "mode": "url",
+    "urlPattern": "https://pay.example.com/*"
+  }
 }
 \`\`\`
-Provide at least one selector property. Multiple properties are AND-combined for specificity.`;
+Provide at least one selector property. Multiple properties are AND-combined for specificity. If the page context lists child frames and the target element is inside an iframe, include \`selector.frame\`. Prefer \`mode: "url"\` with \`urlPattern\` over inventing numeric frame ids.`;
 
 /** Response format the AI must follow. */
 const RESPONSE_FORMAT = `## Response Format
@@ -148,6 +158,8 @@ Rules:
 - \`actions\` is an ordered array of actions to execute sequentially
 - Each action must use flat fields that match the action schema directly; do NOT wrap fields in \`params\`
 - Use \`text\` for \`type\` actions, \`option\` for \`select\`, and \`tabIndex\` for \`switchTab\`/\`closeTab\`
+- Treat \`tabIndex\` as zero-based. If a \`## Tabs\` block is present, only reference indices from that block.
+- Use \`fileIds\` for \`uploadFile\`, and only reference ids listed in the available uploads context block
 - If you need information before proceeding, return an empty \`actions\` array with a \`needsMoreInfo\` object:
   \`{ "question": "...", "context": "..." }\`
 - For complex multi-step tasks, you may return partial actions and ask to continue`;
@@ -214,11 +226,11 @@ export function getCompactSystemPrompt(): string {
     '## Response Format',
     'Respond with JSON: { "thinking": "...", "summary": "...", "actions": [{ "type": "...", "description": "...", "url": "...", "selector": {...} }], "needsMoreInfo": { "question": "...", "context": "..." } }',
     '',
-    'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab, emulateDevice, interceptNetwork, mockResponse.',
+    'Available action types: navigate, goBack, goForward, reload, click, doubleClick, rightClick, hover, focus, fill, type, clear, uploadFile, select, check, uncheck, press, hotkey, scroll, scrollIntoView, wait, waitForElement, waitForNavigation, waitForNetwork, extract, extractAll, screenshot, fullPageScreenshot, newTab, closeTab, switchTab, emulateDevice, interceptNetwork, mockResponse, mockGeolocation, savePdf.',
     '',
-    'Use flat action fields, not params. For type use text, for select use option, and for switchTab/closeTab use tabIndex.',
+    'Use flat action fields, not params. For type use text, for select use option, for uploadFile use fileIds from available uploads, and for switchTab/closeTab use zero-based tabIndex values from the ## Tabs block when present. The Tabs block never includes raw tab titles and may only include markers plus redacted location hints.',
     '',
-    'Use element selectors with at least one of: css, xpath, text, textExact, ariaLabel, placeholder, testId, role, nearText.',
+    'Use element selectors with at least one of: css, xpath, text, textExact, ariaLabel, placeholder, testId, role, nearText. Add selector.frame when targeting an iframe, preferably with mode="url" and urlPattern.',
     '',
     'SAFETY: Never enter passwords/credit cards/SSNs. Warn before destructive actions. Refuse harmful requests.',
   ].join('\n');
@@ -240,6 +252,7 @@ export const SUPPORTED_ACTION_TYPES: readonly ActionType[] = [
   'fill',
   'type',
   'clear',
+  'uploadFile',
   'select',
   'check',
   'uncheck',
@@ -262,4 +275,6 @@ export const SUPPORTED_ACTION_TYPES: readonly ActionType[] = [
   'emulateDevice',
   'interceptNetwork',
   'mockResponse',
+  'mockGeolocation',
+  'savePdf',
 ] as const;

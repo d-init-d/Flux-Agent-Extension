@@ -88,7 +88,10 @@ export class TabManager {
   async listTabs(): Promise<TabState[]> {
     try {
       const tabs = await chrome.tabs.query({ currentWindow: true });
-      return tabs.filter((tab) => tab.id !== undefined).map((tab) => this.mapChromeTab(tab));
+      return tabs
+        .filter((tab) => tab.id !== undefined)
+        .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+        .map((tab) => this.mapChromeTab(tab));
     } catch (error: unknown) {
       throw this.mapTabsError(error, ErrorCode.TAB_PERMISSION_DENIED, 'Failed to list tabs');
     }
