@@ -1,4 +1,4 @@
-import { DebuggerAdapter } from '@core/browser-controller';
+import { DebuggerAdapter } from '@core/browser-controller/debugger-adapter';
 import type { EmulateDeviceAction } from '@shared/types';
 import { Logger } from '@shared/utils';
 

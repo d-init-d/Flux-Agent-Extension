@@ -1,20 +1,18 @@
 import { SessionManager } from '@core/session';
 import type { IServiceWorkerBridge } from '@core/bridge';
-import {
-  AIClientManager,
-  ClaudeProvider,
-  GeminiProvider,
-  getSystemPrompt,
-  OllamaProvider,
-  OpenAIProvider,
-  OpenRouterProvider,
-} from '@core/ai-client';
-import type { IAIClientManager } from '@core/ai-client';
+import { AIClientManager } from '@core/ai-client/manager';
+import { ClaudeProvider } from '@core/ai-client/providers/claude';
+import { GeminiProvider } from '@core/ai-client/providers/gemini';
+import { OllamaProvider } from '@core/ai-client/providers/ollama';
+import { OpenAIProvider } from '@core/ai-client/providers/openai';
+import { OpenRouterProvider } from '@core/ai-client/providers/openrouter';
+import { getSystemPrompt } from '@core/ai-client/prompts/system';
+import type { IAIClientManager } from '@core/ai-client/interfaces';
 import { CommandParser } from '@core/command-parser';
 import type { ParserConfig } from '@core/command-parser';
 import { ActionOrchestrator } from '@core/orchestrator';
-import { TabManager, DebuggerAdapter } from '@core/browser-controller';
-import type { PrintToPDFParams } from '@core/browser-controller';
+import { DebuggerAdapter, type PrintToPDFParams } from '@core/browser-controller/debugger-adapter';
+import { TabManager } from '@core/browser-controller/tab-manager';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
 import type {

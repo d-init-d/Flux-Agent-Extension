@@ -1,4 +1,4 @@
-import { DebuggerAdapter } from '@core/browser-controller';
+import { DebuggerAdapter } from '@core/browser-controller/debugger-adapter';
 import type { MockGeolocationAction } from '@shared/types/actions';
 import { Logger } from '@shared/utils';
 

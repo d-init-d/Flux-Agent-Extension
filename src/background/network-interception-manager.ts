@@ -1,4 +1,4 @@
-import { DebuggerAdapter } from '@core/browser-controller';
+import { DebuggerAdapter } from '@core/browser-controller/debugger-adapter';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import type {
   InterceptNetworkAction,
