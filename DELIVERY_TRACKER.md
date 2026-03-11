@@ -315,7 +315,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: `P-01a`, `P-01b`, `P-01c`, and `P-05a` complete; `P-05b` remains pending, and `P-01` stays in progress pending later performance tasks.
+Status summary: `P-01a`, `P-01b`, `P-01c`, `P-05a`, and `P-05b` are complete; `P-01` stays in progress pending later performance tasks.
 
 ### Sprint 5.1
 
@@ -325,7 +325,7 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, and `P-05a` complete; `P-05b` remains
 - [x] `P-01c` Content script size optimization
 - [x] `P-01d` Service worker keep-alive baseline
 - [x] `P-05a` README
-- [ ] `P-05b` CONTRIBUTING
+- [x] `P-05b` CONTRIBUTING
 - [ ] `P-02` E2E expansion 50+ scenarios
 - [ ] `P-02a` Real-site tests
 - [ ] `P-02b` SPA tests
