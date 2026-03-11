@@ -315,14 +315,14 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: `P-01a` and `P-01b` complete; `P-01` remains in progress pending later performance tasks.
+Status summary: `P-01a`, `P-01b`, and `P-01c` complete; `P-01` remains in progress pending later performance tasks.
 
 ### Sprint 5.1
 
 - [~] `P-01` Performance optimization (ongoing, not measured against final targets)
 - [x] `P-01a` Bundle analysis/tree shaking
 - [x] `P-01b` Lazy-load AI providers
-- [ ] `P-01c` Content script size optimization
+- [x] `P-01c` Content script size optimization
 - [x] `P-01d` Service worker keep-alive baseline
 - [ ] `P-02` E2E expansion 50+ scenarios
 - [ ] `P-02a` Real-site tests

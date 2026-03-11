@@ -12,6 +12,7 @@ const executeInputAction = vi.fn();
 const executeScrollAction = vi.fn();
 const executeExtractAction = vi.fn();
 const executeWaitAction = vi.fn();
+const domInspectorBuildPageContext = vi.fn();
 
 vi.mock('@core/bridge', () => {
   class MockContentScriptBridge {
@@ -55,29 +56,7 @@ vi.mock('../dom/selector-engine', () => {
 
 vi.mock('../dom/inspector', () => {
   class MockDOMInspector {
-    buildPageContext = vi.fn(() => ({
-      url: 'https://example.com',
-      title: 'Example',
-      frame: {
-        frameId: 0,
-        parentFrameId: null,
-        url: 'https://example.com',
-        origin: 'https://example.com',
-        name: 'main',
-        isTop: true,
-      },
-      interactiveElements: [],
-      headings: [],
-      links: [],
-      forms: [],
-      viewport: {
-        width: 1280,
-        height: 720,
-        scrollX: 0,
-        scrollY: 0,
-        scrollHeight: 720,
-      },
-    }));
+    buildPageContext = domInspectorBuildPageContext;
   }
 
   return { DOMInspector: MockDOMInspector };
@@ -110,12 +89,36 @@ describe('ContentScriptManager command routing', () => {
     executeScrollAction.mockReset();
     executeExtractAction.mockReset();
     executeWaitAction.mockReset();
+    domInspectorBuildPageContext.mockReset();
 
     executeInteractionAction.mockResolvedValue({ actionId: 'x', success: true, duration: 1 });
     executeInputAction.mockResolvedValue({ actionId: 'x', success: true, duration: 1 });
     executeScrollAction.mockResolvedValue({ actionId: 'x', success: true, duration: 1 });
     executeExtractAction.mockResolvedValue({ actionId: 'x', success: true, duration: 1 });
     executeWaitAction.mockResolvedValue({ actionId: 'x', success: true, duration: 1 });
+    domInspectorBuildPageContext.mockReturnValue({
+      url: 'https://example.com',
+      title: 'Example',
+      frame: {
+        frameId: 0,
+        parentFrameId: null,
+        url: 'https://example.com',
+        origin: 'https://example.com',
+        name: 'main',
+        isTop: true,
+      },
+      interactiveElements: [],
+      headings: [],
+      links: [],
+      forms: [],
+      viewport: {
+        width: 1280,
+        height: 720,
+        scrollX: 0,
+        scrollY: 0,
+        scrollHeight: 720,
+      },
+    });
 
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
@@ -197,6 +200,45 @@ describe('ContentScriptManager command routing', () => {
 
     manager.destroy();
     expect(bridgeDestroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('lazily serves GET_PAGE_CONTEXT and reuses the DOM inspector instance', async () => {
+    (window as Window & { __FLUX_AGENT_CS_INITIALIZED__?: boolean }).__FLUX_AGENT_CS_INITIALIZED__ =
+      true;
+
+    const module = await import('../index');
+    const manager = new module.ContentScriptManager();
+
+    const handlers = new Map<string, (payload: unknown) => Promise<unknown>>();
+    onCommand.mockImplementation(
+      (type: string, handler: (payload: unknown) => Promise<unknown>) => {
+        handlers.set(type, handler);
+        return () => undefined;
+      },
+    );
+
+    manager.initialize();
+
+    const getPageContextHandler = handlers.get('GET_PAGE_CONTEXT');
+    expect(getPageContextHandler).toBeDefined();
+    expect(domInspectorBuildPageContext).not.toHaveBeenCalled();
+
+    await expect(getPageContextHandler?.(undefined)).resolves.toEqual({
+      context: expect.objectContaining({
+        url: 'https://example.com',
+        title: 'Example',
+      }),
+    });
+    await expect(getPageContextHandler?.(undefined)).resolves.toEqual({
+      context: expect.objectContaining({
+        url: 'https://example.com',
+        title: 'Example',
+      }),
+    });
+
+    expect(domInspectorBuildPageContext).toHaveBeenCalledTimes(2);
+
+    manager.destroy();
   });
 
   it('shows a floating action status card during execution and removes it after success', async () => {

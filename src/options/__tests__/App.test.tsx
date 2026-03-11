@@ -5,6 +5,7 @@ import { createDefaultOnboardingState } from '../../shared/storage/onboarding';
 import { App } from '../App';
 import { renderWithProviders, readStorage, seedStorage } from '../../test/helpers';
 import { ThemeProvider } from '../../ui/theme';
+import * as providerLoader from '../../core/ai-client/provider-loader';
 
 function renderOptionsApp() {
   return renderWithProviders(
@@ -100,12 +101,12 @@ describe('Options App', () => {
 
   it('validates the selected provider connection', async () => {
     const user = userEvent.setup();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    const validateApiKey = vi.fn().mockResolvedValue(true);
+    const createProviderSpy = vi.spyOn(providerLoader, 'createProvider').mockResolvedValue({
+      initialize,
+      validateApiKey,
+    } as Awaited<ReturnType<typeof providerLoader.createProvider>>);
 
     renderOptionsApp();
 
@@ -114,7 +115,9 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /test connection/i }));
 
     expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
-    expect(globalThis.fetch).toHaveBeenCalled();
+    expect(createProviderSpy).toHaveBeenCalledWith('openai');
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(validateApiKey).toHaveBeenCalledWith('sk-openai-test');
     expect(screen.getByLabelText('API key')).toHaveValue('');
   });
 

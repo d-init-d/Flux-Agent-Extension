@@ -14,14 +14,9 @@
 import { ContentScriptBridge } from '@core/bridge';
 import { generateId, Logger } from '@shared/utils';
 import { SelectorEngine } from './dom/selector-engine';
-import { DOMInspector } from './dom/inspector';
-import { AutoWaitEngine } from './dom/auto-wait-engine';
-import { executeInteractionAction } from './actions/interaction';
-import { executeInputAction } from './actions/input';
-import { executeScrollAction } from './actions/scroll';
-import { executeExtractAction } from './actions/extract';
-import { executeWaitAction } from './actions/wait';
-import { ActionStatusOverlay } from './action-status-overlay';
+import type { DOMInspector } from './dom/inspector';
+import type { AutoWaitEngine } from './dom/auto-wait-engine';
+import type { ActionStatusOverlay } from './action-status-overlay';
 import type {
   ExecuteActionPayload,
   ActionResultPayload,
@@ -34,9 +29,47 @@ import type {
   RecordedInputPayload,
   RecordedNavigationPayload,
   ClickAction,
+  HoverAction,
+  FocusAction,
+  TypeAction,
+  ClearAction,
+  UploadFileAction,
+  SelectAction,
+  CheckAction,
+  ScrollAction,
+  ScrollIntoViewAction,
+  ExtractAction,
+  ExtractAllAction,
+  ScreenshotAction,
+  WaitAction,
+  WaitForElementAction,
+  WaitForNavigationAction,
+  WaitForNetworkAction,
+  SerializedFileUpload,
   ElementSelector,
   NavigateAction,
 } from '@shared/types';
+
+type InteractionActionModule = typeof import('./actions/interaction');
+type InputActionModule = typeof import('./actions/input');
+type ScrollActionModule = typeof import('./actions/scroll');
+type ExtractActionModule = typeof import('./actions/extract');
+type WaitActionModule = typeof import('./actions/wait');
+type InteractionExecutionAction = ClickAction | HoverAction | FocusAction;
+type InputExecutionAction =
+  | FillAction
+  | TypeAction
+  | ClearAction
+  | UploadFileAction
+  | SelectAction
+  | CheckAction;
+type ScrollExecutionAction = ScrollAction | ScrollIntoViewAction;
+type ExtractExecutionAction = ExtractAction | ExtractAllAction | ScreenshotAction;
+type WaitExecutionAction =
+  | WaitAction
+  | WaitForElementAction
+  | WaitForNavigationAction
+  | WaitForNetworkAction;
 
 // ============================================================================
 // Double-injection guard
@@ -112,9 +145,17 @@ export class ContentScriptManager {
   private readonly bridge: ContentScriptBridge;
   private readonly logger: Logger;
   private readonly selectorEngine: SelectorEngine;
-  private readonly domInspector: DOMInspector;
-  private readonly autoWaitEngine: AutoWaitEngine;
-  private readonly actionStatusOverlay: ActionStatusOverlay;
+  private domInspector: DOMInspector | null = null;
+  private domInspectorPromise: Promise<DOMInspector> | null = null;
+  private autoWaitEngine: AutoWaitEngine | null = null;
+  private autoWaitEnginePromise: Promise<AutoWaitEngine> | null = null;
+  private actionStatusOverlay: ActionStatusOverlay | null = null;
+  private actionStatusOverlayPromise: Promise<ActionStatusOverlay | null> | null = null;
+  private interactionActionModulePromise: Promise<InteractionActionModule> | null = null;
+  private inputActionModulePromise: Promise<InputActionModule> | null = null;
+  private scrollActionModulePromise: Promise<ScrollActionModule> | null = null;
+  private extractActionModulePromise: Promise<ExtractActionModule> | null = null;
+  private waitActionModulePromise: Promise<WaitActionModule> | null = null;
   private mutationObserver: MutationObserver | null = null;
   private activeHighlights: ActiveHighlight[] = [];
   private highlightAnimationFrame: number | null = null;
@@ -150,9 +191,6 @@ export class ContentScriptManager {
     this.bridge = new ContentScriptBridge();
     this.logger = new Logger('ContentScript');
     this.selectorEngine = new SelectorEngine();
-    this.domInspector = new DOMInspector(this.logger);
-    this.autoWaitEngine = new AutoWaitEngine(this.selectorEngine);
-    this.actionStatusOverlay = new ActionStatusOverlay();
   }
 
   // --------------------------------------------------------------------------
@@ -200,7 +238,8 @@ export class ContentScriptManager {
 
     // Clean up highlight overlays from the DOM
     this.removeAllHighlights();
-    this.actionStatusOverlay.destroy();
+    this.actionStatusOverlay?.destroy();
+    this.actionStatusOverlay = null;
 
     // Remove beforeunload listener
     if (this.unloadHandler !== null) {
@@ -212,7 +251,8 @@ export class ContentScriptManager {
       this.teardownRecordingListeners();
     }
 
-    this.autoWaitEngine.destroy();
+    this.autoWaitEngine?.destroy();
+    this.autoWaitEngine = null;
 
     this.bridge.destroy();
     this.logger.info('ContentScriptManager destroyed');
@@ -273,22 +313,22 @@ export class ContentScriptManager {
     const showFloatingBar = await this.shouldShowFloatingBar();
 
     if (showFloatingBar && !this.isDestroyed) {
-      this.actionStatusOverlay.showRunning(action);
+      await this.showActionRunning(action);
     } else if (!showFloatingBar) {
-      this.actionStatusOverlay.destroy();
+      this.destroyActionStatusOverlay();
     }
 
     try {
       const result = await this.executeAction(payload);
 
       if (this.shouldUpdateActionOverlay(actionRunId, showFloatingBar)) {
-        this.actionStatusOverlay.showResult(action, result);
+        await this.showActionResult(action, result);
       }
 
       return result;
     } catch (error) {
       if (this.shouldUpdateActionOverlay(actionRunId, showFloatingBar)) {
-        this.actionStatusOverlay.showError(action, error);
+        await this.showActionError(action, error);
       }
 
       throw error;
@@ -308,7 +348,7 @@ export class ContentScriptManager {
       case 'rightClick':
       case 'hover':
       case 'focus':
-        return executeInteractionAction(action, this.selectorEngine);
+        return this.executeInteractionAction(action);
       case 'fill':
       case 'type':
       case 'clear':
@@ -316,20 +356,20 @@ export class ContentScriptManager {
       case 'select':
       case 'check':
       case 'uncheck':
-        return executeInputAction(action, this.selectorEngine, payload.context.uploads ?? []);
+        return this.executeInputAction(action, payload.context.uploads ?? []);
       case 'scroll':
       case 'scrollIntoView':
-        return executeScrollAction(action, this.selectorEngine);
+        return this.executeScrollAction(action);
       case 'extract':
       case 'extractAll':
       case 'screenshot':
       case 'fullPageScreenshot':
-        return executeExtractAction(action, this.selectorEngine);
+        return this.executeExtractAction(action);
       case 'wait':
       case 'waitForElement':
       case 'waitForNavigation':
       case 'waitForNetwork':
-        return executeWaitAction(action, this.autoWaitEngine);
+        return this.executeWaitAction(action);
       default:
         break;
     }
@@ -372,7 +412,176 @@ export class ContentScriptManager {
     _payload?: GetPageContextPayload,
   ): Promise<PageContextPayload> {
     this.logger.debug('GET_PAGE_CONTEXT received');
-    return { context: this.domInspector.buildPageContext() };
+    const domInspector = await this.getDOMInspector();
+    return { context: domInspector.buildPageContext() };
+  }
+
+  private async executeInteractionAction(
+    action: InteractionExecutionAction,
+  ): Promise<ActionResultPayload> {
+    const { executeInteractionAction } = await this.loadInteractionActionModule();
+    return executeInteractionAction(action, this.selectorEngine);
+  }
+
+  private async executeInputAction(
+    action: InputExecutionAction,
+    uploads: SerializedFileUpload[],
+  ): Promise<ActionResultPayload> {
+    const { executeInputAction } = await this.loadInputActionModule();
+    return executeInputAction(action, this.selectorEngine, uploads);
+  }
+
+  private async executeScrollAction(
+    action: ScrollExecutionAction,
+  ): Promise<ActionResultPayload> {
+    const { executeScrollAction } = await this.loadScrollActionModule();
+    return executeScrollAction(action, this.selectorEngine);
+  }
+
+  private async executeExtractAction(
+    action: ExtractExecutionAction,
+  ): Promise<ActionResultPayload> {
+    const { executeExtractAction } = await this.loadExtractActionModule();
+    return executeExtractAction(action, this.selectorEngine);
+  }
+
+  private async executeWaitAction(
+    action: WaitExecutionAction,
+  ): Promise<ActionResultPayload> {
+    const [{ executeWaitAction }, autoWaitEngine] = await Promise.all([
+      this.loadWaitActionModule(),
+      this.getAutoWaitEngine(),
+    ]);
+    return executeWaitAction(action, autoWaitEngine);
+  }
+
+  private async showActionRunning(action: ExecuteActionPayload['action']): Promise<void> {
+    const actionStatusOverlay = await this.getActionStatusOverlay();
+    actionStatusOverlay?.showRunning(action);
+  }
+
+  private async showActionResult(
+    action: ExecuteActionPayload['action'],
+    result: ActionResultPayload,
+  ): Promise<void> {
+    const actionStatusOverlay = await this.getActionStatusOverlay();
+    actionStatusOverlay?.showResult(action, result);
+  }
+
+  private async showActionError(
+    action: ExecuteActionPayload['action'],
+    error: unknown,
+  ): Promise<void> {
+    const actionStatusOverlay = await this.getActionStatusOverlay();
+    actionStatusOverlay?.showError(action, error);
+  }
+
+  private async getDOMInspector(): Promise<DOMInspector> {
+    if (this.domInspector) {
+      return this.domInspector;
+    }
+
+    if (!this.domInspectorPromise) {
+      this.domInspectorPromise = import('./dom/inspector').then(({ DOMInspector }) => {
+        const domInspector = new DOMInspector(this.logger);
+        this.domInspector = domInspector;
+        return domInspector;
+      });
+    }
+
+    return this.domInspectorPromise;
+  }
+
+  private async getAutoWaitEngine(): Promise<AutoWaitEngine> {
+    if (this.autoWaitEngine) {
+      return this.autoWaitEngine;
+    }
+
+    if (!this.autoWaitEnginePromise) {
+      this.autoWaitEnginePromise = import('./dom/auto-wait-engine').then(({ AutoWaitEngine }) => {
+        const autoWaitEngine = new AutoWaitEngine(this.selectorEngine);
+        if (this.isDestroyed) {
+          autoWaitEngine.destroy();
+        } else {
+          this.autoWaitEngine = autoWaitEngine;
+        }
+        return autoWaitEngine;
+      });
+    }
+
+    return this.autoWaitEnginePromise;
+  }
+
+  private async getActionStatusOverlay(): Promise<ActionStatusOverlay | null> {
+    if (this.isDestroyed) {
+      return null;
+    }
+
+    if (this.actionStatusOverlay) {
+      return this.actionStatusOverlay;
+    }
+
+    if (!this.actionStatusOverlayPromise) {
+      this.actionStatusOverlayPromise = import('./action-status-overlay').then(
+        ({ ActionStatusOverlay }) => {
+          const actionStatusOverlay = new ActionStatusOverlay();
+          if (this.isDestroyed) {
+            actionStatusOverlay.destroy();
+            return null;
+          }
+
+          this.actionStatusOverlay = actionStatusOverlay;
+          return actionStatusOverlay;
+        },
+      );
+    }
+
+    return this.actionStatusOverlayPromise;
+  }
+
+  private destroyActionStatusOverlay(): void {
+    this.actionStatusOverlay?.destroy();
+    this.actionStatusOverlay = null;
+  }
+
+  private loadInteractionActionModule(): Promise<InteractionActionModule> {
+    if (!this.interactionActionModulePromise) {
+      this.interactionActionModulePromise = import('./actions/interaction');
+    }
+
+    return this.interactionActionModulePromise;
+  }
+
+  private loadInputActionModule(): Promise<InputActionModule> {
+    if (!this.inputActionModulePromise) {
+      this.inputActionModulePromise = import('./actions/input');
+    }
+
+    return this.inputActionModulePromise;
+  }
+
+  private loadScrollActionModule(): Promise<ScrollActionModule> {
+    if (!this.scrollActionModulePromise) {
+      this.scrollActionModulePromise = import('./actions/scroll');
+    }
+
+    return this.scrollActionModulePromise;
+  }
+
+  private loadExtractActionModule(): Promise<ExtractActionModule> {
+    if (!this.extractActionModulePromise) {
+      this.extractActionModulePromise = import('./actions/extract');
+    }
+
+    return this.extractActionModulePromise;
+  }
+
+  private loadWaitActionModule(): Promise<WaitActionModule> {
+    if (!this.waitActionModulePromise) {
+      this.waitActionModulePromise = import('./actions/wait');
+    }
+
+    return this.waitActionModulePromise;
   }
 
   // --------------------------------------------------------------------------
