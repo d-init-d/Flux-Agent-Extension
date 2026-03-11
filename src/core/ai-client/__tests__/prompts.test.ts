@@ -1,4 +1,5 @@
 import {
+  buildComparePricesPrompt,
   buildConfirmationPrompt,
   buildContinuationPrompt,
   buildEnrichedUserMessage,
@@ -209,6 +210,18 @@ describe('ai-client prompts', () => {
       expect(prompt).toContain('Before submitting, summarize which profile values you plan to use');
       expect(prompt).toContain('Do not invent profile details or guess values for missing fields.');
       expect(prompt).toContain('If the page is not a form, or no saved profile data is available, say that clearly and ask for the missing details.');
+    });
+
+    it('buildComparePricesPrompt emphasizes multi-tab price comparison without guessing', () => {
+      const prompt = buildComparePricesPrompt();
+
+      expect(prompt).toContain('Compare pricing for the same product or plan across the relevant pages that are already open.');
+      expect(prompt).toContain('If a ## Tabs block is available, use those zero-based tabIndex values exactly');
+      expect(prompt).toContain('markers plus redacted location hints');
+      expect(prompt).toContain('Return a structured comparison with the source tabIndex or current-tab label');
+      expect(prompt).toContain('Keep pricing text, units, and qualifiers exactly as shown');
+      expect(prompt).toContain('finish with the cheapest clear option plus any notable trade-offs.');
+      expect(prompt).toContain('If fewer than two relevant pricing sources are available, say that clearly before continuing.');
     });
 
     it('formatSelector builds human-readable selector text', () => {

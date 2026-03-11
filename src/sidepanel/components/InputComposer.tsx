@@ -1,5 +1,9 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { buildExtractTableDataPrompt, buildFillFormFromProfilePrompt } from '@core/ai-client/prompts/templates';
+import {
+  buildComparePricesPrompt,
+  buildExtractTableDataPrompt,
+  buildFillFormFromProfilePrompt,
+} from '@core/ai-client/prompts/templates';
 import { Button } from '@/ui/components';
 
 interface SlashCommand {
@@ -31,6 +35,12 @@ const DEFAULT_COMMANDS: SlashCommand[] = [
     command: '/extract-table',
     description: 'Insert a prompt for extracting table data.',
     insertText: buildExtractTableDataPrompt(),
+  },
+  {
+    id: 'compare-prices',
+    command: '/compare-prices',
+    description: 'Insert a prompt for comparing prices across relevant tabs.',
+    insertText: buildComparePricesPrompt(),
   },
   {
     id: 'fill-from-profile',

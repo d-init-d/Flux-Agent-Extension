@@ -326,6 +326,24 @@ export function buildFillFormFromProfilePrompt(): string {
 }
 
 /**
+ * Build a focused prompt for comparing prices across relevant tabs.
+ *
+ * Used by the sidepanel slash command flow as a ready-to-edit multi-tab prompt
+ * without changing the message payload contract.
+ */
+export function buildComparePricesPrompt(): string {
+  return [
+    'Compare pricing for the same product or plan across the relevant pages that are already open.',
+    'If a ## Tabs block is available, use those zero-based tabIndex values exactly and rely on markers plus redacted location hints to pick the right tabs.',
+    'Use the current tab when it already shows pricing, and switch tabs only when another tab is needed for the comparison.',
+    'Return a structured comparison with the source tabIndex or current-tab label, product or plan name, price, billing period, fees or discounts, and the important terms or limits shown on each page.',
+    'Keep pricing text, units, and qualifiers exactly as shown, and call out missing or unclear values instead of guessing.',
+    'Choose the single best matching offer from each relevant tab and finish with the cheapest clear option plus any notable trade-offs.',
+    'If fewer than two relevant pricing sources are available, say that clearly before continuing.',
+  ].join('\n');
+}
+
+/**
  * Format an element selector for human-readable display.
  */
 export function formatSelector(selector: ElementSelector): string {
