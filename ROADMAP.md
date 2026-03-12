@@ -486,6 +486,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-02c` is PASS via `src/test/e2e/p-02c-edge-cases.test.tsx`, which adds deterministic edge-case E2E coverage for slow page-context fetches, oversized DOM/page-context inputs, and graceful no-op degradation when live page-context collection fails. Verification passed with `pnpm typecheck`, targeted Vitest on `src/test/e2e/p-02c-edge-cases.test.tsx` (`1 file / 3 tests`), full `pnpm test` (`70 files / 1121 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-02` remains in progress pending `P-02d`.
 
+> Update: `P-02d` is PASS via `src/test/e2e/p-02d-error-recovery.test.tsx`, which adds deterministic error-recovery E2E coverage for recoverable retries that continue the plan, unrecoverable failures that halt the remaining actions cleanly, and optional-action failures that surface safely without crashing the UI/runtime. Verification passed with `pnpm typecheck`, targeted Vitest on `src/test/e2e/p-02d-error-recovery.test.tsx` (`1 file / 3 tests`), full `pnpm test` (`71 files / 1124 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-02` remains in progress toward the broader `50+` scenario target.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |
