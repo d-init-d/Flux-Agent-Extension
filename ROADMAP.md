@@ -488,6 +488,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-02d` is PASS via `src/test/e2e/p-02d-error-recovery.test.tsx`, which adds deterministic error-recovery E2E coverage for recoverable retries that continue the plan, unrecoverable failures that halt the remaining actions cleanly, and optional-action failures that surface safely without crashing the UI/runtime. Verification passed with `pnpm typecheck`, targeted Vitest on `src/test/e2e/p-02d-error-recovery.test.tsx` (`1 file / 3 tests`), full `pnpm test` (`71 files / 1124 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-02` remains in progress toward the broader `50+` scenario target.
 
+> Update: `P-06` is now in progress via `BETA_PROGRAM.md` and `.github/ISSUE_TEMPLATE/beta-feedback.md`, which prepare the beta-program operating kit inside the repo. `P-06b` is PASS with seven structured scripts covering onboarding, provider setup, popup, side panel, recording/playback, export, and workflow reuse. `P-06a` and `P-06c` now have recruitment and triage assets ready, but still require real testers, real browser runs, and actual issue intake before they can be marked complete. Verification for this docs-only slice used `git diff --check` on the new files and tracker updates.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |
