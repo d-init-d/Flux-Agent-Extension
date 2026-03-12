@@ -498,6 +498,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-03d` is PASS via `src/core/bridge/__tests__/message-protocol-fuzzing.test.ts`, plus small hardening updates in `src/core/bridge/message-validation.ts` and `src/core/bridge/service-worker-bridge.ts` so hostile getter/proxy payloads degrade to invalid-message handling instead of crashing bridge code. Verification passed with `pnpm typecheck`, targeted Vitest on the bridge fuzzing + validation suites (`5 files / 100 tests`), full `pnpm test` (`74 files / 1156 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. With `P-03a` through `P-03d` complete, `P-03` is now PASS with no new critical/high findings observed in the repo-side penetration-test evidence.
 
+> Update: `P-04` is now in progress via `PERMISSIONS.md`, `PRIVACY_POLICY.md`, and `DATA_USE_DISCLOSURE.md`, all aligned to the live manifest and current options/runtime behavior. `P-04a` is PASS because every declared permission and the broad `"<all_urls>"` host scope are now explicitly justified against shipped features. `P-04b` and `P-04c` have substantial prep artifacts, but remain in progress because the privacy policy still needs the publisher's real public contact and the Chrome Web Store disclosure still needs to be entered into the actual CWS form before they can be marked fully complete.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |

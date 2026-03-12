@@ -315,7 +315,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `P-03`, `P-03a`, `P-03b`, `P-03c`, `P-03d`, `P-05a`, `P-05b`, and `P-06b` are complete; `P-01`, `P-02`, and `P-06` remain in progress pending their final targets.
+Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `P-03`, `P-03a`, `P-03b`, `P-03c`, `P-03d`, `P-04a`, `P-05a`, `P-05b`, and `P-06b` are complete; `P-01`, `P-02`, `P-04`, and `P-06` remain in progress pending their final targets.
 
 ### Sprint 5.1
 
@@ -340,10 +340,10 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `
 - [x] `P-03b` XSS pen-test
 - [x] `P-03c` API key extraction attempts
 - [x] `P-03d` Message fuzzing
-- [ ] `P-04` CWS compliance
-- [ ] `P-04a` Permission justification
-- [ ] `P-04b` Privacy policy
-- [ ] `P-04c` Data use disclosure
+- [~] `P-04` CWS compliance
+- [x] `P-04a` Permission justification
+- [~] `P-04b` Privacy policy
+- [~] `P-04c` Data use disclosure
 
 ### Sprint 5.2
 
