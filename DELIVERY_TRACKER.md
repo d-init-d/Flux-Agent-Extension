@@ -61,8 +61,8 @@ Status summary: Mostly done, remaining hardening gates on lint and coverage.
 - [x] `F-07` Vitest setup + Chrome mocks
 - [x] `F-07a` Vitest config
 - [x] `F-07b` Chrome API mock library
-- [~] `F-08` CI quality gate hardening
-- [~] `F-08a` CI lint/typecheck/test/build alignment
+- [x] `F-08` CI quality gate hardening
+- [x] `F-08a` CI lint/typecheck/test/build alignment
 - [x] `F-08b` Release workflow
 - [x] `F-09` Security primitives
 - [x] `F-09a` HTML/input sanitizer

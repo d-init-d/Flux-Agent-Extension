@@ -30,6 +30,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Security audit
+        run: pnpm audit --audit-level=high
+
       - name: Run tests
         run: pnpm test
 
