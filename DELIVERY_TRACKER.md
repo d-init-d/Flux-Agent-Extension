@@ -47,7 +47,7 @@ Status summary: Mostly done, remaining hardening gates on lint and coverage.
 - [x] `F-02` Design token system
 - [x] `F-02a` Light/dark semantic colors
 - [x] `F-02b` Typography/spacing/shadows
-- [~] `F-02c` Tailwind token extension hardening
+- [x] `F-02c` Tailwind token extension hardening
 - [x] `F-03` Shared interfaces baseline
 - [x] `F-03a` Action types
 - [x] `F-03b` AI provider interfaces
