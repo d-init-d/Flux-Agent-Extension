@@ -23,6 +23,14 @@ import { installChromeMock, resetAllMocks } from './mocks/chrome';
 // Web Crypto must be available before any test imports encryption.ts
 installWebCryptoMock();
 
+// Suppress React 19 act() warnings (cosmetic noise from async state updates)
+const _originalConsoleError = console.error;
+console.error = (...args: unknown[]) => {
+  const msg = typeof args[0] === 'string' ? args[0] : '';
+  if (msg.includes('not wrapped in act')) return;
+  _originalConsoleError(...args);
+};
+
 // ============================================================================
 // Per-test lifecycle hooks
 // ============================================================================
