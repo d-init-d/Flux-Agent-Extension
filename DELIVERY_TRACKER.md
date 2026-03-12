@@ -111,8 +111,8 @@ Status summary: AI client done, command parser started, execution engine largely
 - [x] `C-06a` Streaming parser
 - [x] `C-06b` Token counter
 - [x] `C-06c` Rate limiter
-- [~] `C-07` Prompt engineering integration hardening
-- [~] `C-07a` Core system prompt quality loop
+- [x] `C-07` Prompt engineering integration hardening
+- [x] `C-07a` Core system prompt quality loop
 - [~] `C-07b` Context injection template hardening
 - [ ] `C-07c` Prompt-injection dedicated suite
 - [x] `C-25a` AI client tests
