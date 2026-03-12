@@ -492,6 +492,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-03a` is PASS via `src/core/command-parser/__tests__/prompt-injection-battery.test.ts`, which now blocks 139 prompt-injection-style attempts and asserts the roadmap target of `100+` blocked attempts directly in the battery. Verification passed with `pnpm typecheck`, targeted Vitest on `src/core/command-parser/__tests__/prompt-injection-battery.test.ts` (`1 file / 1 test`), full `pnpm test` (`71 files / 1124 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-03` remains in progress pending `P-03b`, `P-03c`, and `P-03d`.
 
+> Update: `P-03b` is PASS via `src/sidepanel/components/__tests__/MessageBubble.xss-matrix.test.tsx`, which adds a deterministic 20-context XSS matrix over the actual `marked -> DOMPurify -> anchor hardening` render path used by assistant markdown. Verification passed with `pnpm typecheck`, targeted Vitest on the new matrix plus existing markdown/sanitizer suites (`3 files / 136 tests`), full `pnpm test` (`72 files / 1144 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-03` remains in progress pending `P-03c` and `P-03d`.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |
