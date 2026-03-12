@@ -315,7 +315,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-05a`, and `P-05b` are complete; `P-01` and `P-02` remain in progress pending their final targets.
+Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-05a`, and `P-05b` are complete; `P-01` and `P-02` remain in progress pending their final targets.
 
 ### Sprint 5.1
 
@@ -329,7 +329,7 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-05a`, and `P-05b
 - [~] `P-02` E2E expansion 50+ scenarios
 - [x] `P-02a` Real-site tests
 - [x] `P-02b` SPA tests
-- [ ] `P-02c` Edge-case tests
+- [x] `P-02c` Edge-case tests
 - [ ] `P-02d` Error recovery tests
 - [ ] `P-06` Beta coordination
 - [ ] `P-06a` Recruit testers
