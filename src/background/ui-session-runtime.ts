@@ -3,6 +3,7 @@ import type { IServiceWorkerBridge } from '@core/bridge';
 import { AIClientManager } from '@core/ai-client/manager';
 import { createProvider } from '@core/ai-client/provider-loader';
 import { getSystemPrompt } from '@core/ai-client/prompts/system';
+import { sanitizeUserMessage } from '@core/ai-client/prompts/templates';
 import type { IAIClientManager, IAIProvider } from '@core/ai-client/interfaces';
 import { CommandParser } from '@core/command-parser';
 import type { ParserConfig } from '@core/command-parser';
@@ -1528,7 +1529,7 @@ export class UISessionRuntime {
       ...priorMessages,
       {
         role: 'user',
-        content: [trimmedContext, availableUploadsBlock, `## User Request\n${prompt.trim()}`]
+        content: [trimmedContext, availableUploadsBlock, `<user_request>\n## User Request\n${sanitizeUserMessage(prompt.trim())}\n</user_request>`]
           .filter((value) => value.length > 0)
           .join('\n\n'),
       },

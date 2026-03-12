@@ -37,6 +37,7 @@ export {
   buildContinuationPrompt,
   buildConfirmationPrompt,
   formatSelector,
+  sanitizeUserMessage,
 } from './prompts/templates';
 export type { PageContext, ActionResult, SessionContext, ErrorContext } from './prompts/templates';
 

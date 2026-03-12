@@ -6,6 +6,7 @@ import { App } from '../App';
 import { renderWithProviders, readStorage, seedStorage } from '../../test/helpers';
 import { ThemeProvider } from '../../ui/theme';
 import * as providerLoader from '../../core/ai-client/provider-loader';
+import type { IAIProvider } from '../../core/ai-client/interfaces';
 
 function renderOptionsApp() {
   return renderWithProviders(
@@ -13,6 +14,61 @@ function renderOptionsApp() {
       <App />
     </ThemeProvider>,
   );
+}
+
+function mockSuccessfulProviderValidation() {
+  const initialize = vi.fn().mockResolvedValue(undefined);
+  const validateApiKey = vi.fn().mockResolvedValue(true);
+  const provider: IAIProvider = {
+    name: 'openai',
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsFunctionCalling: true,
+    initialize,
+    validateApiKey,
+    chat: async function* () {
+      return;
+    },
+    abort: vi.fn(),
+  };
+  const createProviderSpy = vi.spyOn(providerLoader, 'createProvider').mockResolvedValue(provider);
+
+  return {
+    createProviderSpy,
+    initialize,
+    validateApiKey,
+  };
+}
+
+function mockPendingProviderValidation() {
+  const initialize = vi.fn().mockResolvedValue(undefined);
+  let resolveValidation: ((value: boolean) => void) | undefined;
+  const validateApiKey = vi.fn().mockImplementation(
+    () =>
+      new Promise<boolean>((resolve) => {
+        resolveValidation = resolve;
+      }),
+  );
+  const provider: IAIProvider = {
+    name: 'openai',
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsFunctionCalling: true,
+    initialize,
+    validateApiKey,
+    chat: async function* () {
+      return;
+    },
+    abort: vi.fn(),
+  };
+
+  vi.spyOn(providerLoader, 'createProvider').mockResolvedValue(provider);
+
+  return {
+    initialize,
+    validateApiKey,
+    resolveValidation: () => resolveValidation?.(true),
+  };
 }
 
 describe('Options App', () => {
@@ -103,10 +159,19 @@ describe('Options App', () => {
     const user = userEvent.setup();
     const initialize = vi.fn().mockResolvedValue(undefined);
     const validateApiKey = vi.fn().mockResolvedValue(true);
-    const createProviderSpy = vi.spyOn(providerLoader, 'createProvider').mockResolvedValue({
+    const provider: IAIProvider = {
+      name: 'openai',
+      supportsVision: true,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
       initialize,
       validateApiKey,
-    } as Awaited<ReturnType<typeof providerLoader.createProvider>>);
+      chat: async function* () {
+        return;
+      },
+      abort: vi.fn(),
+    };
+    const createProviderSpy = vi.spyOn(providerLoader, 'createProvider').mockResolvedValue(provider);
 
     renderOptionsApp();
 
@@ -566,6 +631,7 @@ describe('Options App', () => {
 
   it('persists onboarding completion and returns to the dashboard', async () => {
     const user = userEvent.setup();
+    const { createProviderSpy, initialize, validateApiKey } = mockSuccessfulProviderValidation();
 
     await seedStorage({
       onboarding: createDefaultOnboardingState(),
@@ -591,19 +657,15 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /back/i }));
     expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
-
-    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-openai-test' } });
     await user.click(screen.getByRole('button', { name: /save provider/i }));
     expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
-    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-openai-test' } });
     await user.click(screen.getByRole('button', { name: /test connection/i }));
     expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
+    expect(createProviderSpy).toHaveBeenCalledWith('openai');
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(validateApiKey).toHaveBeenCalledWith('sk-openai-test');
 
     await user.click(screen.getByRole('button', { name: /continue/i }));
     expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
@@ -653,6 +715,7 @@ describe('Options App', () => {
 
   it('keeps onboarding completion locked when a key-based provider is only validated without saving', async () => {
     const user = userEvent.setup();
+    const { createProviderSpy, initialize, validateApiKey } = mockSuccessfulProviderValidation();
 
     await seedStorage({
       onboarding: createDefaultOnboardingState(),
@@ -664,16 +727,12 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }));
     expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify({ data: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
-
-    await user.type(screen.getByLabelText('API key'), 'sk-openai-test');
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-openai-test' } });
     await user.click(screen.getByRole('button', { name: /test connection/i }));
     expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
+    expect(createProviderSpy).toHaveBeenCalledWith('openai');
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(validateApiKey).toHaveBeenCalledWith('sk-openai-test');
 
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await user.click(screen.getByRole('button', { name: /continue/i }));
@@ -684,14 +743,7 @@ describe('Options App', () => {
 
   it('locks onboarding navigation while provider validation is in progress', async () => {
     const user = userEvent.setup();
-    let resolveValidation: ((value: Response) => void) | undefined;
-
-    vi.spyOn(globalThis, 'fetch').mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveValidation = resolve;
-        }),
-    );
+    const { initialize, validateApiKey, resolveValidation } = mockPendingProviderValidation();
 
     await seedStorage({
       onboarding: createDefaultOnboardingState(),
@@ -709,13 +761,10 @@ describe('Options App', () => {
     expect(screen.getByRole('button', { name: /continue/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /back/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /skip for now/i })).toBeDisabled();
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(validateApiKey).toHaveBeenCalledWith('sk-openai-test');
 
-    resolveValidation?.(
-      new Response(JSON.stringify({ data: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    );
+    resolveValidation();
 
     expect(await screen.findByText(/openai responded successfully/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /continue/i })).toBeEnabled();

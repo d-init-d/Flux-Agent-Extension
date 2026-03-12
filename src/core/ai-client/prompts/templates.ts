@@ -83,6 +83,16 @@ export interface ErrorContext {
 // ---------------------------------------------------------------------------
 
 /**
+ * Sanitize user message to prevent XML tag injection that could confuse
+ * context boundary parsing.
+ */
+export function sanitizeUserMessage(message: string): string {
+  return message
+    .replace(/<\/?(?:page_context|session_context|error_context|user_request|system)>/gi, '')
+    .trim();
+}
+
+/**
  * Inject current page context before the user's message.
  *
  * This gives the AI awareness of the current page state so it can
@@ -90,6 +100,7 @@ export interface ErrorContext {
  */
 export function buildPageContextBlock(context: PageContext): string {
   const lines: string[] = [
+    '<page_context>',
     '## Current Page State',
     `- **URL**: ${context.url}`,
     `- **Title**: ${context.title}`,
@@ -119,6 +130,7 @@ export function buildPageContextBlock(context: PageContext): string {
     lines.push('', '### Visible Text', truncated);
   }
 
+  lines.push('</page_context>');
   return lines.join('\n');
 }
 
@@ -130,6 +142,7 @@ export function buildPageContextBlock(context: PageContext): string {
  */
 export function buildSessionContextBlock(session: SessionContext): string {
   const lines: string[] = [
+    '<session_context>',
     '## Session Context',
     `- **Session**: ${session.sessionId}`,
     `- **Turn**: ${session.turnCount}`,
@@ -158,6 +171,7 @@ export function buildSessionContextBlock(session: SessionContext): string {
     }
   }
 
+  lines.push('</session_context>');
   return lines.join('\n');
 }
 
@@ -169,6 +183,7 @@ export function buildSessionContextBlock(session: SessionContext): string {
  */
 export function buildErrorRecoveryBlock(error: ErrorContext): string {
   const lines: string[] = [
+    '<error_context>',
     '## Action Failed — Recovery Needed',
     '',
     `The following action failed after ${error.retryCount} attempt(s):`,
@@ -194,6 +209,7 @@ export function buildErrorRecoveryBlock(error: ErrorContext): string {
     '2. A request for more information from the user if the page state is unclear',
   );
 
+  lines.push('</error_context>');
   return lines.join('\n');
 }
 
@@ -227,8 +243,8 @@ export function buildEnrichedUserMessage(
     blocks.push(buildErrorRecoveryBlock(errorContext));
   }
 
-  // User's message comes last
-  blocks.push(`## User Request\n${userMessage}`);
+  // User's message comes last, sanitized and wrapped with XML delimiters
+  blocks.push(`<user_request>\n## User Request\n${sanitizeUserMessage(userMessage)}\n</user_request>`);
 
   return blocks.join('\n\n---\n\n');
 }
