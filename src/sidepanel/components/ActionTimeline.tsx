@@ -48,27 +48,51 @@ function StatusIcon({ status }: { status: ActionLogStatus }) {
   switch (status) {
     case 'running':
       return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5">
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          className="h-3.5 w-3.5"
+        >
           <path d="M10 3.25a6.75 6.75 0 1 0 6.53 8.5" strokeLinecap="round" />
           <path d="M10 6.5v3.8l2.65 1.55" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case 'done':
       return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="h-3.5 w-3.5"
+        >
           <path d="m5.75 10.25 2.5 2.5 6-6.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       );
     case 'failed':
       return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className="h-3.5 w-3.5"
+        >
           <path d="m6.25 6.25 7.5 7.5" strokeLinecap="round" />
           <path d="m13.75 6.25-7.5 7.5" strokeLinecap="round" />
         </svg>
       );
     default:
       return (
-        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-3.5 w-3.5">
+        <svg
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          className="h-3.5 w-3.5"
+        >
           <circle cx="10" cy="10" r="5.5" />
           <path d="M10 7.5v2.8l1.9 1.1" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -84,7 +108,11 @@ export function ActionTimeline({ actions }: ActionTimelineProps) {
         const statusLabel = getStatusLabel(action.status);
 
         return (
-          <li key={action.id} className="relative pl-8" data-testid={`action-timeline-item-${action.id}`}>
+          <li
+            key={action.id}
+            className="relative pl-8"
+            data-testid={`action-timeline-item-${action.id}`}
+          >
             {!isLast ? (
               <span
                 className="absolute left-[0.7rem] top-7 h-[calc(100%-0.75rem)] w-px bg-[rgb(var(--color-border-default))]"

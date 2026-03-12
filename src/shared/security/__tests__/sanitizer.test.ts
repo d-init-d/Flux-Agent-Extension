@@ -9,12 +9,7 @@
  * - escapeRegExp: Regex special character escaping
  */
 
-import {
-  sanitizeHtml,
-  sanitizeSelector,
-  sanitizeScript,
-  escapeRegExp,
-} from '../sanitizer';
+import { sanitizeHtml, sanitizeSelector, sanitizeScript, escapeRegExp } from '../sanitizer';
 
 // ============================================================================
 // sanitizeHtml
@@ -312,33 +307,23 @@ describe('sanitizeSelector', () => {
     });
 
     it('should reject JAVASCRIPT: (case-insensitive)', () => {
-      expect(() => sanitizeSelector('JAVASCRIPT:void(0)')).toThrow(
-        /javascript: protocol/,
-      );
+      expect(() => sanitizeSelector('JAVASCRIPT:void(0)')).toThrow(/javascript: protocol/);
     });
 
     it('should reject javascript with whitespace before colon', () => {
-      expect(() => sanitizeSelector('javascript :void(0)')).toThrow(
-        /javascript: protocol/,
-      );
+      expect(() => sanitizeSelector('javascript :void(0)')).toThrow(/javascript: protocol/);
     });
 
     it('should reject onclick= event handler', () => {
-      expect(() => sanitizeSelector('[onclick=alert(1)]')).toThrow(
-        /event handler attribute/,
-      );
+      expect(() => sanitizeSelector('[onclick=alert(1)]')).toThrow(/event handler attribute/);
     });
 
     it('should reject onload= event handler', () => {
-      expect(() => sanitizeSelector('[onload=evil()]')).toThrow(
-        /event handler attribute/,
-      );
+      expect(() => sanitizeSelector('[onload=evil()]')).toThrow(/event handler attribute/);
     });
 
     it('should reject onerror= event handler', () => {
-      expect(() => sanitizeSelector('[onerror=alert]')).toThrow(
-        /event handler attribute/,
-      );
+      expect(() => sanitizeSelector('[onerror=alert]')).toThrow(/event handler attribute/);
     });
 
     it('should reject expression() CSS function', () => {
@@ -348,21 +333,15 @@ describe('sanitizeSelector', () => {
     });
 
     it('should reject expression with whitespace', () => {
-      expect(() => sanitizeSelector('expression (')).toThrow(
-        /CSS expression\(\)/,
-      );
+      expect(() => sanitizeSelector('expression (')).toThrow(/CSS expression\(\)/);
     });
 
     it('should reject url() CSS function', () => {
-      expect(() => sanitizeSelector('div[style="url(evil.js)"]')).toThrow(
-        /CSS url\(\)/,
-      );
+      expect(() => sanitizeSelector('div[style="url(evil.js)"]')).toThrow(/CSS url\(\)/);
     });
 
     it('should reject url with whitespace', () => {
-      expect(() => sanitizeSelector('url (')).toThrow(
-        /CSS url\(\)/,
-      );
+      expect(() => sanitizeSelector('url (')).toThrow(/CSS url\(\)/);
     });
 
     it('should reject chrome-extension:// references', () => {
@@ -373,23 +352,17 @@ describe('sanitizeSelector', () => {
 
     it('should reject -moz-binding', () => {
       // Use input WITHOUT url() so the -moz-binding pattern is matched first
-      expect(() => sanitizeSelector('[style="-moz-binding:something"]')).toThrow(
-        /-moz-binding/,
-      );
+      expect(() => sanitizeSelector('[style="-moz-binding:something"]')).toThrow(/-moz-binding/);
     });
 
     it('should reject behavior: CSS property', () => {
       // Use input WITHOUT url() so the behavior: pattern is matched first
-      expect(() => sanitizeSelector('[style="behavior: test"]')).toThrow(
-        /behavior:/,
-      );
+      expect(() => sanitizeSelector('[style="behavior: test"]')).toThrow(/behavior:/);
     });
 
     it('should reject @import rule', () => {
       // Use input WITHOUT url() so the @import pattern is matched first
-      expect(() => sanitizeSelector('@import "style.css"')).toThrow(
-        /@import/,
-      );
+      expect(() => sanitizeSelector('@import "style.css"')).toThrow(/@import/);
     });
   });
 });
@@ -474,17 +447,13 @@ describe('sanitizeScript', () => {
     });
 
     it('should reject Function() constructor', () => {
-      expect(() => sanitizeScript('Function("return 1")')).toThrow(
-        /Function\(\) constructor/,
-      );
+      expect(() => sanitizeScript('Function("return 1")')).toThrow(/Function\(\) constructor/);
     });
 
     it('should reject new Function()', () => {
       // Pattern `\bFunction\s*\(` matches before `\bnew\s+Function\s*\(` in the blocklist,
       // so the error message says "Function() constructor", not "new Function()".
-      expect(() => sanitizeScript('new Function("alert(1)")')).toThrow(
-        /Function\(\) constructor/,
-      );
+      expect(() => sanitizeScript('new Function("alert(1)")')).toThrow(/Function\(\) constructor/);
     });
   });
 
@@ -494,27 +463,19 @@ describe('sanitizeScript', () => {
 
   describe('blocked: data exfiltration', () => {
     it('should reject document.cookie', () => {
-      expect(() => sanitizeScript('var c = document.cookie')).toThrow(
-        /document\.cookie/,
-      );
+      expect(() => sanitizeScript('var c = document.cookie')).toThrow(/document\.cookie/);
     });
 
     it('should reject document . cookie (with whitespace)', () => {
-      expect(() => sanitizeScript('document . cookie')).toThrow(
-        /document\.cookie/,
-      );
+      expect(() => sanitizeScript('document . cookie')).toThrow(/document\.cookie/);
     });
 
     it('should reject localStorage', () => {
-      expect(() => sanitizeScript('localStorage.getItem("key")')).toThrow(
-        /localStorage/,
-      );
+      expect(() => sanitizeScript('localStorage.getItem("key")')).toThrow(/localStorage/);
     });
 
     it('should reject sessionStorage', () => {
-      expect(() => sanitizeScript('sessionStorage.setItem("k","v")')).toThrow(
-        /sessionStorage/,
-      );
+      expect(() => sanitizeScript('sessionStorage.setItem("k","v")')).toThrow(/sessionStorage/);
     });
   });
 
@@ -524,15 +485,11 @@ describe('sanitizeScript', () => {
 
   describe('blocked: network access', () => {
     it('should reject fetch()', () => {
-      expect(() => sanitizeScript('fetch("https://evil.com")')).toThrow(
-        /fetch\(\)/,
-      );
+      expect(() => sanitizeScript('fetch("https://evil.com")')).toThrow(/fetch\(\)/);
     });
 
     it('should reject XMLHttpRequest', () => {
-      expect(() => sanitizeScript('new XMLHttpRequest()')).toThrow(
-        /XMLHttpRequest/,
-      );
+      expect(() => sanitizeScript('new XMLHttpRequest()')).toThrow(/XMLHttpRequest/);
     });
   });
 
@@ -542,21 +499,15 @@ describe('sanitizeScript', () => {
 
   describe('blocked: chrome APIs', () => {
     it('should reject chrome.storage', () => {
-      expect(() => sanitizeScript('chrome.storage.local.get("key")')).toThrow(
-        /chrome\.\* API/,
-      );
+      expect(() => sanitizeScript('chrome.storage.local.get("key")')).toThrow(/chrome\.\* API/);
     });
 
     it('should reject chrome.runtime', () => {
-      expect(() => sanitizeScript('chrome.runtime.sendMessage({})')).toThrow(
-        /chrome\.\* API/,
-      );
+      expect(() => sanitizeScript('chrome.runtime.sendMessage({})')).toThrow(/chrome\.\* API/);
     });
 
     it('should reject chrome.tabs', () => {
-      expect(() => sanitizeScript('chrome.tabs.query({})')).toThrow(
-        /chrome\.\* API/,
-      );
+      expect(() => sanitizeScript('chrome.tabs.query({})')).toThrow(/chrome\.\* API/);
     });
   });
 
@@ -566,21 +517,15 @@ describe('sanitizeScript', () => {
 
   describe('blocked: window escape', () => {
     it('should reject window.opener', () => {
-      expect(() => sanitizeScript('window.opener.postMessage("x")')).toThrow(
-        /window\.opener/,
-      );
+      expect(() => sanitizeScript('window.opener.postMessage("x")')).toThrow(/window\.opener/);
     });
 
     it('should reject window.parent', () => {
-      expect(() => sanitizeScript('window.parent.location = "evil"')).toThrow(
-        /window\.parent/,
-      );
+      expect(() => sanitizeScript('window.parent.location = "evil"')).toThrow(/window\.parent/);
     });
 
     it('should reject window.top', () => {
-      expect(() => sanitizeScript('if (window.top !== window.self) {}')).toThrow(
-        /window\.top/,
-      );
+      expect(() => sanitizeScript('if (window.top !== window.self) {}')).toThrow(/window\.top/);
     });
   });
 
@@ -590,9 +535,7 @@ describe('sanitizeScript', () => {
 
   describe('blocked: worker loading', () => {
     it('should reject importScripts()', () => {
-      expect(() => sanitizeScript('importScripts("evil.js")')).toThrow(
-        /importScripts\(\)/,
-      );
+      expect(() => sanitizeScript('importScripts("evil.js")')).toThrow(/importScripts\(\)/);
     });
   });
 
@@ -602,21 +545,17 @@ describe('sanitizeScript', () => {
 
   describe('blocked: prototype pollution', () => {
     it('should reject __proto__', () => {
-      expect(() => sanitizeScript('obj.__proto__.polluted = true')).toThrow(
-        /__proto__/,
-      );
+      expect(() => sanitizeScript('obj.__proto__.polluted = true')).toThrow(/__proto__/);
     });
 
     it('should reject prototype bracket access', () => {
-      expect(() => sanitizeScript('obj.prototype["inject"] = fn')).toThrow(
-        /prototype\[\]/,
-      );
+      expect(() => sanitizeScript('obj.prototype["inject"] = fn')).toThrow(/prototype\[\]/);
     });
 
     it('should reject constructor.prototype manipulation', () => {
-      expect(() =>
-        sanitizeScript('obj.constructor["prototype"].x = 1'),
-      ).toThrow(/constructor\.prototype/);
+      expect(() => sanitizeScript('obj.constructor["prototype"].x = 1')).toThrow(
+        /constructor\.prototype/,
+      );
     });
   });
 });
@@ -709,9 +648,7 @@ describe('escapeRegExp', () => {
     });
 
     it('should handle string of only special characters', () => {
-      expect(escapeRegExp('^$.*+?()[]{}|')).toBe(
-        '\\^\\$\\.\\*\\+\\?\\(\\)\\[\\]\\{\\}\\|',
-      );
+      expect(escapeRegExp('^$.*+?()[]{}|')).toBe('\\^\\$\\.\\*\\+\\?\\(\\)\\[\\]\\{\\}\\|');
     });
   });
 });

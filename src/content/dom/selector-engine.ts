@@ -15,7 +15,8 @@ const INTERACTIVE_SELECTOR = [
   '[contenteditable="true"]',
 ].join(', ');
 
-const SECTION_CONTAINER_SELECTOR = 'section, article, main, aside, nav, form, [role="region"], [role="form"]';
+const SECTION_CONTAINER_SELECTOR =
+  'section, article, main, aside, nav, form, [role="region"], [role="form"]';
 
 const TEXTUAL_SELECTOR_KEYS: Array<keyof ElementSelector> = [
   'css',
@@ -194,11 +195,19 @@ export class SelectorEngine {
     const normalized = role.toLowerCase();
     switch (normalized) {
       case 'button':
-        return Array.from(root.querySelectorAll('button, input[type="button"], input[type="submit"], input[type="reset"]'));
+        return Array.from(
+          root.querySelectorAll(
+            'button, input[type="button"], input[type="submit"], input[type="reset"]',
+          ),
+        );
       case 'link':
         return Array.from(root.querySelectorAll('a[href]'));
       case 'textbox':
-        return Array.from(root.querySelectorAll('input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="url"], input[type="tel"], textarea'));
+        return Array.from(
+          root.querySelectorAll(
+            'input:not([type]), input[type="text"], input[type="email"], input[type="password"], input[type="search"], input[type="url"], input[type="tel"], textarea',
+          ),
+        );
       case 'checkbox':
         return Array.from(root.querySelectorAll('input[type="checkbox"]'));
       case 'radio':
@@ -285,7 +294,9 @@ export class SelectorEngine {
       return [];
     }
 
-    return elements.filter((element) => sectionRoots.some((sectionRoot) => sectionRoot.contains(element)));
+    return elements.filter((element) =>
+      sectionRoots.some((sectionRoot) => sectionRoot.contains(element)),
+    );
   }
 
   private findSectionRoots(sectionName: string, root: Document | Element): Element[] {
@@ -347,7 +358,9 @@ export class SelectorEngine {
 
   private isHeadingElement(element: Element): boolean {
     const tag = element.tagName.toUpperCase();
-    return tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6';
+    return (
+      tag === 'H1' || tag === 'H2' || tag === 'H3' || tag === 'H4' || tag === 'H5' || tag === 'H6'
+    );
   }
 
   private getRectCenter(rect: DOMRect | DOMRectReadOnly): { x: number; y: number } {

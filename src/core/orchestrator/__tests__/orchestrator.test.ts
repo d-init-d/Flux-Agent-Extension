@@ -52,9 +52,7 @@ describe('ActionOrchestrator', () => {
 
   it('retries failed actions up to retries and then succeeds', async () => {
     const execute = vi
-      .fn<
-        (action: Action) => Promise<ActionResult>
-      >()
+      .fn<(action: Action) => Promise<ActionResult>>()
       .mockResolvedValueOnce(failureResult('retry-action'))
       .mockResolvedValueOnce(failureResult('retry-action'))
       .mockResolvedValueOnce(successResult('retry-action'));
@@ -161,10 +159,7 @@ describe('ActionOrchestrator', () => {
     });
 
     const orchestrator = new ActionOrchestrator({ execute });
-    const results = await orchestrator.executeBatch([
-      createAction('a1'),
-      createAction('a2'),
-    ]);
+    const results = await orchestrator.executeBatch([createAction('a1'), createAction('a2')]);
 
     expect(results).toHaveLength(1);
     expect(results[0]?.success).toBe(false);
@@ -199,9 +194,7 @@ describe('ActionOrchestrator', () => {
         return new Promise((resolve) => {
           setTimeout(() => {
             if (context.abortSignal?.aborted) {
-              resolve(
-                failureResult(action.id, ErrorCode.ABORTED),
-              );
+              resolve(failureResult(action.id, ErrorCode.ABORTED));
               return;
             }
 

@@ -1,10 +1,5 @@
 import { ErrorCode, ExtensionError } from '@shared/errors';
-import type {
-  ActionResultPayload,
-  ClickAction,
-  FocusAction,
-  HoverAction,
-} from '@shared/types';
+import type { ActionResultPayload, ClickAction, FocusAction, HoverAction } from '@shared/types';
 import { SelectorEngine } from '../dom/selector-engine';
 
 export type InteractionAction = ClickAction | HoverAction | FocusAction;
@@ -46,15 +41,14 @@ export async function executeInteractionAction(
       duration: getDurationMs(startedAt),
     };
   } catch (error: unknown) {
-    const extensionError =
-      ExtensionError.isExtensionError(error)
-        ? error
-        : new ExtensionError(
-            ErrorCode.ACTION_FAILED,
-            `Failed to execute action "${action.type}"`,
-            true,
-            error,
-          );
+    const extensionError = ExtensionError.isExtensionError(error)
+      ? error
+      : new ExtensionError(
+          ErrorCode.ACTION_FAILED,
+          `Failed to execute action "${action.type}"`,
+          true,
+          error,
+        );
 
     return {
       actionId: action.id,
@@ -107,7 +101,10 @@ function dispatchMouseEvent(
   );
 }
 
-function assertElementInteractive(element: Element, actionType: InteractionAction['type']): asserts element is HTMLElement {
+function assertElementInteractive(
+  element: Element,
+  actionType: InteractionAction['type'],
+): asserts element is HTMLElement {
   if (!(element instanceof HTMLElement)) {
     throw new ExtensionError(
       ErrorCode.ELEMENT_NOT_INTERACTIVE,
@@ -127,7 +124,10 @@ function assertElementInteractive(element: Element, actionType: InteractionActio
 
 function isDisabledControl(element: HTMLElement): boolean {
   if ('disabled' in element) {
-    return Boolean((element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).disabled);
+    return Boolean(
+      (element as HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement)
+        .disabled,
+    );
   }
   return false;
 }

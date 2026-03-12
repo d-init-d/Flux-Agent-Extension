@@ -373,7 +373,13 @@ describe('ContextBuilder', () => {
     const page = createPageContext(0);
     page.childFrames = [
       {
-        frame: { frameId: 1, parentFrameId: 0, url: 'https://embed.test/widget', origin: 'https://embed.test', isTop: false },
+        frame: {
+          frameId: 1,
+          parentFrameId: 0,
+          url: 'https://embed.test/widget',
+          origin: 'https://embed.test',
+          isTop: false,
+        },
         title: 'Widget Frame',
         interactiveElementCount: 3,
       },
@@ -392,7 +398,12 @@ describe('ContextBuilder', () => {
     session.actionHistory = [
       {
         action: { id: 'fail-1', type: 'click' },
-        result: { actionId: 'fail-1', success: false, duration: 100, error: { message: 'Element not found' } },
+        result: {
+          actionId: 'fail-1',
+          success: false,
+          duration: 100,
+          error: { message: 'Element not found' },
+        },
         timestamp: now,
       },
     ];
@@ -406,7 +417,13 @@ describe('ContextBuilder', () => {
   it('handles page in iframe (non-top frame)', () => {
     const builder = new ContextBuilder();
     const page = createPageContext();
-    page.frame = { frameId: 5, parentFrameId: 0, url: 'https://iframe.test', origin: 'https://iframe.test', isTop: false };
+    page.frame = {
+      frameId: 5,
+      parentFrameId: 0,
+      url: 'https://iframe.test',
+      origin: 'https://iframe.test',
+      isTop: false,
+    };
 
     const context = builder.buildContext(page, createSession(), { includeDOM: false });
 
@@ -426,7 +443,9 @@ describe('ContextBuilder', () => {
   it('handles message without timestamp', () => {
     const builder = new ContextBuilder();
     const session = createSession();
-    session.messages = [{ role: 'user', content: 'Test', timestamp: undefined as unknown as number }];
+    session.messages = [
+      { role: 'user', content: 'Test', timestamp: undefined as unknown as number },
+    ];
 
     const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
 
@@ -447,7 +466,15 @@ describe('ContextBuilder', () => {
     const builder = new ContextBuilder();
     const session = createSession();
     session.tabSnapshot = [
-      { tabIndex: 0, id: 1, url: '', title: '', status: 'complete', isActive: true, isTarget: true },
+      {
+        tabIndex: 0,
+        id: 1,
+        url: '',
+        title: '',
+        status: 'complete',
+        isActive: true,
+        isTarget: true,
+      },
     ];
 
     const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
@@ -459,7 +486,15 @@ describe('ContextBuilder', () => {
     const builder = new ContextBuilder();
     const session = createSession();
     session.tabSnapshot = [
-      { tabIndex: 0, id: 1, url: ':::invalid', title: '', status: 'complete', isActive: false, isTarget: false },
+      {
+        tabIndex: 0,
+        id: 1,
+        url: ':::invalid',
+        title: '',
+        status: 'complete',
+        isActive: false,
+        isTarget: false,
+      },
     ];
 
     const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
@@ -497,7 +532,10 @@ describe('ContextBuilder', () => {
     const builder = new ContextBuilder();
     const page = createPageContext(50);
 
-    const context = builder.buildContext(page, createSession(), { includeDOM: true, maxElements: 3 });
+    const context = builder.buildContext(page, createSession(), {
+      includeDOM: true,
+      maxElements: 3,
+    });
 
     expect(context).toContain('47 more interactive element(s) omitted');
   });

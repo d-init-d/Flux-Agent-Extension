@@ -45,7 +45,16 @@ describe('DOMInspector', () => {
       <div id="non-interactive" role="region">Region</div>
     `;
 
-    const ids = ['link', 'anchor-role', 'email', 'country', 'note', 'role-btn', 'editable', 'non-interactive'];
+    const ids = [
+      'link',
+      'anchor-role',
+      'email',
+      'country',
+      'note',
+      'role-btn',
+      'editable',
+      'non-interactive',
+    ];
     for (const id of ids) {
       const element = document.getElementById(id);
       expect(element).not.toBeNull();
@@ -128,7 +137,10 @@ describe('DOMInspector', () => {
   });
 
   it('enforces interactive element limit', () => {
-    const buttons = Array.from({ length: 12 }, (_, index) => `<button id="btn-${index}">Button ${index}</button>`);
+    const buttons = Array.from(
+      { length: 12 },
+      (_, index) => `<button id="btn-${index}">Button ${index}</button>`,
+    );
     document.body.innerHTML = buttons.join('');
 
     for (let index = 0; index < 12; index++) {
@@ -145,9 +157,16 @@ describe('DOMInspector', () => {
   });
 
   it('enforces heading/link limits and summary max length', () => {
-    const headings = Array.from({ length: 10 }, (_, index) => `<h2 id="h-${index}">Heading ${index}</h2>`).join('');
-    const links = Array.from({ length: 10 }, (_, index) => `<a id="l-${index}" href="/${index}">Link ${index}</a>`).join('');
-    document.title = 'A very long title that should be truncated in summary output for compact context';
+    const headings = Array.from(
+      { length: 10 },
+      (_, index) => `<h2 id="h-${index}">Heading ${index}</h2>`,
+    ).join('');
+    const links = Array.from(
+      { length: 10 },
+      (_, index) => `<a id="l-${index}" href="/${index}">Link ${index}</a>`,
+    ).join('');
+    document.title =
+      'A very long title that should be truncated in summary output for compact context';
     document.body.innerHTML = headings + links;
 
     for (let index = 0; index < 10; index++) {

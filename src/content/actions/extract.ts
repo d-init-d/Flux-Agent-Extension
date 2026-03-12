@@ -24,15 +24,14 @@ export async function executeExtractAction(
       duration: getDurationMs(startedAt),
     };
   } catch (error: unknown) {
-    const extensionError =
-      ExtensionError.isExtensionError(error)
-        ? error
-        : new ExtensionError(
-            ErrorCode.ACTION_FAILED,
-            `Failed to execute action "${action.type}"`,
-            true,
-            error,
-          );
+    const extensionError = ExtensionError.isExtensionError(error)
+      ? error
+      : new ExtensionError(
+          ErrorCode.ACTION_FAILED,
+          `Failed to execute action "${action.type}"`,
+          true,
+          error,
+        );
 
     return {
       actionId: action.id,
@@ -66,7 +65,10 @@ async function performExtractAction(
   }
 }
 
-function extractSingleValue(action: ExtractAction, selectorEngine: SelectorEngine): { value: unknown } {
+function extractSingleValue(
+  action: ExtractAction,
+  selectorEngine: SelectorEngine,
+): { value: unknown } {
   const element = selectorEngine.findElement(action.selector);
   if (!element) {
     throw new ExtensionError(
@@ -95,8 +97,12 @@ function extractMultipleValues(
     );
   }
 
-  const attributes = action.attributes && action.attributes.length > 0 ? action.attributes : ['textContent'];
-  const capped = typeof action.limit === 'number' && action.limit > 0 ? elements.slice(0, action.limit) : elements;
+  const attributes =
+    action.attributes && action.attributes.length > 0 ? action.attributes : ['textContent'];
+  const capped =
+    typeof action.limit === 'number' && action.limit > 0
+      ? elements.slice(0, action.limit)
+      : elements;
 
   const items = capped.map((element) => {
     const entry: Record<string, unknown> = {};
@@ -183,5 +189,9 @@ function getDurationMs(startedAt: number): number {
 }
 
 function assertNever(value: never): never {
-  throw new ExtensionError(ErrorCode.ACTION_INVALID, `Unsupported extract action: ${String(value)}`, false);
+  throw new ExtensionError(
+    ErrorCode.ACTION_INVALID,
+    `Unsupported extract action: ${String(value)}`,
+    false,
+  );
 }

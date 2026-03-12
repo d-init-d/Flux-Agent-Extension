@@ -497,7 +497,9 @@ describe('Logger', () => {
     });
 
     it('should swallow transport errors without crashing', () => {
-      const badTransport = vi.fn(() => { throw new Error('boom'); });
+      const badTransport = vi.fn(() => {
+        throw new Error('boom');
+      });
       Logger.addTransport(badTransport);
       const logger = new Logger('Test', 'debug');
 

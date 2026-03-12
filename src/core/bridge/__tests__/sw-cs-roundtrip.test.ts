@@ -28,25 +28,22 @@ describe('ServiceWorker <-> ContentScript round-trip', () => {
     const onMessage = runtimeOnMessageMock();
 
     const tabsSendMessage = chrome.tabs.sendMessage as ReturnType<typeof vi.fn>;
-    tabsSendMessage.mockImplementation(
-      (_tabId: number, message: unknown): Promise<unknown> => {
-        return new Promise<unknown>((resolve) => {
-          const sender: chrome.runtime.MessageSender = {
-            id: chrome.runtime.id,
-          };
+    tabsSendMessage.mockImplementation((_tabId: number, message: unknown): Promise<unknown> => {
+      return new Promise<unknown>((resolve) => {
+        const sender: chrome.runtime.MessageSender = {
+          id: chrome.runtime.id,
+        };
 
-          onMessage.dispatch(message, sender, (response?: unknown) => {
-            resolve(response);
-          });
+        onMessage.dispatch(message, sender, (response?: unknown) => {
+          resolve(response);
         });
-      },
-    );
+      });
+    });
 
-    const response = await serviceBridge.send<{ actionId: string }, { actionId: string; success: boolean; duration: number }>(
-      1,
-      'EXECUTE_ACTION',
-      { actionId: 'action-1' },
-    );
+    const response = await serviceBridge.send<
+      { actionId: string },
+      { actionId: string; success: boolean; duration: number }
+    >(1, 'EXECUTE_ACTION', { actionId: 'action-1' });
 
     expect(response).toEqual({
       actionId: 'action-1',

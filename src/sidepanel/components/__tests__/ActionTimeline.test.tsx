@@ -39,9 +39,21 @@ describe('ActionTimeline', () => {
     render(<ActionTimeline actions={TIMELINE_ACTIONS} />);
 
     expect(screen.getByRole('list', { name: 'Executed actions timeline' })).toBeInTheDocument();
-    expect(screen.getByTestId('action-timeline-icon-pending-action')).toHaveAttribute('data-status', 'pending');
-    expect(screen.getByTestId('action-timeline-icon-running-action')).toHaveAttribute('data-status', 'running');
-    expect(screen.getByTestId('action-timeline-icon-done-action')).toHaveAttribute('data-status', 'done');
-    expect(screen.getByTestId('action-timeline-icon-failed-action')).toHaveAttribute('data-status', 'failed');
+    expect(screen.getByTestId('action-timeline-icon-pending-action')).toHaveAttribute(
+      'data-status',
+      'pending',
+    );
+    expect(screen.getByTestId('action-timeline-icon-running-action')).toHaveAttribute(
+      'data-status',
+      'running',
+    );
+    expect(screen.getByTestId('action-timeline-icon-done-action')).toHaveAttribute(
+      'data-status',
+      'done',
+    );
+    expect(screen.getByTestId('action-timeline-icon-failed-action')).toHaveAttribute(
+      'data-status',
+      'failed',
+    );
   });
 });

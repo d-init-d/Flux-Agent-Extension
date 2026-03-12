@@ -75,10 +75,7 @@ describe('Modal', () => {
 
   it('sets aria-describedby when description is provided', () => {
     render(<Modal {...defaultProps} description="Description text" />);
-    expect(screen.getByRole('dialog')).toHaveAttribute(
-      'aria-describedby',
-      'modal-description',
-    );
+    expect(screen.getByRole('dialog')).toHaveAttribute('aria-describedby', 'modal-description');
   });
 
   // -------------------------------------------------------------------------
@@ -86,9 +83,7 @@ describe('Modal', () => {
   // -------------------------------------------------------------------------
 
   it('renders footer when provided', () => {
-    render(
-      <Modal {...defaultProps} footer={<button>Confirm</button>} />,
-    );
+    render(<Modal {...defaultProps} footer={<button>Confirm</button>} />);
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 
@@ -158,9 +153,7 @@ describe('Modal', () => {
   it('does not call onClose on backdrop click when closeOnBackdropClick=false', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    render(
-      <Modal {...defaultProps} onClose={onClose} closeOnBackdropClick={false} />,
-    );
+    render(<Modal {...defaultProps} onClose={onClose} closeOnBackdropClick={false} />);
 
     const backdrop = document.querySelector('[aria-hidden="true"]') as HTMLElement;
     expect(backdrop).toBeTruthy();
@@ -224,9 +217,12 @@ describe('Modal', () => {
     );
 
     // Wait for the panel to be focused (50ms timeout in component)
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toHaveFocus();
-    }, { timeout: 200 });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('dialog')).toHaveFocus();
+      },
+      { timeout: 200 },
+    );
 
     // Tab through: close button -> input -> action button -> back to close button
     const user = userEvent.setup();
@@ -251,9 +247,12 @@ describe('Modal', () => {
       </Modal>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toHaveFocus();
-    }, { timeout: 200 });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('dialog')).toHaveFocus();
+      },
+      { timeout: 200 },
+    );
 
     const footerBtn = screen.getByTestId('footer-btn');
     footerBtn.focus();
@@ -270,9 +269,12 @@ describe('Modal', () => {
       </Modal>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toHaveFocus();
-    }, { timeout: 200 });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('dialog')).toHaveFocus();
+      },
+      { timeout: 200 },
+    );
 
     const closeBtn = screen.getByLabelText('Close dialog');
     closeBtn.focus();
@@ -289,9 +291,12 @@ describe('Modal', () => {
       </Modal>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toHaveFocus();
-    }, { timeout: 200 });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('dialog')).toHaveFocus();
+      },
+      { timeout: 200 },
+    );
 
     const closeBtn = screen.getByLabelText('Close dialog');
     closeBtn.focus();
@@ -309,9 +314,12 @@ describe('Modal', () => {
 
     const { rerender } = render(<Modal {...defaultProps} />);
 
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toHaveFocus();
-    }, { timeout: 200 });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('dialog')).toHaveFocus();
+      },
+      { timeout: 200 },
+    );
 
     rerender(<Modal {...defaultProps} open={false} />);
 

@@ -65,9 +65,9 @@ vi.mock('../../sidepanel/lib/extension-client', () => ({
       throw new Error('Runtime is not initialized for E2E test');
     }
 
-    const request = activeRuntime.handleMessage(
-      createExtensionMessage(type, payload),
-    ) as Promise<ExtensionResponse<ResponsePayloadMap[T]>>;
+    const request = activeRuntime.handleMessage(createExtensionMessage(type, payload)) as Promise<
+      ExtensionResponse<ResponsePayloadMap[T]>
+    >;
 
     pendingExtensionRequests.add(request);
     const response = await request.finally(() => {
@@ -240,12 +240,16 @@ function installNavigationCompletion(): void {
         );
 
         tabsApi._setTabs?.(nextTabs);
-        chrome.tabs.onUpdated.dispatch(tabId, { status: 'complete', url: completedUrl }, {
-          ...(nextTabs.find((tab) => tab.id === tabId) ?? response),
-          id: tabId,
-          url: completedUrl,
-          status: 'complete',
-        });
+        chrome.tabs.onUpdated.dispatch(
+          tabId,
+          { status: 'complete', url: completedUrl },
+          {
+            ...(nextTabs.find((tab) => tab.id === tabId) ?? response),
+            id: tabId,
+            url: completedUrl,
+            status: 'complete',
+          },
+        );
       }, 0);
     }
 
@@ -282,12 +286,14 @@ function createPageContext(base: Partial<PageContext>): PageContext {
 
 async function runScenario(scenario: SiteScenario): Promise<void> {
   const user = userEvent.setup();
-  const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-    actionId: action.id,
-    success: true,
-    duration: 8,
-    data: { executed: true, type: action.type },
-  }));
+  const actionHandler = vi.fn(
+    async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 8,
+      data: { executed: true, type: action.type },
+    }),
+  );
 
   installNavigationCompletion();
   activeRuntime = new UISessionRuntime({
@@ -308,9 +314,9 @@ async function runScenario(scenario: SiteScenario): Promise<void> {
     expect(actionHandler).toHaveBeenCalledTimes(scenario.expectedExecutedActions.length);
   });
 
-  expect(actionHandler.mock.calls.map(([action]) => ({ id: action.id, type: action.type }))).toEqual(
-    scenario.expectedExecutedActions,
-  );
+  expect(
+    actionHandler.mock.calls.map(([action]) => ({ id: action.id, type: action.type })),
+  ).toEqual(scenario.expectedExecutedActions);
   expect(await screen.findByText(scenario.prompt)).toBeInTheDocument();
   expect(await screen.findByText(scenario.summary)).toBeInTheDocument();
 
@@ -461,11 +467,13 @@ describe('P-02a real-site E2E expansion', () => {
   it('P-02a covers an Amazon search-product-cart interaction', async () => {
     await runScenario({
       prompt: 'Search Amazon for a Logitech MX Master 3S and add the first matching item to cart',
-      summary: 'Amazon-style commerce UI executes search, product selection, and add-to-cart actions.',
+      summary:
+        'Amazon-style commerce UI executes search, product selection, and add-to-cart actions.',
       pageContext: createPageContext({
         url: 'https://www.amazon.com/s?k=mx+master+3s',
         title: 'Amazon.com : mx master 3s',
-        summary: 'Amazon search results with a department search box, product cards, and add-to-cart CTA.',
+        summary:
+          'Amazon search results with a department search box, product cards, and add-to-cart CTA.',
         interactiveElements: [
           {
             index: 1,
@@ -563,11 +571,13 @@ describe('P-02a real-site E2E expansion', () => {
   it('P-02a covers GitHub repository navigation and tab interaction', async () => {
     await runScenario({
       prompt: 'Use GitHub search to open microsoft/playwright and switch to the Issues tab',
-      summary: 'GitHub-style repository UI executes search, repository navigation, and tab switching actions.',
+      summary:
+        'GitHub-style repository UI executes search, repository navigation, and tab switching actions.',
       pageContext: createPageContext({
         url: 'https://github.com/search?q=playwright&type=repositories',
         title: 'Repository search results · GitHub',
-        summary: 'GitHub search and repository context with command palette search, repository links, and nav tabs.',
+        summary:
+          'GitHub search and repository context with command palette search, repository links, and nav tabs.',
         interactiveElements: [
           {
             index: 1,

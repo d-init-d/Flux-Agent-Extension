@@ -21,7 +21,11 @@ const THEME_OPTIONS: ThemeOption[] = [
   { mode: 'system', label: 'System', icon: LaptopMinimal },
 ];
 
-export function ThemeToggle({ className = '', onModeChange, persistOnSelect = true }: ThemeToggleProps) {
+export function ThemeToggle({
+  className = '',
+  onModeChange,
+  persistOnSelect = true,
+}: ThemeToggleProps) {
   const { mode, resolvedTheme, setMode } = useTheme();
   const groupLabelId = useId();
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -72,7 +76,8 @@ export function ThemeToggle({ className = '', onModeChange, persistOnSelect = tr
             <button
               key={option.mode}
               ref={(element) => {
-                optionRefs.current[THEME_OPTIONS.findIndex((item) => item.mode === option.mode)] = element;
+                optionRefs.current[THEME_OPTIONS.findIndex((item) => item.mode === option.mode)] =
+                  element;
               }}
               type="button"
               role="radio"
@@ -80,7 +85,9 @@ export function ThemeToggle({ className = '', onModeChange, persistOnSelect = tr
               aria-checked={isSelected}
               aria-label={`Use ${option.label.toLowerCase()} theme`}
               title={stateLabel}
-              onKeyDown={(event) => handleOptionKeyDown(event, activeIndex === -1 ? 0 : activeIndex)}
+              onKeyDown={(event) =>
+                handleOptionKeyDown(event, activeIndex === -1 ? 0 : activeIndex)
+              }
               onClick={() => {
                 selectMode(option.mode);
               }}

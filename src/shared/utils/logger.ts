@@ -29,13 +29,7 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
 };
 
 /** Keys whose values must be redacted from log output. */
-const SENSITIVE_KEYS = new Set([
-  'apikey',
-  'password',
-  'token',
-  'secret',
-  'authorization',
-]);
+const SENSITIVE_KEYS = new Set(['apikey', 'password', 'token', 'secret', 'authorization']);
 
 /** Maximum string length before truncation in serialized data. */
 const MAX_STRING_LENGTH = 1000;
@@ -382,8 +376,7 @@ export class Logger {
 
     // Custom transports and buffer receive SANITIZED data
     // (safe for serialization, redacted, no circular refs)
-    const hasExternalConsumers =
-      Logger.customTransports.length > 0 || Logger.buffer !== undefined;
+    const hasExternalConsumers = Logger.customTransports.length > 0 || Logger.buffer !== undefined;
 
     if (hasExternalConsumers) {
       const sanitizedData = data !== undefined ? safeSanitize(data) : undefined;

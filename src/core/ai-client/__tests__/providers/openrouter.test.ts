@@ -345,7 +345,10 @@ describe('OpenRouterProvider', () => {
     const ssePayload = [
       'data: {broken\n\n',
       formatSSEData({
-        id: 'evt', object: 'c', created: 1, model: config.model,
+        id: 'evt',
+        object: 'c',
+        created: 1,
+        model: config.model,
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
       }),
     ].join('');
@@ -362,7 +365,10 @@ describe('OpenRouterProvider', () => {
 
     const ssePayload = [
       formatSSEData({
-        id: 'evt', object: 'c', created: 1, model: config.model,
+        id: 'evt',
+        object: 'c',
+        created: 1,
+        model: config.model,
         choices: [{ index: 0, delta: { content: 'Hi' }, finish_reason: null }],
       }),
       'data: [DONE]\n\n',
@@ -379,28 +385,39 @@ describe('OpenRouterProvider', () => {
 
     const ssePayload = [
       formatSSEData({
-        id: 'evt-1', object: 'c', created: 1, model: config.model,
-        choices: [{
-          index: 0,
-          delta: {
-            tool_calls: [{ index: 0, id: 'c1', function: { name: 'fn', arguments: '{}' } }],
+        id: 'evt-1',
+        object: 'c',
+        created: 1,
+        model: config.model,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              tool_calls: [{ index: 0, id: 'c1', function: { name: 'fn', arguments: '{}' } }],
+            },
+            finish_reason: null,
           },
-          finish_reason: null,
-        }],
+        ],
       }),
       formatSSEData({
-        id: 'evt-2', object: 'c', created: 2, model: config.model,
+        id: 'evt-2',
+        object: 'c',
+        created: 2,
+        model: config.model,
         choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
       }),
       formatSSEData({
-        id: 'evt-3', object: 'c', created: 3, model: config.model,
+        id: 'evt-3',
+        object: 'c',
+        created: 3,
+        model: config.model,
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
       }),
     ].join('');
 
     vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
     const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
-    const toolCalls = chunks.filter(c => c.type === 'tool_call');
+    const toolCalls = chunks.filter((c) => c.type === 'tool_call');
     expect(toolCalls).toHaveLength(1);
     expect(toolCalls[0].toolCall?.name).toBe('fn');
   });
@@ -411,12 +428,18 @@ describe('OpenRouterProvider', () => {
 
     const ssePayload = [
       formatSSEData({
-        id: 'evt', object: 'c', created: 1, model: config.model,
+        id: 'evt',
+        object: 'c',
+        created: 1,
+        model: config.model,
         choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
         usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
       }),
       formatSSEData({
-        id: 'evt', object: 'c', created: 2, model: config.model,
+        id: 'evt',
+        object: 'c',
+        created: 2,
+        model: config.model,
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
       }),
     ].join('');
@@ -433,12 +456,18 @@ describe('OpenRouterProvider', () => {
     const provider = new OpenRouterProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', createStreamingFetchMock([
-      formatSSEData({
-        id: 'evt', object: 'c', created: 1, model: config.model,
-        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-      }),
-    ]));
+    vi.stubGlobal(
+      'fetch',
+      createStreamingFetchMock([
+        formatSSEData({
+          id: 'evt',
+          object: 'c',
+          created: 1,
+          model: config.model,
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        }),
+      ]),
+    );
 
     const messages = [
       {
@@ -470,11 +499,17 @@ describe('OpenRouterProvider', () => {
 
     const ssePayload = [
       formatSSEData({
-        id: 'evt', object: 'c', created: 1, model: config.model,
+        id: 'evt',
+        object: 'c',
+        created: 1,
+        model: config.model,
         choices: [],
       }),
       formatSSEData({
-        id: 'evt', object: 'c', created: 2, model: config.model,
+        id: 'evt',
+        object: 'c',
+        created: 2,
+        model: config.model,
         choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
       }),
     ].join('');
@@ -488,17 +523,25 @@ describe('OpenRouterProvider', () => {
     const provider = new OpenRouterProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', createStreamingFetchMock([
-      formatSSEData({
-        id: 'evt', object: 'c', created: 1, model: config.model,
-        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-      }),
-    ]));
+    vi.stubGlobal(
+      'fetch',
+      createStreamingFetchMock([
+        formatSSEData({
+          id: 'evt',
+          object: 'c',
+          created: 1,
+          model: config.model,
+          choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+        }),
+      ]),
+    );
 
-    const tools = [{
-      type: 'function' as const,
-      function: { name: 'search', description: 'Search', parameters: {} },
-    }];
+    const tools = [
+      {
+        type: 'function' as const,
+        function: { name: 'search', description: 'Search', parameters: {} },
+      },
+    ];
     await collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { tools }));
 
     const requestBody = JSON.parse(

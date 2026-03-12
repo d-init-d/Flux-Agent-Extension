@@ -77,10 +77,11 @@ function buildJsonExport(session: Session, exportedAt: Date): SessionRecordingJs
   });
 }
 
-function sanitizeRecordingExport(recording: SessionRecordingJsonExport): SessionRecordingJsonExport {
-  return JSON.parse(
-    JSON.stringify(recording),
-    (_key, value: unknown) => (typeof value === 'string' ? redactPII(value) : value),
+function sanitizeRecordingExport(
+  recording: SessionRecordingJsonExport,
+): SessionRecordingJsonExport {
+  return JSON.parse(JSON.stringify(recording), (_key, value: unknown) =>
+    typeof value === 'string' ? redactPII(value) : value,
   ) as SessionRecordingJsonExport;
 }
 

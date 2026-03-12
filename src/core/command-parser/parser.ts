@@ -20,7 +20,6 @@ interface JsonCandidate {
   score: number;
 }
 
-
 export class CommandParser implements ICommandParser {
   private readonly config: ParserConfig;
 
@@ -228,7 +227,10 @@ export class CommandParser implements ICommandParser {
     const normalized = this.normalizeLegacyActionShape(raw);
     const withId: Record<string, unknown> = {
       ...normalized,
-      id: typeof normalized.id === 'string' && normalized.id.trim().length > 0 ? normalized.id : generateId(),
+      id:
+        typeof normalized.id === 'string' && normalized.id.trim().length > 0
+          ? normalized.id
+          : generateId(),
     };
 
     return withId as unknown as Action;
@@ -243,7 +245,11 @@ export class CommandParser implements ICommandParser {
 
     delete normalized.params;
 
-    if (normalized.type === 'type' && typeof normalized.text !== 'string' && typeof normalized.value === 'string') {
+    if (
+      normalized.type === 'type' &&
+      typeof normalized.text !== 'string' &&
+      typeof normalized.value === 'string'
+    ) {
       normalized.text = normalized.value;
     }
 
@@ -350,9 +356,7 @@ export class CommandParser implements ICommandParser {
           return -1;
         }
 
-        const validPair =
-          (opening === '{' && char === '}') ||
-          (opening === '[' && char === ']');
+        const validPair = (opening === '{' && char === '}') || (opening === '[' && char === ']');
 
         if (!validPair) {
           return -1;

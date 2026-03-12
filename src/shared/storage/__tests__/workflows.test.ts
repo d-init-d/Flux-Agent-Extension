@@ -13,7 +13,9 @@ import {
   setSavedWorkflows,
 } from '../workflows';
 
-function createRecordedAction(overrides: Partial<RecordedSessionAction> = {}): RecordedSessionAction {
+function createRecordedAction(
+  overrides: Partial<RecordedSessionAction> = {},
+): RecordedSessionAction {
   return {
     action: {
       id: 'action-1',

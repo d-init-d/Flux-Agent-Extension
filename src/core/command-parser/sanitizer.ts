@@ -202,12 +202,10 @@ function enforceClassificationPolicy(action: Action, config: ParserSanitizerConf
   const classification = classifyAction(action);
 
   if (classification.level === 'blocked') {
-    throw new ExtensionError(
-      ErrorCode.ACTION_BLOCKED,
-      classification.reason,
-      true,
-      { actionType: action.type, classification },
-    );
+    throw new ExtensionError(ErrorCode.ACTION_BLOCKED, classification.reason, true, {
+      actionType: action.type,
+      classification,
+    });
   }
 
   if (config.strictMode && classification.requiresConfirmation) {

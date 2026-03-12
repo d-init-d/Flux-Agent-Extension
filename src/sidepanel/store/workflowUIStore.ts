@@ -123,7 +123,7 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
         selectedWorkflowId:
           state.selectedWorkflowId && items.some((item) => item.id === state.selectedWorkflowId)
             ? state.selectedWorkflowId
-            : items[0]?.id ?? null,
+            : (items[0]?.id ?? null),
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to load saved workflows';
@@ -250,7 +250,10 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
         source: payload.source,
       });
       const nextWorkflow = response.workflow;
-      const nextItems = sortWorkflows([nextWorkflow, ...items.filter((item) => item.id !== nextWorkflow.id)]);
+      const nextItems = sortWorkflows([
+        nextWorkflow,
+        ...items.filter((item) => item.id !== nextWorkflow.id),
+      ]);
       set({
         items: nextItems,
         isSaving: false,
@@ -281,7 +284,12 @@ export const useWorkflowUIStore = create<WorkflowUIStoreState>((set, get) => ({
       set({
         items: nextItems,
         isDeletingWorkflowId: null,
-        selectedWorkflowId: getNextSelectedWorkflowId(items, nextItems, workflowId, selectedWorkflowId),
+        selectedWorkflowId: getNextSelectedWorkflowId(
+          items,
+          nextItems,
+          workflowId,
+          selectedWorkflowId,
+        ),
       });
       return true;
     } catch (error) {

@@ -63,10 +63,7 @@ export class SecureStorage {
 
     if (storage) {
       this.storage = storage;
-    } else if (
-      typeof chrome !== 'undefined' &&
-      chrome?.storage?.local
-    ) {
+    } else if (typeof chrome !== 'undefined' && chrome?.storage?.local) {
       this.storage = chrome.storage.local as unknown as ChromeStorageLocal;
     } else {
       throw new Error(
@@ -123,9 +120,7 @@ export class SecureStorage {
     }
 
     if (typeof ciphertext !== 'string') {
-      throw new Error(
-        `Expected encrypted value to be a string, got ${typeof ciphertext}`,
-      );
+      throw new Error(`Expected encrypted value to be a string, got ${typeof ciphertext}`);
     }
 
     const plaintext = await decrypt(ciphertext, this.passphrase);
@@ -186,9 +181,7 @@ export class SecureStorage {
     }
 
     if (typeof raw !== 'string') {
-      throw new Error(
-        `Expected plain value to be a string, got ${typeof raw}`,
-      );
+      throw new Error(`Expected plain value to be a string, got ${typeof raw}`);
     }
 
     return JSON.parse(raw) as T;
@@ -214,10 +207,7 @@ export class SecureStorage {
    * @param newPassphrase - New passphrase to use going forward.
    * @throws {Error} If either passphrase is empty or decryption fails.
    */
-  async changePassphrase(
-    oldPassphrase: string,
-    newPassphrase: string,
-  ): Promise<void> {
+  async changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void> {
     if (!oldPassphrase) {
       throw new Error('Old passphrase must not be empty');
     }
@@ -279,9 +269,7 @@ export class SecureStorage {
     try {
       const parsed: unknown = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (item): item is string => typeof item === 'string',
-        );
+        return parsed.filter((item): item is string => typeof item === 'string');
       }
       return [];
     } catch {

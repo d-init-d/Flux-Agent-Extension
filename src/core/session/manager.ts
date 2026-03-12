@@ -67,9 +67,7 @@ export class SessionManager implements ISessionManager {
   }
 
   getActiveSessions(): Session[] {
-    return [...this.sessions.values()].filter(
-      (session) => session.status !== 'completed',
-    );
+    return [...this.sessions.values()].filter((session) => session.status !== 'completed');
   }
 
   async start(sessionId: string, initialPrompt?: string): Promise<void> {
@@ -111,11 +109,7 @@ export class SessionManager implements ISessionManager {
     const normalizedMessage = message.trim();
 
     if (normalizedMessage.length === 0) {
-      throw new ExtensionError(
-        ErrorCode.ACTION_INVALID,
-        'Cannot send an empty message',
-        true,
-      );
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Cannot send an empty message', true);
     }
 
     const aiMessage: AIMessage = {
@@ -173,11 +167,7 @@ export class SessionManager implements ISessionManager {
     const session = this.requireSession(sessionId);
     const pageContext = this.resolvePageContext(sessionId, session);
 
-    return this.contextBuilder.buildContext(
-      pageContext,
-      session,
-      DEFAULT_CONTEXT_BUILDER_OPTIONS,
-    );
+    return this.contextBuilder.buildContext(pageContext, session, DEFAULT_CONTEXT_BUILDER_OPTIONS);
   }
 
   getHistory(sessionId: string): ActionRecord[] {
@@ -363,7 +353,11 @@ export class SessionManager implements ISessionManager {
     session.lastActivityAt = now;
   }
 
-  markPlaybackActionCompleted(sessionId: string, nextActionIndex: number, timestamp: number = Date.now()): void {
+  markPlaybackActionCompleted(
+    sessionId: string,
+    nextActionIndex: number,
+    timestamp: number = Date.now(),
+  ): void {
     const session = this.requireSession(sessionId);
     session.playback.nextActionIndex = nextActionIndex;
     session.playback.updatedAt = timestamp;

@@ -10,7 +10,10 @@ import { ONBOARDING_STORAGE_KEY } from '@shared/storage/onboarding';
 type DemoSurface = 'popup' | 'sidepanel' | 'options';
 type StorageAreaName = 'local' | 'session' | 'sync';
 
-type RuntimeHandler = (message: ExtensionMessage, state: DemoRuntimeState) => unknown | Promise<unknown>;
+type RuntimeHandler = (
+  message: ExtensionMessage,
+  state: DemoRuntimeState,
+) => unknown | Promise<unknown>;
 
 interface DemoScenario {
   surface: DemoSurface;
@@ -50,7 +53,7 @@ const FIXED_NOW = Date.UTC(2026, 2, 12, 14, 30, 0);
 function deepClone<T>(value: T): T {
   return typeof structuredClone === 'function'
     ? structuredClone(value)
-    : JSON.parse(JSON.stringify(value)) as T;
+    : (JSON.parse(JSON.stringify(value)) as T);
 }
 
 function createTab(id: number, title: string, url: string): chrome.tabs.Tab {
@@ -124,13 +127,19 @@ function createSession(overrides: Partial<Session> & { id: string; name: string 
   };
 }
 
-function createWorkflow(id: string, name: string, updatedAtOffsetMinutes: number, tags: string[]): SavedWorkflow {
+function createWorkflow(
+  id: string,
+  name: string,
+  updatedAtOffsetMinutes: number,
+  tags: string[],
+): SavedWorkflow {
   return {
     id,
     name,
-    description: name === 'Pipeline handoff flow'
-      ? 'Captures the handoff review workflow from triage through export.'
-      : 'Replays the weekly competitor pricing check with reusable selectors.',
+    description:
+      name === 'Pipeline handoff flow'
+        ? 'Captures the handoff review workflow from triage through export.'
+        : 'Replays the weekly competitor pricing check with reusable selectors.',
     actions: [
       {
         action: {
@@ -169,7 +178,11 @@ function createWorkflow(id: string, name: string, updatedAtOffsetMinutes: number
   };
 }
 
-function createRuntimeEvent(type: ExtensionMessageType, payload: unknown, index: number): ExtensionMessage {
+function createRuntimeEvent(
+  type: ExtensionMessageType,
+  payload: unknown,
+  index: number,
+): ExtensionMessage {
   return {
     id: `demo-event-${index}`,
     channel: 'sidePanel',
@@ -205,12 +218,14 @@ function buildWorkspaceSession(): Session {
     messages: [
       {
         role: 'user',
-        content: 'Review the pipeline board, summarize blockers, and capture the next actions for handoff.',
+        content:
+          'Review the pipeline board, summarize blockers, and capture the next actions for handoff.',
         timestamp: FIXED_NOW - 8 * 60_000,
       },
       {
         role: 'assistant',
-        content: 'I found **3 blockers** in the active launch board.\n\n- Finance approval is still pending.\n- The checklist still needs 2 store screenshots.\n- Legal review is waiting on final copy.',
+        content:
+          'I found **3 blockers** in the active launch board.\n\n- Finance approval is still pending.\n- The checklist still needs 2 store screenshots.\n- Legal review is waiting on final copy.',
         timestamp: FIXED_NOW - 7 * 60_000,
       },
     ],
@@ -230,7 +245,8 @@ function buildWorkflowSession(): Session {
       },
       {
         role: 'assistant',
-        content: 'The recording is ready. You can replay the 4 captured actions, export them in a script format, or save the sequence as a reusable workflow.',
+        content:
+          'The recording is ready. You can replay the 4 captured actions, export them in a script format, or save the sequence as a reusable workflow.',
         timestamp: FIXED_NOW - 9 * 60_000,
       },
     ],
@@ -238,11 +254,19 @@ function buildWorkflowSession(): Session {
       status: 'idle',
       actions: [
         {
-          action: { id: 'recorded-nav', type: 'navigate', url: 'https://workspace.acme.test/pipeline' },
+          action: {
+            id: 'recorded-nav',
+            type: 'navigate',
+            url: 'https://workspace.acme.test/pipeline',
+          },
           timestamp: FIXED_NOW - 8 * 60_000,
         },
         {
-          action: { id: 'recorded-click', type: 'click', selector: { css: '[data-testid="filters"]' } },
+          action: {
+            id: 'recorded-click',
+            type: 'click',
+            selector: { css: '[data-testid="filters"]' },
+          },
           timestamp: FIXED_NOW - 7 * 60_000,
         },
         {
@@ -255,7 +279,11 @@ function buildWorkflowSession(): Session {
           timestamp: FIXED_NOW - 6 * 60_000,
         },
         {
-          action: { id: 'recorded-export', type: 'click', selector: { css: '[data-testid="export"]' } },
+          action: {
+            id: 'recorded-export',
+            type: 'click',
+            selector: { css: '[data-testid="export"]' },
+          },
           timestamp: FIXED_NOW - 5 * 60_000,
         },
       ],
@@ -274,8 +302,16 @@ function buildWorkflowSession(): Session {
   });
 }
 
-const POPUP_TAB_LOCKED = createTab(11, 'Q2 launch checklist | Notion', 'https://workspace.notion.site/q2-launch-checklist');
-const POPUP_TAB_UNLOCKED = createTab(12, 'Revenue pipeline dashboard | Acme CRM', 'https://app.acme.test/revenue/pipeline');
+const POPUP_TAB_LOCKED = createTab(
+  11,
+  'Q2 launch checklist | Notion',
+  'https://workspace.notion.site/q2-launch-checklist',
+);
+const POPUP_TAB_UNLOCKED = createTab(
+  12,
+  'Revenue pipeline dashboard | Acme CRM',
+  'https://app.acme.test/revenue/pipeline',
+);
 const SIDEPANEL_TAB = createTab(41, 'Pipeline workspace', 'https://workspace.acme.test/pipeline');
 
 const SCENARIOS: Record<string, DemoScenario> = {
@@ -340,45 +376,58 @@ const SCENARIOS: Record<string, DemoScenario> = {
       SESSION_SEND_MESSAGE: async () => undefined,
     },
     runtimeEvents: [
-      createRuntimeEvent('EVENT_ACTION_PROGRESS', {
-        sessionId: 'session-workspace',
-        entry: {
-          id: 'workspace-step-1',
-          title: 'Inspecting current board state',
-          detail: 'Collected the visible pipeline columns and the cards that are still blocked.',
-          timestamp: FIXED_NOW - 6 * 60_000,
-          status: 'done',
-          progress: 100,
-          currentStep: 1,
-          totalSteps: 3,
+      createRuntimeEvent(
+        'EVENT_ACTION_PROGRESS',
+        {
+          sessionId: 'session-workspace',
+          entry: {
+            id: 'workspace-step-1',
+            title: 'Inspecting current board state',
+            detail: 'Collected the visible pipeline columns and the cards that are still blocked.',
+            timestamp: FIXED_NOW - 6 * 60_000,
+            status: 'done',
+            progress: 100,
+            currentStep: 1,
+            totalSteps: 3,
+          },
         },
-      }, 1),
-      createRuntimeEvent('EVENT_ACTION_PROGRESS', {
-        sessionId: 'session-workspace',
-        entry: {
-          id: 'workspace-step-2',
-          title: 'Summarizing blockers',
-          detail: 'Extracted the stalled cards and grouped them by owner so the handoff stays readable.',
-          timestamp: FIXED_NOW - 5 * 60_000,
-          status: 'running',
-          progress: 66,
-          currentStep: 2,
-          totalSteps: 3,
+        1,
+      ),
+      createRuntimeEvent(
+        'EVENT_ACTION_PROGRESS',
+        {
+          sessionId: 'session-workspace',
+          entry: {
+            id: 'workspace-step-2',
+            title: 'Summarizing blockers',
+            detail:
+              'Extracted the stalled cards and grouped them by owner so the handoff stays readable.',
+            timestamp: FIXED_NOW - 5 * 60_000,
+            status: 'running',
+            progress: 66,
+            currentStep: 2,
+            totalSteps: 3,
+          },
         },
-      }, 2),
-      createRuntimeEvent('EVENT_ACTION_PROGRESS', {
-        sessionId: 'session-workspace',
-        entry: {
-          id: 'workspace-step-3',
-          title: 'Drafting next actions',
-          detail: 'Prepared a concise checklist for the next review pass in the same session.',
-          timestamp: FIXED_NOW - 4 * 60_000,
-          status: 'pending',
-          progress: 0,
-          currentStep: 3,
-          totalSteps: 3,
+        2,
+      ),
+      createRuntimeEvent(
+        'EVENT_ACTION_PROGRESS',
+        {
+          sessionId: 'session-workspace',
+          entry: {
+            id: 'workspace-step-3',
+            title: 'Drafting next actions',
+            detail: 'Prepared a concise checklist for the next review pass in the same session.',
+            timestamp: FIXED_NOW - 4 * 60_000,
+            status: 'pending',
+            progress: 0,
+            currentStep: 3,
+            totalSteps: 3,
+          },
         },
-      }, 3),
+        3,
+      ),
     ],
   },
   'sidepanel-workflows': {
@@ -411,7 +460,10 @@ const SCENARIOS: Record<string, DemoScenario> = {
         }
         return undefined;
       },
-      WORKFLOW_RUN: async (_message, state) => ({ workflow: state.workflows[0], session: state.sessions[0] }),
+      WORKFLOW_RUN: async (_message, state) => ({
+        workflow: state.workflows[0],
+        session: state.sessions[0],
+      }),
     },
   },
   'options-control-surface': {
@@ -529,22 +581,28 @@ function createStorageArea(
       }, {});
     },
     async set(items: Record<string, unknown>): Promise<void> {
-      const changes = Object.entries(items).reduce<Record<string, chrome.storage.StorageChange>>((result, [key, value]) => {
-        result[key] = { oldValue: store[key], newValue: value };
-        store[key] = value;
-        return result;
-      }, {});
+      const changes = Object.entries(items).reduce<Record<string, chrome.storage.StorageChange>>(
+        (result, [key, value]) => {
+          result[key] = { oldValue: store[key], newValue: value };
+          store[key] = value;
+          return result;
+        },
+        {},
+      );
       globalChangeEvent.dispatch(changes, areaName);
     },
     async remove(keys: string | string[]): Promise<void> {
       const keyList = Array.isArray(keys) ? keys : [keys];
-      const changes = keyList.reduce<Record<string, chrome.storage.StorageChange>>((result, key) => {
-        if (key in store) {
-          result[key] = { oldValue: store[key] };
-          delete store[key];
-        }
-        return result;
-      }, {});
+      const changes = keyList.reduce<Record<string, chrome.storage.StorageChange>>(
+        (result, key) => {
+          if (key in store) {
+            result[key] = { oldValue: store[key] };
+            delete store[key];
+          }
+          return result;
+        },
+        {},
+      );
 
       if (Object.keys(changes).length > 0) {
         globalChangeEvent.dispatch(changes, areaName);
@@ -579,7 +637,9 @@ function installDemoChrome(scenario: DemoScenario): void {
       },
     },
     runtime: {
-      async sendMessage(message: ExtensionMessage): Promise<{ success: boolean; data?: unknown; error?: { code: string; message: string } }> {
+      async sendMessage(
+        message: ExtensionMessage,
+      ): Promise<{ success: boolean; data?: unknown; error?: { code: string; message: string } }> {
         const handler = scenario.handlers[message.type];
 
         if (!handler) {
@@ -605,7 +665,11 @@ function installDemoChrome(scenario: DemoScenario): void {
       onMessage: {
         addListener(listener: ChromeMessageListener) {
           runtimeMessageEvent.addListener(listener);
-          if (!runtimeState.runtimeEventsDispatched && scenario.runtimeEvents && scenario.runtimeEvents.length > 0) {
+          if (
+            !runtimeState.runtimeEventsDispatched &&
+            scenario.runtimeEvents &&
+            scenario.runtimeEvents.length > 0
+          ) {
             runtimeState.runtimeEventsDispatched = true;
             window.setTimeout(() => {
               for (const event of scenario.runtimeEvents ?? []) {

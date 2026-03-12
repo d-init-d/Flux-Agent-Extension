@@ -15,7 +15,12 @@ describe('action schemas', () => {
     fill: { id: 'a10', type: 'fill', selector: { css: '#email' }, value: 'user@example.com' },
     type: { id: 'a11', type: 'type', selector: { css: '#code' }, text: '123456' },
     clear: { id: 'a12', type: 'clear', selector: { css: '#input' } },
-    uploadFile: { id: 'a13', type: 'uploadFile', selector: { css: '#resume' }, fileIds: ['file-1'] },
+    uploadFile: {
+      id: 'a13',
+      type: 'uploadFile',
+      selector: { css: '#resume' },
+      fileIds: ['file-1'],
+    },
     select: { id: 'a14', type: 'select', selector: { css: '#country' }, option: 'US' },
     check: { id: 'a15', type: 'check', selector: { css: '#agree' } },
     uncheck: { id: 'a16', type: 'uncheck', selector: { css: '#agree' } },
@@ -86,7 +91,9 @@ describe('action schemas', () => {
     expect(missingSelector.valid).toBe(false);
     expect(missingSelector.errors?.[0]).toContain('selector');
     expect(emptySelector.valid).toBe(false);
-    expect(emptySelector.errors?.[0]).toContain('selector must include at least one selector strategy');
+    expect(emptySelector.errors?.[0]).toContain(
+      'selector must include at least one selector strategy',
+    );
   });
 
   it('rejects invalid action payload shape', () => {
@@ -97,7 +104,11 @@ describe('action schemas', () => {
   });
 
   it('requires urlPatterns for network interception actions', () => {
-    const interceptResult = validateActionSchema({ id: 'x5', type: 'interceptNetwork', operation: 'block' });
+    const interceptResult = validateActionSchema({
+      id: 'x5',
+      type: 'interceptNetwork',
+      operation: 'block',
+    });
     const mockResult = validateActionSchema({
       id: 'x6',
       type: 'mockResponse',
@@ -111,7 +122,12 @@ describe('action schemas', () => {
   });
 
   it('requires at least one staged file id for upload actions', () => {
-    const result = validateActionSchema({ id: 'x-upload', type: 'uploadFile', selector: { css: '#resume' }, fileIds: [] });
+    const result = validateActionSchema({
+      id: 'x-upload',
+      type: 'uploadFile',
+      selector: { css: '#resume' },
+      fileIds: [],
+    });
 
     expect(result.valid).toBe(false);
     expect(result.errors?.[0]).toContain('fileIds');

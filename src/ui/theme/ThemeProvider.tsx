@@ -1,11 +1,4 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-} from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -58,11 +51,7 @@ interface ThemeProviderProps {
   children: React.ReactNode;
 }
 
-const ThemeProvider: React.FC<ThemeProviderProps> = ({
-  defaultMode,
-  targetElement,
-  children,
-}) => {
+const ThemeProvider: React.FC<ThemeProviderProps> = ({ defaultMode, targetElement, children }) => {
   // -----------------------------------------------------------------------
   // State: read persisted preference or fall back to default
   // -----------------------------------------------------------------------

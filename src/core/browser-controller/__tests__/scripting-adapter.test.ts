@@ -85,7 +85,9 @@ describe('ScriptingAdapter', () => {
   });
 
   it('maps generic scripting failures to CONTENT_SCRIPT_INJECTION_FAILED', async () => {
-    vi.spyOn(chrome.scripting, 'removeCSS').mockRejectedValueOnce(new Error('Injection pipeline crashed'));
+    vi.spyOn(chrome.scripting, 'removeCSS').mockRejectedValueOnce(
+      new Error('Injection pipeline crashed'),
+    );
 
     await expect(adapter.removeCSS(1, 'body { color: #111; }')).rejects.toMatchObject({
       code: ErrorCode.CONTENT_SCRIPT_INJECTION_FAILED,

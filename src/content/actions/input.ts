@@ -11,7 +11,13 @@ import type {
 } from '@shared/types';
 import { SelectorEngine } from '../dom/selector-engine';
 
-export type InputAction = FillAction | TypeAction | ClearAction | UploadFileAction | SelectAction | CheckAction;
+export type InputAction =
+  | FillAction
+  | TypeAction
+  | ClearAction
+  | UploadFileAction
+  | SelectAction
+  | CheckAction;
 
 type InputTarget = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
@@ -59,15 +65,14 @@ export async function executeInputAction(
       duration: getDurationMs(startedAt),
     };
   } catch (error: unknown) {
-    const extensionError =
-      ExtensionError.isExtensionError(error)
-        ? error
-        : new ExtensionError(
-            ErrorCode.ACTION_FAILED,
-            `Failed to execute action "${action.type}"`,
-            true,
-            error,
-          );
+    const extensionError = ExtensionError.isExtensionError(error)
+      ? error
+      : new ExtensionError(
+          ErrorCode.ACTION_FAILED,
+          `Failed to execute action "${action.type}"`,
+          true,
+          error,
+        );
 
     return {
       actionId: action.id,
@@ -83,7 +88,11 @@ export async function executeInputAction(
   }
 }
 
-async function performInputAction(action: InputAction, element: HTMLElement, uploads: SerializedFileUpload[]): Promise<void> {
+async function performInputAction(
+  action: InputAction,
+  element: HTMLElement,
+  uploads: SerializedFileUpload[],
+): Promise<void> {
   switch (action.type) {
     case 'fill': {
       fillElement(element, action.value, action.clearFirst !== false);
@@ -164,7 +173,11 @@ function clearElement(element: HTMLElement): void {
   setValueReactSafe(target, '');
 }
 
-function uploadFilesIntoInput(element: HTMLElement, uploads: SerializedFileUpload[], clearFirst: boolean): void {
+function uploadFilesIntoInput(
+  element: HTMLElement,
+  uploads: SerializedFileUpload[],
+  clearFirst: boolean,
+): void {
   if (!(element instanceof HTMLInputElement) || element.type !== 'file') {
     throw new ExtensionError(
       ErrorCode.ELEMENT_NOT_INTERACTIVE,
@@ -174,15 +187,15 @@ function uploadFilesIntoInput(element: HTMLElement, uploads: SerializedFileUploa
   }
 
   if (element.disabled) {
-    throw new ExtensionError(
-      ErrorCode.ELEMENT_NOT_INTERACTIVE,
-      'File input is disabled',
-      true,
-    );
+    throw new ExtensionError(ErrorCode.ELEMENT_NOT_INTERACTIVE, 'File input is disabled', true);
   }
 
   if (uploads.length === 0) {
-    throw new ExtensionError(ErrorCode.FILE_UPLOAD_NOT_FOUND, 'No staged uploads were provided to the content script', true);
+    throw new ExtensionError(
+      ErrorCode.FILE_UPLOAD_NOT_FOUND,
+      'No staged uploads were provided to the content script',
+      true,
+    );
   }
 
   const existingFiles = clearFirst ? [] : Array.from(element.files ?? []);
@@ -210,21 +223,14 @@ function selectOption(element: HTMLElement, action: SelectAction): void {
   }
 
   if (element.disabled) {
-    throw new ExtensionError(
-      ErrorCode.ELEMENT_NOT_INTERACTIVE,
-      'Select element is disabled',
-      true,
-    );
+    throw new ExtensionError(ErrorCode.ELEMENT_NOT_INTERACTIVE, 'Select element is disabled', true);
   }
 
   const optionIndex = resolveSelectOptionIndex(element, action);
   if (optionIndex < 0 || optionIndex >= element.options.length) {
-    throw new ExtensionError(
-      ErrorCode.ELEMENT_NOT_FOUND,
-      'Select option not found',
-      true,
-      { option: action.option },
-    );
+    throw new ExtensionError(ErrorCode.ELEMENT_NOT_FOUND, 'Select option not found', true, {
+      option: action.option,
+    });
   }
 
   element.selectedIndex = optionIndex;
@@ -233,7 +239,9 @@ function selectOption(element: HTMLElement, action: SelectAction): void {
 
 function resolveSelectOptionIndex(element: HTMLSelectElement, action: SelectAction): number {
   if (typeof action.option === 'string') {
-    const valueMatch = Array.from(element.options).findIndex((option) => option.value === action.option);
+    const valueMatch = Array.from(element.options).findIndex(
+      (option) => option.value === action.option,
+    );
     if (valueMatch !== -1) {
       return valueMatch;
     }
@@ -247,14 +255,18 @@ function resolveSelectOptionIndex(element: HTMLSelectElement, action: SelectActi
   }
 
   if (typeof option.value === 'string') {
-    const byValue = Array.from(element.options).findIndex((selectOption) => selectOption.value === option.value);
+    const byValue = Array.from(element.options).findIndex(
+      (selectOption) => selectOption.value === option.value,
+    );
     if (byValue !== -1) {
       return byValue;
     }
   }
 
   if (typeof option.label === 'string') {
-    return Array.from(element.options).findIndex((selectOption) => selectOption.label === option.label);
+    return Array.from(element.options).findIndex(
+      (selectOption) => selectOption.label === option.label,
+    );
   }
 
   return -1;

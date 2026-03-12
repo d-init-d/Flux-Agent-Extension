@@ -76,7 +76,8 @@ describe('executeExtractAction', () => {
   });
 
   it('extracts specific attribute from element', async () => {
-    document.body.innerHTML = '<a id="link" href="https://example.com" data-custom="custom-val">Link</a>';
+    document.body.innerHTML =
+      '<a id="link" href="https://example.com" data-custom="custom-val">Link</a>';
 
     const action: ExtractAction = {
       id: 'extract-attr',
@@ -171,7 +172,8 @@ describe('executeExtractAction', () => {
   });
 
   it('extractAll respects limit', async () => {
-    document.body.innerHTML = '<span class="item">A</span><span class="item">B</span><span class="item">C</span>';
+    document.body.innerHTML =
+      '<span class="item">A</span><span class="item">B</span><span class="item">C</span>';
 
     const action: ExtractAllAction = {
       id: 'extractall-limit',

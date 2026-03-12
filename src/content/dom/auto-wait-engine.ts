@@ -85,12 +85,9 @@ export class AutoWaitEngine {
     while (Date.now() <= deadline) {
       const currentUrl = location.href;
       const changedUrl = currentUrl !== initialUrl;
-      const changedNavigationEntry =
-        this.getNavigationEntryCount() > initialNavigationCount;
-      const changedNavigationSignal =
-        this.lastNavigationSignalAt > initialNavigationSignalAt;
-      const hasNavigationSignal =
-        changedUrl || changedNavigationEntry || changedNavigationSignal;
+      const changedNavigationEntry = this.getNavigationEntryCount() > initialNavigationCount;
+      const changedNavigationSignal = this.lastNavigationSignalAt > initialNavigationSignalAt;
+      const hasNavigationSignal = changedUrl || changedNavigationEntry || changedNavigationSignal;
       const matchesPattern = regex ? regex.test(currentUrl) : true;
 
       if (hasNavigationSignal && matchesPattern) {

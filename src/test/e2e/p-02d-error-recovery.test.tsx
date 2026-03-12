@@ -52,9 +52,9 @@ vi.mock('../../sidepanel/lib/extension-client', () => ({
       throw new Error('Runtime is not initialized for E2E test');
     }
 
-    const request = activeRuntime.handleMessage(
-      createExtensionMessage(type, payload),
-    ) as Promise<ExtensionResponse<ResponsePayloadMap[T]>>;
+    const request = activeRuntime.handleMessage(createExtensionMessage(type, payload)) as Promise<
+      ExtensionResponse<ResponsePayloadMap[T]>
+    >;
 
     pendingExtensionRequests.add(request);
     const response = await request.finally(() => {
@@ -426,14 +426,19 @@ describe('P-02d error-recovery E2E expansion', () => {
       'submit-after-retry',
     ]);
     expect(
-      await screen.findByText('The assistant retries the Login click and then continues to Submit.'),
+      await screen.findByText(
+        'The assistant retries the Login click and then continues to Submit.',
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText('Login button was still hydrating')).not.toBeInTheDocument();
 
     const session = await getSessionState(sessionId);
     expect(session?.status).toBe('idle');
     expect(session?.lastError ?? null).toBeNull();
-    expect(session?.actionHistory.map((entry) => entry.action.id)).toEqual(['retry-click', 'submit-after-retry']);
+    expect(session?.actionHistory.map((entry) => entry.action.id)).toEqual([
+      'retry-click',
+      'submit-after-retry',
+    ]);
 
     await openActionLog(user);
     expect(await screen.findByText('Retry the Login button until it responds')).toBeInTheDocument();
@@ -501,17 +506,25 @@ describe('P-02d error-recovery E2E expansion', () => {
       expect(actionHandler).toHaveBeenCalledTimes(1);
     });
 
-    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual(['dismiss-missing-modal']);
-    expect((await screen.findAllByText('Security confirmation modal never appeared')).length).toBeGreaterThanOrEqual(2);
+    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual([
+      'dismiss-missing-modal',
+    ]);
+    expect(
+      (await screen.findAllByText('Security confirmation modal never appeared')).length,
+    ).toBeGreaterThanOrEqual(2);
 
     const session = await getSessionState(sessionId);
     expect(session?.status).toBe('error');
     expect(session?.lastError?.message).toBe('Security confirmation modal never appeared');
-    expect(session?.actionHistory.map((entry) => entry.action.id)).toEqual(['dismiss-missing-modal']);
+    expect(session?.actionHistory.map((entry) => entry.action.id)).toEqual([
+      'dismiss-missing-modal',
+    ]);
 
     await openActionLog(user);
     expect(await screen.findByText('Click the Login button')).toBeInTheDocument();
-    expect(screen.getAllByText('Security confirmation modal never appeared').length).toBeGreaterThanOrEqual(2);
+    expect(
+      screen.getAllByText('Security confirmation modal never appeared').length,
+    ).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('Click the Submit button')).not.toBeInTheDocument();
   });
 
@@ -609,20 +622,29 @@ describe('P-02d error-recovery E2E expansion', () => {
       'continue-payment',
     ]);
     expect(
-      await screen.findByText('The assistant skips the optional Login failure and still reaches Submit.'),
+      await screen.findByText(
+        'The assistant skips the optional Login failure and still reaches Submit.',
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText('Request failed')).not.toBeInTheDocument();
 
     const session = await getSessionState(sessionId);
     expect(session?.status).toBe('idle');
     expect(session?.lastError ?? null).toBeNull();
-    expect(session?.actionHistory.map((entry) => ({ id: entry.action.id, success: entry.result.success }))).toEqual([
+    expect(
+      session?.actionHistory.map((entry) => ({
+        id: entry.action.id,
+        success: entry.result.success,
+      })),
+    ).toEqual([
       { id: 'dismiss-optional-banner', success: false },
       { id: 'continue-payment', success: true },
     ]);
 
     await openActionLog(user);
-    expect(await screen.findByText('Click the Login button only if it is currently needed')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Click the Login button only if it is currently needed'),
+    ).toBeInTheDocument();
     expect(await screen.findByText('Promo banner was already absent')).toBeInTheDocument();
     expect(await screen.findByText('Continue with the Submit button')).toBeInTheDocument();
   });

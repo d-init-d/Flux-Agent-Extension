@@ -66,9 +66,7 @@ describe('chatStore', () => {
   describe('syncSession', () => {
     it('should map user messages from session', () => {
       const session = createSession('s1', {
-        messages: [
-          { role: 'user', content: 'Hello', timestamp: 1700000000000 },
-        ],
+        messages: [{ role: 'user', content: 'Hello', timestamp: 1700000000000 }],
       });
 
       useChatStore.getState().syncSession(session);
@@ -81,9 +79,7 @@ describe('chatStore', () => {
 
     it('should map assistant messages from session', () => {
       const session = createSession('s1', {
-        messages: [
-          { role: 'assistant', content: '**Bold**', timestamp: 1700000000000 },
-        ],
+        messages: [{ role: 'assistant', content: '**Bold**', timestamp: 1700000000000 }],
       });
 
       useChatStore.getState().syncSession(session);
@@ -123,8 +119,16 @@ describe('chatStore', () => {
     it('should handle non-string content gracefully', () => {
       const session = createSession('s1', {
         messages: [
-          { role: 'user', content: ['array content'] as unknown as string, timestamp: 1700000000000 },
-          { role: 'assistant', content: { obj: true } as unknown as string, timestamp: 1700000000000 },
+          {
+            role: 'user',
+            content: ['array content'] as unknown as string,
+            timestamp: 1700000000000,
+          },
+          {
+            role: 'assistant',
+            content: { obj: true } as unknown as string,
+            timestamp: 1700000000000,
+          },
         ],
       });
 
@@ -138,9 +142,7 @@ describe('chatStore', () => {
 
     it('should use Date.now() when timestamp is undefined', () => {
       const session = createSession('s1', {
-        messages: [
-          { role: 'user', content: 'no ts' },
-        ],
+        messages: [{ role: 'user', content: 'no ts' }],
       });
 
       useChatStore.getState().syncSession(session);
@@ -177,13 +179,15 @@ describe('chatStore', () => {
     it('should append delta to existing assistant message', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'msg-1',
-            variant: 'assistant' as const,
-            timestamp: new Date().toISOString(),
-            markdown: 'Hello',
-            isStreaming: true,
-          }],
+          s1: [
+            {
+              id: 'msg-1',
+              variant: 'assistant' as const,
+              timestamp: new Date().toISOString(),
+              markdown: 'Hello',
+              isStreaming: true,
+            },
+          ],
         },
         streamMessageIdsBySession: { s1: 'msg-1' },
       });
@@ -203,13 +207,15 @@ describe('chatStore', () => {
     it('should set isStreaming to false when done', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'msg-1',
-            variant: 'assistant' as const,
-            timestamp: new Date().toISOString(),
-            markdown: 'Hello',
-            isStreaming: true,
-          }],
+          s1: [
+            {
+              id: 'msg-1',
+              variant: 'assistant' as const,
+              timestamp: new Date().toISOString(),
+              markdown: 'Hello',
+              isStreaming: true,
+            },
+          ],
         },
         streamMessageIdsBySession: { s1: 'msg-1' },
       });
@@ -229,13 +235,15 @@ describe('chatStore', () => {
     it('should handle error in stream chunk with existing message', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'msg-1',
-            variant: 'assistant' as const,
-            timestamp: new Date().toISOString(),
-            markdown: 'Partial',
-            isStreaming: true,
-          }],
+          s1: [
+            {
+              id: 'msg-1',
+              variant: 'assistant' as const,
+              timestamp: new Date().toISOString(),
+              markdown: 'Partial',
+              isStreaming: true,
+            },
+          ],
         },
         streamMessageIdsBySession: { s1: 'msg-1' },
       });
@@ -289,12 +297,14 @@ describe('chatStore', () => {
     it('should not update non-assistant existing message on append', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'msg-1',
-            variant: 'user' as const,
-            timestamp: new Date().toISOString(),
-            text: 'User msg',
-          }],
+          s1: [
+            {
+              id: 'msg-1',
+              variant: 'user' as const,
+              timestamp: new Date().toISOString(),
+              text: 'User msg',
+            },
+          ],
         },
         streamMessageIdsBySession: { s1: null },
       });
@@ -313,12 +323,14 @@ describe('chatStore', () => {
     it('should not update non-assistant message on error', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'msg-1',
-            variant: 'user' as const,
-            timestamp: new Date().toISOString(),
-            text: 'User msg',
-          }],
+          s1: [
+            {
+              id: 'msg-1',
+              variant: 'user' as const,
+              timestamp: new Date().toISOString(),
+              text: 'User msg',
+            },
+          ],
         },
         streamMessageIdsBySession: { s1: null },
       });
@@ -355,12 +367,14 @@ describe('chatStore', () => {
     it('should append to existing messages', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'user-0',
-            variant: 'user' as const,
-            timestamp: new Date().toISOString(),
-            text: 'Hello',
-          }],
+          s1: [
+            {
+              id: 'user-0',
+              variant: 'user' as const,
+              timestamp: new Date().toISOString(),
+              text: 'Hello',
+            },
+          ],
         },
       });
 
@@ -393,7 +407,15 @@ describe('chatStore', () => {
 
     it('should pass uploads when provided', async () => {
       sendExtensionRequest.mockResolvedValueOnce(undefined);
-      const uploads = [{ name: 'file.txt', mimeType: 'text/plain', size: 5, lastModified: 0, base64Data: 'aGVsbG8=' }];
+      const uploads = [
+        {
+          name: 'file.txt',
+          mimeType: 'text/plain',
+          size: 5,
+          lastModified: 0,
+          base64Data: 'aGVsbG8=',
+        },
+      ];
 
       await useChatStore.getState().sendMessage('s1', 'With file', uploads);
 
@@ -428,15 +450,17 @@ describe('chatStore', () => {
     it('should handle error with existing non-assistant message (no isStreaming update)', () => {
       useChatStore.setState({
         messagesBySession: {
-          s1: [{
-            id: 'msg-1',
-            variant: 'error' as const,
-            timestamp: new Date().toISOString(),
-            title: 'Previous error',
-            description: 'old',
-            errorCode: 'OLD',
-            actions: [],
-          }],
+          s1: [
+            {
+              id: 'msg-1',
+              variant: 'error' as const,
+              timestamp: new Date().toISOString(),
+              title: 'Previous error',
+              description: 'old',
+              errorCode: 'OLD',
+              actions: [],
+            },
+          ],
         },
         streamMessageIdsBySession: { s1: null },
       });

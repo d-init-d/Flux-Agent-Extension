@@ -9,12 +9,7 @@ const DEFAULT_TAB_TITLE = 'Untitled';
  */
 export function mapChromeTabToTabState(tab: chrome.tabs.Tab): TabState {
   if (tab.id === undefined) {
-    throw new ExtensionError(
-      ErrorCode.TAB_NOT_FOUND,
-      'Cannot map tab without id',
-      false,
-      { tab },
-    );
+    throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'Cannot map tab without id', false, { tab });
   }
 
   return {
@@ -55,11 +50,7 @@ export class TabManager {
     try {
       await chrome.tabs.remove(idToClose);
     } catch (error: unknown) {
-      throw this.mapTabsError(
-        error,
-        ErrorCode.TAB_CLOSED,
-        `Failed to close tab ${idToClose}`,
-      );
+      throw this.mapTabsError(error, ErrorCode.TAB_CLOSED, `Failed to close tab ${idToClose}`);
     }
   }
 
@@ -77,11 +68,7 @@ export class TabManager {
       }
       return this.mapChromeTab(tab);
     } catch (error: unknown) {
-      throw this.mapTabsError(
-        error,
-        ErrorCode.TAB_CLOSED,
-        `Failed to switch to tab ${tabId}`,
-      );
+      throw this.mapTabsError(error, ErrorCode.TAB_CLOSED, `Failed to switch to tab ${tabId}`);
     }
   }
 
@@ -138,11 +125,7 @@ export class TabManager {
     return mapChromeTabToTabState(tab);
   }
 
-  private mapTabsError(
-    error: unknown,
-    fallbackCode: ErrorCode,
-    message: string,
-  ): ExtensionError {
+  private mapTabsError(error: unknown, fallbackCode: ErrorCode, message: string): ExtensionError {
     if (ExtensionError.isExtensionError(error)) {
       return error;
     }

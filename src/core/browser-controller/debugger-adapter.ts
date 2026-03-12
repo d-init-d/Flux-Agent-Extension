@@ -246,7 +246,11 @@ export class DebuggerAdapter {
     });
   }
 
-  async getDocument(tabId: number, depth?: number, pierce?: boolean): Promise<DomGetDocumentResult> {
+  async getDocument(
+    tabId: number,
+    depth?: number,
+    pierce?: boolean,
+  ): Promise<DomGetDocumentResult> {
     return this.sendCommand(tabId, 'DOM.getDocument', {
       depth,
       pierce,
@@ -295,7 +299,10 @@ export class DebuggerAdapter {
     });
   }
 
-  async setDeviceMetricsOverride(tabId: number, params: DeviceMetricsOverrideParams): Promise<void> {
+  async setDeviceMetricsOverride(
+    tabId: number,
+    params: DeviceMetricsOverrideParams,
+  ): Promise<void> {
     await this.sendCommand(tabId, 'Emulation.setDeviceMetricsOverride', params);
   }
 
@@ -342,7 +349,11 @@ export class DebuggerAdapter {
   }
 
   onEvent(listener: DebuggerEventListener): () => void {
-    const handleEvent: Parameters<typeof chrome.debugger.onEvent.addListener>[0] = (source, method, params) => {
+    const handleEvent: Parameters<typeof chrome.debugger.onEvent.addListener>[0] = (
+      source,
+      method,
+      params,
+    ) => {
       if (typeof source.tabId !== 'number') {
         return;
       }
@@ -361,7 +372,10 @@ export class DebuggerAdapter {
   }
 
   onDetach(listener: DebuggerDetachListener): () => void {
-    const handleDetach: Parameters<typeof chrome.debugger.onDetach.addListener>[0] = (source, reason) => {
+    const handleDetach: Parameters<typeof chrome.debugger.onDetach.addListener>[0] = (
+      source,
+      reason,
+    ) => {
       if (typeof source.tabId !== 'number') {
         return;
       }

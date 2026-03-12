@@ -88,7 +88,8 @@ function getPlaybackSummary({
 
   const actionLabel = formatActionCount(actionCount);
   const currentStep = Math.min(nextActionIndex + 1, actionCount);
-  const isCompleted = playbackStatus === 'idle' && nextActionIndex === actionCount && lastCompletedAt !== null;
+  const isCompleted =
+    playbackStatus === 'idle' && nextActionIndex === actionCount && lastCompletedAt !== null;
 
   if (isCompleted) {
     return `Playback finished for ${actionLabel}. You can replay it from the start.`;
@@ -181,8 +182,15 @@ export function App() {
   const deleteWorkflow = useWorkflowUIStore((state) => state.deleteWorkflow);
   const runWorkflow = useWorkflowUIStore((state) => state.runWorkflow);
 
-  const { sessions, activeSessionId, isHydrating, hydrate, createSession, switchSession, applySessionUpdate } =
-    useSession();
+  const {
+    sessions,
+    activeSessionId,
+    isHydrating,
+    hydrate,
+    createSession,
+    switchSession,
+    applySessionUpdate,
+  } = useSession();
   const {
     messagesBySession,
     streamMessageIdsBySession,
@@ -198,11 +206,7 @@ export function App() {
       switch (message.type) {
         case 'EVENT_SESSION_UPDATE': {
           const payload = message.payload as SessionUpdateEventPayload;
-          applySessionUpdate(
-            payload.sessionId,
-            payload.session,
-            payload.reason,
-          );
+          applySessionUpdate(payload.sessionId, payload.session, payload.reason);
           if (payload.session) {
             syncSession(payload.session);
           }
@@ -256,10 +260,10 @@ export function App() {
     () => sessions.find((session) => session.config.id === activeSessionId) ?? null,
     [activeSessionId, sessions],
   );
-  const activeMessages = activeSessionId ? messagesBySession[activeSessionId] ?? [] : [];
-  const activeActions = activeSessionId ? entriesBySession[activeSessionId] ?? [] : [];
+  const activeMessages = activeSessionId ? (messagesBySession[activeSessionId] ?? []) : [];
+  const activeActions = activeSessionId ? (entriesBySession[activeSessionId] ?? []) : [];
   const activeStreamMessageId = activeSessionId
-    ? streamMessageIdsBySession[activeSessionId] ?? null
+    ? (streamMessageIdsBySession[activeSessionId] ?? null)
     : null;
 
   const statusLabel = activeSession?.status ?? (isHydrating ? 'Loading' : 'Ready');
@@ -304,9 +308,7 @@ export function App() {
     recordingExportRequest !== null;
   const playbackButtonsDisabled = !activeSessionId || playbackRequest !== null;
   const playbackSpeedDisabled =
-    !activeSessionId ||
-    recordingStatus !== 'idle' ||
-    playbackRequest !== null;
+    !activeSessionId || recordingStatus !== 'idle' || playbackRequest !== null;
   const canSaveWorkflow = Boolean(activeSessionId) && recordingActionCount > 0;
   const activeSessionName = getSessionDisplayName(activeSession);
   const selectedWorkflow = useMemo(
@@ -314,12 +316,12 @@ export function App() {
     [selectedWorkflowId, workflowItems],
   );
   const workflowRunDisabled = !activeSessionId;
-  const saveModalActionCount = workflowSaveMode === 'edit'
-    ? selectedWorkflow?.actions.length ?? 0
-    : recordingActionCount;
-  const saveModalSourceSessionName = workflowSaveMode === 'edit'
-    ? selectedWorkflow?.source?.sessionName ?? selectedWorkflow?.name ?? 'Saved workflow'
-    : activeSessionName;
+  const saveModalActionCount =
+    workflowSaveMode === 'edit' ? (selectedWorkflow?.actions.length ?? 0) : recordingActionCount;
+  const saveModalSourceSessionName =
+    workflowSaveMode === 'edit'
+      ? (selectedWorkflow?.source?.sessionName ?? selectedWorkflow?.name ?? 'Saved workflow')
+      : activeSessionName;
 
   useEffect(() => {
     setPlaybackSpeedDraft(playbackState.speed);
@@ -492,7 +494,7 @@ export function App() {
         className="border-b border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary))] px-4 py-4 sm:px-6"
         data-testid="sidepanel-header"
       >
-          <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-3">
+        <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold leading-snug tracking-tight">Flux Agent</h1>
             <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
@@ -533,7 +535,9 @@ export function App() {
               onClick={() => {
                 setSubmitError(null);
                 void createSession().catch((error) => {
-                  setSubmitError(error instanceof Error ? error.message : 'Failed to create session');
+                  setSubmitError(
+                    error instanceof Error ? error.message : 'Failed to create session',
+                  );
                 });
               }}
             >
@@ -707,7 +711,10 @@ export function App() {
                       {playbackSummary}
                     </p>
                     {playbackState.status === 'paused' && playbackState.lastError ? (
-                      <p className="mt-2 text-sm leading-relaxed text-[rgb(var(--color-error-700))]" role="status">
+                      <p
+                        className="mt-2 text-sm leading-relaxed text-[rgb(var(--color-error-700))]"
+                        role="status"
+                      >
                         Playback issue: {getPlaybackErrorMessage(playbackState.lastError.message)}
                       </p>
                     ) : null}
@@ -742,7 +749,9 @@ export function App() {
                           value={recordingExportFormat}
                           disabled={recordingExportDisabled}
                           onChange={(event) => {
-                            setRecordingExportFormat(event.target.value as SessionRecordingExportFormat);
+                            setRecordingExportFormat(
+                              event.target.value as SessionRecordingExportFormat,
+                            );
                           }}
                         >
                           {RECORDING_EXPORT_FORMAT_OPTIONS.map((option) => (
@@ -894,8 +903,12 @@ export function App() {
         selectedWorkflowId={selectedWorkflowId}
         canSaveCurrentSession={canSaveWorkflow}
         canRunSelectedWorkflow={!workflowRunDisabled}
-        isRunningSelectedWorkflow={selectedWorkflowId !== null && workflowRunningId === selectedWorkflowId}
-        isDeletingSelectedWorkflow={selectedWorkflowId !== null && workflowDeletingId === selectedWorkflowId}
+        isRunningSelectedWorkflow={
+          selectedWorkflowId !== null && workflowRunningId === selectedWorkflowId
+        }
+        isDeletingSelectedWorkflow={
+          selectedWorkflowId !== null && workflowDeletingId === selectedWorkflowId
+        }
         error={workflowError}
         onClose={closeWorkflowModal}
         onOpenSaveWorkflow={handleOpenSaveWorkflow}

@@ -5,42 +5,16 @@
  */
 
 // Sanitization
-export {
-  sanitizeHtml,
-  sanitizeSelector,
-  sanitizeScript,
-  escapeRegExp,
-} from './sanitizer';
+export { sanitizeHtml, sanitizeSelector, sanitizeScript, escapeRegExp } from './sanitizer';
 
 // URL Validation
-export {
-  validateUrl,
-  isSafeUrl,
-} from './url-validator';
-export type {
-  UrlRiskLevel,
-  UrlValidationResult,
-  UrlValidatorOptions,
-} from './url-validator';
+export { validateUrl, isSafeUrl } from './url-validator';
+export type { UrlRiskLevel, UrlValidationResult, UrlValidatorOptions } from './url-validator';
 
 // PII Detection
-export {
-  detectPII,
-  redactPII,
-} from './pii-detector';
-export type {
-  PIIType,
-  PIIFinding,
-  PIIDetectionResult,
-} from './pii-detector';
+export { detectPII, redactPII } from './pii-detector';
+export type { PIIType, PIIFinding, PIIDetectionResult } from './pii-detector';
 
 // Action Classification
-export {
-  classifyAction,
-  requiresConfirmation,
-  getActionSensitivity,
-} from './action-classifier';
-export type {
-  SensitivityLevel,
-  ClassificationResult,
-} from './action-classifier';
+export { classifyAction, requiresConfirmation, getActionSensitivity } from './action-classifier';
+export type { SensitivityLevel, ClassificationResult } from './action-classifier';

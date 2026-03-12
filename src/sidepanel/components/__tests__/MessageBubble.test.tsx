@@ -15,7 +15,9 @@ describe('MessageBubble', () => {
     render(<MessageBubble {...message} />);
 
     expect(screen.getByTestId('message-row-user')).toHaveClass('justify-end');
-    expect(screen.getByTestId('message-bubble-user')).toHaveTextContent('Draft a reply for this page.');
+    expect(screen.getByTestId('message-bubble-user')).toHaveTextContent(
+      'Draft a reply for this page.',
+    );
     expect(screen.getByText('09:41')).toBeInTheDocument();
   });
 
@@ -27,7 +29,9 @@ describe('MessageBubble', () => {
       variant: 'assistant',
       timestamp: '2026-03-06T09:41:04.000Z',
       markdown: 'I found **3 tiers**.\n\n- Starter\n- Pro',
-      actions: [{ id: 'extract', label: 'Extract JSON', buttonVariant: 'primary', onClick: onExtract }],
+      actions: [
+        { id: 'extract', label: 'Extract JSON', buttonVariant: 'primary', onClick: onExtract },
+      ],
     };
 
     render(<MessageBubble {...message} />);
@@ -78,7 +82,8 @@ describe('MessageBubble', () => {
       id: 'assistant-safe-2',
       variant: 'assistant',
       timestamp: '2026-03-06T09:41:04.000Z',
-      markdown: '<script>alert(1)</script><img src="https://evil.example/x.png" onerror="alert(1)" /><iframe src="https://evil.example"></iframe><svg onload="alert(1)"><circle /></svg>**Still safe**',
+      markdown:
+        '<script>alert(1)</script><img src="https://evil.example/x.png" onerror="alert(1)" /><iframe src="https://evil.example"></iframe><svg onload="alert(1)"><circle /></svg>**Still safe**',
     };
 
     const { container } = render(<MessageBubble {...message} />);

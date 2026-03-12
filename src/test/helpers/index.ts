@@ -42,9 +42,7 @@ export function renderWithProviders(
  * Create a mock `chrome.tabs.Tab` with sensible defaults.
  * All properties can be overridden.
  */
-export function createMockTab(
-  overrides: Partial<chrome.tabs.Tab> = {},
-): chrome.tabs.Tab {
+export function createMockTab(overrides: Partial<chrome.tabs.Tab> = {}): chrome.tabs.Tab {
   return {
     id: 1,
     index: 0,
@@ -112,9 +110,7 @@ interface MockSession {
 /**
  * Create a mock Session object matching the architecture spec.
  */
-export function createMockSession(
-  overrides: Partial<MockSession> = {},
-): MockSession {
+export function createMockSession(overrides: Partial<MockSession> = {}): MockSession {
   const now = Date.now();
   return {
     config: {
@@ -168,9 +164,7 @@ interface MockAction {
 /**
  * Create a mock Action object. Type defaults to 'click'.
  */
-export function createMockAction(
-  overrides: Partial<MockAction> = {},
-): MockAction {
+export function createMockAction(overrides: Partial<MockAction> = {}): MockAction {
   return {
     id: `action-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     type: 'click',
@@ -262,9 +256,7 @@ export function mockFetch(responseInit: MockFetchResponseInit = {}) {
     statusText,
     headers: new Headers(headers),
     json: vi.fn().mockResolvedValue(body),
-    text: vi.fn().mockResolvedValue(
-      typeof body === 'string' ? body : JSON.stringify(body),
-    ),
+    text: vi.fn().mockResolvedValue(typeof body === 'string' ? body : JSON.stringify(body)),
     blob: vi.fn().mockResolvedValue(new Blob()),
     arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
     clone: vi.fn(function (this: typeof mockResponse) {
@@ -308,9 +300,7 @@ export function mockFetchSequence(responses: MockFetchResponseInit[]) {
       statusText,
       headers: new Headers(headers),
       json: vi.fn().mockResolvedValue(body),
-      text: vi.fn().mockResolvedValue(
-        typeof body === 'string' ? body : JSON.stringify(body),
-      ),
+      text: vi.fn().mockResolvedValue(typeof body === 'string' ? body : JSON.stringify(body)),
       blob: vi.fn().mockResolvedValue(new Blob()),
       arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
       clone: vi.fn(),
@@ -397,8 +387,7 @@ export async function expectAsyncError(
     await fn();
     throw new Error(`Expected function to throw, but it resolved successfully.`);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
     expect(message).toContain(expectedMessage);
   }
 }

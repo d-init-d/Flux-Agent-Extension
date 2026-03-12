@@ -18,14 +18,7 @@ export type { SwitchProps } from './Switch';
 export { Badge } from './Badge';
 export type { BadgeProps, BadgeVariant, BadgeSize } from './Badge';
 
-export {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from './Card';
+export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './Card';
 export type {
   CardProps,
   CardVariant,

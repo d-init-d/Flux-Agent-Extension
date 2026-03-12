@@ -56,9 +56,9 @@ vi.mock('../../sidepanel/lib/extension-client', () => ({
       throw new Error('Runtime is not initialized for E2E test');
     }
 
-    const request = activeRuntime.handleMessage(
-      createExtensionMessage(type, payload),
-    ) as Promise<ExtensionResponse<ResponsePayloadMap[T]>>;
+    const request = activeRuntime.handleMessage(createExtensionMessage(type, payload)) as Promise<
+      ExtensionResponse<ResponsePayloadMap[T]>
+    >;
 
     pendingExtensionRequests.add(request);
     const response = await request.finally(() => {
@@ -198,9 +198,17 @@ function createBridge(
   send: ReturnType<typeof vi.fn>;
   ensureContentScript: ReturnType<typeof vi.fn>;
   sendOneWay: ReturnType<typeof vi.fn>;
-  emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
+  emitEvent: (
+    type: string,
+    tabId: number,
+    frame: Record<string, unknown>,
+    payload?: unknown,
+  ) => void;
 } {
-  const eventHandlers = new Map<string, (tabId: number, frame: unknown, payload: unknown) => void>();
+  const eventHandlers = new Map<
+    string,
+    (tabId: number, frame: unknown, payload: unknown) => void
+  >();
   const send = vi.fn(async (_tabId: number, type: string, payload: unknown) => {
     if (type === 'GET_PAGE_CONTEXT') {
       return { context: createPageContext() };
@@ -218,12 +226,14 @@ function createBridge(
     send,
     ensureContentScript: vi.fn(async () => undefined),
     sendOneWay: vi.fn(),
-    onEvent: vi.fn((type: string, handler: (tabId: number, frame: unknown, payload: unknown) => void) => {
-      eventHandlers.set(type, handler);
-      return () => {
-        eventHandlers.delete(type);
-      };
-    }),
+    onEvent: vi.fn(
+      (type: string, handler: (tabId: number, frame: unknown, payload: unknown) => void) => {
+        eventHandlers.set(type, handler);
+        return () => {
+          eventHandlers.delete(type);
+        };
+      },
+    ),
     isReady: vi.fn(async () => true),
     emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => {
       eventHandlers.get(type)?.(tabId, frame, payload);
@@ -232,7 +242,12 @@ function createBridge(
     send: ReturnType<typeof vi.fn>;
     ensureContentScript: ReturnType<typeof vi.fn>;
     sendOneWay: ReturnType<typeof vi.fn>;
-    emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
+    emitEvent: (
+      type: string,
+      tabId: number,
+      frame: Record<string, unknown>,
+      payload?: unknown,
+    ) => void;
   };
 }
 
@@ -349,12 +364,16 @@ function installNavigationCompletion(url: string): void {
           processId: 1,
           timeStamp: Date.now(),
         });
-        chrome.tabs.onUpdated.dispatch(tabId, { status: 'complete', url }, {
-          ...(nextTabs.find((tab) => tab.id === tabId) ?? response),
-          id: tabId,
-          url,
-          status: 'complete',
-        });
+        chrome.tabs.onUpdated.dispatch(
+          tabId,
+          { status: 'complete', url },
+          {
+            ...(nextTabs.find((tab) => tab.id === tabId) ?? response),
+            id: tabId,
+            url,
+            status: 'complete',
+          },
+        );
         chrome.webNavigation.onCompleted.dispatch({
           tabId,
           frameId: 0,
@@ -428,7 +447,12 @@ function extractEmbeddedRecording(script: string): {
     throw new Error('Unable to locate embedded recording payload in exported script');
   }
 
-  return JSON.parse(script.slice(start + prefix.length, end).trim().replace(/;$/, '')) as {
+  return JSON.parse(
+    script
+      .slice(start + prefix.length, end)
+      .trim()
+      .replace(/;$/, ''),
+  ) as {
     actionCount: number;
     exportedAt: string;
     actions: Array<{ action: Action; timestamp: number }>;
@@ -539,12 +563,14 @@ describe('Full pipeline E2E (U-16)', () => {
 
   it('U-16b fills a form field and updates the UI', async () => {
     const user = userEvent.setup();
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 11,
-      data: { filled: true },
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 11,
+        data: { filled: true },
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     activeRuntime = new UISessionRuntime({
@@ -578,8 +604,12 @@ describe('Full pipeline E2E (U-16)', () => {
       );
     });
 
-    expect(await screen.findByText('Fill the email field with user@example.com')).toBeInTheDocument();
-    expect(await screen.findByText('Fill the email field with the requested value.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Fill the email field with user@example.com'),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText('Fill the email field with the requested value.'),
+    ).toBeInTheDocument();
 
     await openActionLog(user);
     expect(await screen.findByText('Fill the Email field')).toBeInTheDocument();
@@ -587,12 +617,14 @@ describe('Full pipeline E2E (U-16)', () => {
 
   it('U-16c clicks an element and updates the UI', async () => {
     const user = userEvent.setup();
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 8,
-      data: { clicked: true },
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 8,
+        data: { clicked: true },
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     activeRuntime = new UISessionRuntime({
@@ -633,14 +665,17 @@ describe('Full pipeline E2E (U-16)', () => {
 
   it('U-16d retries a recoverable failure and still completes the pipeline', async () => {
     const user = userEvent.setup();
-    const actionHandler = vi.fn(async (_action: Action): Promise<ActionResult> => ({
-      actionId: 'retry-click',
-      success: true,
-      duration: 7,
-      data: { clicked: true },
-    }));
+    const actionHandler = vi.fn(
+      async (_action: Action): Promise<ActionResult> => ({
+        actionId: 'retry-click',
+        success: true,
+        duration: 7,
+        data: { clicked: true },
+      }),
+    );
 
-    actionHandler.mockResolvedValueOnce({
+    actionHandler
+      .mockResolvedValueOnce({
         actionId: 'retry-click',
         success: false,
         duration: 10,
@@ -708,7 +743,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionSelect = screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement;
+    const sessionSelect = screen.getByRole('combobox', {
+      name: 'Active session',
+    }) as HTMLSelectElement;
     const sessionId = sessionSelect.value;
     expect(sessionId).toBeTruthy();
 
@@ -717,7 +754,11 @@ describe('Full pipeline E2E (U-16)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('recording-live-indicator')).toHaveTextContent('Live');
     });
-    expect(screen.getByText('0 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '0 actions captured so far. New browser steps will keep syncing into this session.',
+      ),
+    ).toBeInTheDocument();
 
     await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
       action: {
@@ -736,7 +777,11 @@ describe('Full pipeline E2E (U-16)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('2 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          '2 actions captured so far. New browser steps will keep syncing into this session.',
+        ),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Pause' }));
@@ -752,7 +797,9 @@ describe('Full pipeline E2E (U-16)', () => {
       },
     });
 
-    expect(screen.getByText('2 actions captured. Resume when you want to keep collecting steps.')).toBeInTheDocument();
+    expect(
+      screen.getByText('2 actions captured. Resume when you want to keep collecting steps.'),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Resume' }));
     await waitFor(() => {
@@ -767,13 +814,19 @@ describe('Full pipeline E2E (U-16)', () => {
       },
     });
 
-    expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '3 actions captured so far. New browser steps will keep syncing into this session.',
+      ),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Start recording' })).toBeInTheDocument();
     });
-    expect(screen.getByText('3 actions captured in this session. Start again to continue recording.')).toBeInTheDocument();
+    expect(
+      screen.getByText('3 actions captured in this session. Start again to continue recording.'),
+    ).toBeInTheDocument();
 
     const stateResponse = await activeRuntime.handleMessage(
       createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
@@ -803,7 +856,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Start recording' }));
@@ -822,7 +877,11 @@ describe('Full pipeline E2E (U-16)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('1 action captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          '1 action captured so far. New browser steps will keep syncing into this session.',
+        ),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Pause' }));
@@ -841,7 +900,9 @@ describe('Full pipeline E2E (U-16)', () => {
       createTopFrame('https://example.com/ignored-during-pause'),
     );
 
-    expect(screen.getByText('1 action captured. Resume when you want to keep collecting steps.')).toBeInTheDocument();
+    expect(
+      screen.getByText('1 action captured. Resume when you want to keep collecting steps.'),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Resume' }));
 
@@ -857,7 +918,11 @@ describe('Full pipeline E2E (U-16)', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('2 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          '2 actions captured so far. New browser steps will keep syncing into this session.',
+        ),
+      ).toBeInTheDocument();
     });
 
     const stateResponse = await activeRuntime.handleMessage(
@@ -865,20 +930,24 @@ describe('Full pipeline E2E (U-16)', () => {
     );
     expect(stateResponse.success).toBe(true);
     expect(stateResponse.data?.session?.recording.actions.map((entry) => entry.action)).toEqual([
-      expect.objectContaining({ id: 'recorded-navigation-1', type: 'navigate', url: 'https://example.com/dashboard' }),
+      expect.objectContaining({
+        id: 'recorded-navigation-1',
+        type: 'navigate',
+        url: 'https://example.com/dashboard',
+      }),
       expect.objectContaining({ type: 'navigate', url: 'https://example.com/orders' }),
     ]);
   });
 
-  it(
-    'A-09a replays a recorded click-fill-click flow with deterministic timing, pause, and resume',
-    async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-      data: action.type === 'fill' ? { filled: true } : { clicked: true },
-    }));
+  it('A-09a replays a recorded click-fill-click flow with deterministic timing, pause, and resume', async () => {
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+        data: action.type === 'fill' ? { filled: true } : { clicked: true },
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     activeRuntime = new UISessionRuntime({
@@ -889,7 +958,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     const recordedAt = {
@@ -931,7 +1002,11 @@ describe('Full pipeline E2E (U-16)', () => {
       },
     });
 
-    expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '3 actions captured so far. New browser steps will keep syncing into this session.',
+      ),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await settleAsyncSideEffects(1);
@@ -1018,7 +1093,9 @@ describe('Full pipeline E2E (U-16)', () => {
       'playback-click-2',
     ]);
     expect(screen.getByText('Finished')).toBeInTheDocument();
-    expect(screen.getByText('Playback finished for 3 actions. You can replay it from the start.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Playback finished for 3 actions. You can replay it from the start.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('3 / 3 actions')).toBeInTheDocument();
 
     const finishedState = await activeRuntime.handleMessage(
@@ -1033,16 +1110,16 @@ describe('Full pipeline E2E (U-16)', () => {
         lastError: null,
       }),
     );
-    },
-    15_000,
-  );
+  }, 15_000);
 
   it('A-09b stops playback from the UI and resets progress back to the start', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     activeRuntime = new UISessionRuntime({
@@ -1053,7 +1130,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     const recordedAt = {
@@ -1176,7 +1255,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     await sendPrompt(user, 'Try the login flow');
@@ -1193,8 +1274,12 @@ describe('Full pipeline E2E (U-16)', () => {
     );
     expect(stateResponse.success).toBe(true);
     expect(stateResponse.data?.session?.status).toBe('error');
-    expect(stateResponse.data?.session?.lastError?.message).toBe('Login button is permanently unavailable');
-    expect(stateResponse.data?.session?.actionHistory.map((entry) => entry.action.id)).toEqual(['failing-click']);
+    expect(stateResponse.data?.session?.lastError?.message).toBe(
+      'Login button is permanently unavailable',
+    );
+    expect(stateResponse.data?.session?.actionHistory.map((entry) => entry.action.id)).toEqual([
+      'failing-click',
+    ]);
   });
 
   it('A-08c ignores malformed or invalid recording events until a valid top-frame action arrives', async () => {
@@ -1213,7 +1298,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'Start recording' }));
@@ -1235,19 +1322,14 @@ describe('Full pipeline E2E (U-16)', () => {
       createTopFrame(),
     );
     act(() => {
-      bridge.emitEvent(
-        'RECORDED_INPUT',
-        2,
-        createTopFrame(),
-        {
-          action: {
-            id: 'ignored-other-tab',
-            type: 'fill',
-            selector: { testId: 'email-field' },
-            value: 'ignored@example.com',
-          },
+      bridge.emitEvent('RECORDED_INPUT', 2, createTopFrame(), {
+        action: {
+          id: 'ignored-other-tab',
+          type: 'fill',
+          selector: { testId: 'email-field' },
+          value: 'ignored@example.com',
         },
-      );
+      });
     });
     await settleAsyncSideEffects(2);
     await emitRecordedEvent(
@@ -1302,7 +1384,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
@@ -1374,7 +1458,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     const recordedAt = {
@@ -1462,7 +1548,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     await renderApp();
 
-    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    const sessionId = (
+      screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement
+    ).value;
     expect(sessionId).toBeTruthy();
 
     const recordedAt = {
@@ -1504,7 +1592,11 @@ describe('Full pipeline E2E (U-16)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          '3 actions captured so far. New browser steps will keep syncing into this session.',
+        ),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Stop' }));
@@ -1627,7 +1719,11 @@ describe('Full pipeline E2E (U-16)', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('3 actions captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          '3 actions captured so far. New browser steps will keep syncing into this session.',
+        ),
+      ).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole('button', { name: 'Stop' }));
@@ -1663,7 +1759,9 @@ describe('Full pipeline E2E (U-16)', () => {
 
     expect(playwrightScript).toContain("const { chromium } = require('playwright');");
     expect(playwrightScript).toContain('function getDelayMs(actions, index)');
-    expect(playwrightScript).toContain('return Math.max(0, actions[index].timestamp - actions[index - 1].timestamp);');
+    expect(playwrightScript).toContain(
+      'return Math.max(0, actions[index].timestamp - actions[index - 1].timestamp);',
+    );
     expect(playwrightScript).toContain('await page.waitForTimeout(delayMs);');
     expect(playwrightScript).toContain(JSON.stringify(specialValue));
     expect(embeddedRecording.actionCount).toBe(3);

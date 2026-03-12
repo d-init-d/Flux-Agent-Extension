@@ -41,10 +41,7 @@ describe('prompt injection battery', () => {
     ];
 
     for (const url of blockedUrls) {
-      addCase(
-        { id: `blocked-url-${cases.length + 1}`, type: 'navigate', url },
-        strictConfig,
-      );
+      addCase({ id: `blocked-url-${cases.length + 1}`, type: 'navigate', url }, strictConfig);
     }
 
     const highRiskUrls = [
@@ -71,10 +68,7 @@ describe('prompt injection battery', () => {
     ];
 
     for (const url of highRiskUrls) {
-      addCase(
-        { id: `confirm-url-${cases.length + 1}`, type: 'navigate', url },
-        strictConfig,
-      );
+      addCase({ id: `confirm-url-${cases.length + 1}`, type: 'navigate', url }, strictConfig);
     }
 
     const dangerousScripts = [
@@ -264,10 +258,9 @@ describe('prompt injection battery', () => {
         throw new Error('expected blocked action');
       } catch (error) {
         expect(error).toBeInstanceOf(ExtensionError);
-        expect([
-          ErrorCode.ACTION_BLOCKED,
-          ErrorCode.ACTION_INVALID,
-        ]).toContain((error as ExtensionError).code);
+        expect([ErrorCode.ACTION_BLOCKED, ErrorCode.ACTION_INVALID]).toContain(
+          (error as ExtensionError).code,
+        );
       }
     }
   });

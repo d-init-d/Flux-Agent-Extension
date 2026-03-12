@@ -281,12 +281,15 @@ describe('OpenAIProvider', () => {
     await provider.initialize(config);
 
     const errorBody = JSON.stringify({ error: { message: 'Rate limited', type: 'rate_limit' } });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 429,
-      headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(errorBody),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(errorBody),
+      }),
+    );
 
     const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
     await expect(collectChunks(stream)).rejects.toThrow('Rate limited');
@@ -296,12 +299,15 @@ describe('OpenAIProvider', () => {
     const provider = new OpenAIProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Invalid key' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Invalid key' } })),
+      }),
+    );
 
     const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
     await expect(collectChunks(stream)).rejects.toThrow('Invalid key');
@@ -311,12 +317,15 @@ describe('OpenAIProvider', () => {
     const provider = new OpenAIProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-      headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Model not found' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Model not found' } })),
+      }),
+    );
 
     const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
     await expect(collectChunks(stream)).rejects.toThrow('Model not found');
@@ -326,12 +335,15 @@ describe('OpenAIProvider', () => {
     const provider = new OpenAIProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      headers: new Headers({}),
-      text: vi.fn().mockResolvedValue('Internal server error'),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue('Internal server error'),
+      }),
+    );
 
     const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
     await expect(collectChunks(stream)).rejects.toThrow(/Internal server error/);
@@ -341,12 +353,15 @@ describe('OpenAIProvider', () => {
     const provider = new OpenAIProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-      headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(''),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(''),
+      }),
+    );
 
     const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
     await expect(collectChunks(stream)).rejects.toThrow(/OpenAI API error/);

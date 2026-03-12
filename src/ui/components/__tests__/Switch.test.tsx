@@ -8,7 +8,10 @@ describe('Switch', () => {
   it('renders with role switch and checked state', () => {
     render(<Switch checked aria-label="Test switch" />);
 
-    expect(screen.getByRole('switch', { name: /test switch/i })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('switch', { name: /test switch/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('forwards ref to the button element', () => {
@@ -33,7 +36,14 @@ describe('Switch', () => {
     const user = userEvent.setup();
     const onCheckedChange = vi.fn();
 
-    render(<Switch checked={false} disabled onCheckedChange={onCheckedChange} aria-label="Disabled toggle" />);
+    render(
+      <Switch
+        checked={false}
+        disabled
+        onCheckedChange={onCheckedChange}
+        aria-label="Disabled toggle"
+      />,
+    );
 
     await user.click(screen.getByRole('switch', { name: /disabled toggle/i }));
 

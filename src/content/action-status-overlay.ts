@@ -65,11 +65,7 @@ export class ActionStatusOverlay {
     document.getElementById(ACTION_STATUS_STYLE_ID)?.remove();
   }
 
-  private render(config: {
-    state: ActionOverlayState;
-    action: Action;
-    message: string;
-  }): void {
+  private render(config: { state: ActionOverlayState; action: Action; message: string }): void {
     this.clearHideTimer();
     const parts = this.ensureOverlay();
     const detail = getActionDetail(config.action);
@@ -400,7 +396,9 @@ function getActionDetail(action: Action): string | null {
     case 'wait':
       return `${action.duration}ms`;
     case 'waitForNavigation':
-      return action.urlPattern ? `URL pattern: ${truncateText(action.urlPattern, 60)}` : 'Navigation change';
+      return action.urlPattern
+        ? `URL pattern: ${truncateText(action.urlPattern, 60)}`
+        : 'Navigation change';
     case 'waitForNetwork':
       return `State: ${action.state}`;
     case 'extract':
@@ -452,7 +450,9 @@ function formatSelector(selector: ElementSelector): string | null {
   return typeof selector.nth === 'number' ? `index ${selector.nth}` : null;
 }
 
-function formatSelectOption(option: string | { value?: string; label?: string; index?: number }): string {
+function formatSelectOption(
+  option: string | { value?: string; label?: string; index?: number },
+): string {
   if (typeof option === 'string') {
     return option;
   }

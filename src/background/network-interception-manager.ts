@@ -63,7 +63,22 @@ interface NetworkInterceptionManagerOptions {
 const DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES: NetworkResourceType[] = ['XHR', 'Fetch'];
 const ALLOWED_INTERCEPTION_RESOURCE_TYPES = new Set(DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES);
 const BLOCKED_RESPONSE_HEADERS = new Set(['set-cookie', 'cookie', 'authorization']);
-const SENSITIVE_INTERCEPTION_HINTS = ['login', 'signin', 'sign-in', 'signup', 'sign-up', 'auth', 'oauth', 'token', 'session', 'password', 'passcode', 'credential', 'mfa', 'otp'];
+const SENSITIVE_INTERCEPTION_HINTS = [
+  'login',
+  'signin',
+  'sign-in',
+  'signup',
+  'sign-up',
+  'auth',
+  'oauth',
+  'token',
+  'session',
+  'password',
+  'passcode',
+  'credential',
+  'mfa',
+  'otp',
+];
 
 export class NetworkInterceptionManager implements INetworkInterceptionManager {
   private readonly debuggerAdapter: DebuggerAdapter;
@@ -89,7 +104,10 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
     });
 
     this.removeDebuggerDetachListener = this.debuggerAdapter.onDetach((tabId, reason) => {
-      this.logger.debug('Debugger detached; dropping network interception state', { tabId, reason });
+      this.logger.debug('Debugger detached; dropping network interception state', {
+        tabId,
+        reason,
+      });
       this.dropTabState(tabId);
     });
 
@@ -205,12 +223,17 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
     }
   }
 
-  private readonly handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (tabId) => {
+  private readonly handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (
+    tabId,
+  ) => {
     this.logger.debug('Tab removed; dropping network interception state', { tabId });
     this.dropTabState(tabId);
   };
 
-  private async handleRequestPaused(tabId: number, payload: FetchRequestPausedPayload): Promise<void> {
+  private async handleRequestPaused(
+    tabId: number,
+    payload: FetchRequestPausedPayload,
+  ): Promise<void> {
     const rule = this.findMatchingRule(tabId, payload.request.url, payload.resourceType);
 
     try {
@@ -220,7 +243,11 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
       }
 
       if (rule.kind === 'block') {
-        await this.debuggerAdapter.failInterceptedRequest(tabId, payload.requestId, 'BlockedByClient');
+        await this.debuggerAdapter.failInterceptedRequest(
+          tabId,
+          payload.requestId,
+          'BlockedByClient',
+        );
         return;
       }
 
@@ -272,7 +299,8 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
 
     this.rulesById.delete(ruleId);
 
-    const tabRuleIds = this.ruleIdsByTab.get(existingRule.tabId)?.filter((candidate) => candidate !== ruleId) ?? [];
+    const tabRuleIds =
+      this.ruleIdsByTab.get(existingRule.tabId)?.filter((candidate) => candidate !== ruleId) ?? [];
     if (tabRuleIds.length > 0) {
       this.ruleIdsByTab.set(existingRule.tabId, tabRuleIds);
     } else {
@@ -322,11 +350,7 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
     }
   }
 
-  private findMatchingRule(
-    tabId: number,
-    url: string,
-    resourceType?: string,
-  ): NetworkRule | null {
+  private findMatchingRule(tabId: number, url: string, resourceType?: string): NetworkRule | null {
     const activeSessionId = this.activeSessionByTab.get(tabId);
     if (!activeSessionId) {
       return null;
@@ -336,7 +360,11 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
 
     for (let index = ruleIds.length - 1; index >= 0; index -= 1) {
       const rule = this.rulesById.get(ruleIds[index]);
-      if (!rule || rule.sessionId !== activeSessionId || !this.matchesRule(rule, url, resourceType)) {
+      if (
+        !rule ||
+        rule.sessionId !== activeSessionId ||
+        !this.matchesRule(rule, url, resourceType)
+      ) {
         continue;
       }
 
@@ -356,12 +384,17 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
       return true;
     }
 
-    return typeof resourceType === 'string' && rule.resourceTypes.has(resourceType as NetworkResourceType);
+    return (
+      typeof resourceType === 'string' &&
+      rule.resourceTypes.has(resourceType as NetworkResourceType)
+    );
   }
 
   private createRule(sessionId: string, tabId: number, action: NetworkRuleAction): NetworkRule {
     const compiledPatterns = action.urlPatterns.map((pattern) => this.compilePattern(pattern));
-    const requestedResourceTypes = action.resourceTypes?.length ? action.resourceTypes : DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES;
+    const requestedResourceTypes = action.resourceTypes?.length
+      ? action.resourceTypes
+      : DEFAULT_MOCK_RESPONSE_RESOURCE_TYPES;
     for (const resourceType of requestedResourceTypes) {
       if (!ALLOWED_INTERCEPTION_RESOURCE_TYPES.has(resourceType)) {
         throw new ExtensionError(
@@ -402,8 +435,13 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
     };
   }
 
-  private buildResponseHeaders(action: MockResponseAction): Array<{ name: string; value: string }> | undefined {
-    const responseHeaders = Object.entries(action.response.headers ?? {}).map(([name, value]) => ({ name, value }));
+  private buildResponseHeaders(
+    action: MockResponseAction,
+  ): Array<{ name: string; value: string }> | undefined {
+    const responseHeaders = Object.entries(action.response.headers ?? {}).map(([name, value]) => ({
+      name,
+      value,
+    }));
     for (const header of responseHeaders) {
       const normalizedName = header.name.trim().toLowerCase();
       if (
@@ -419,7 +457,9 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
       }
     }
 
-    const hasContentType = responseHeaders.some((header) => header.name.toLowerCase() === 'content-type');
+    const hasContentType = responseHeaders.some(
+      (header) => header.name.toLowerCase() === 'content-type',
+    );
 
     if (action.response.contentType && !hasContentType) {
       responseHeaders.push({ name: 'Content-Type', value: action.response.contentType });
@@ -439,7 +479,11 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
   private compilePattern(pattern: string): RegExp {
     const trimmed = pattern.trim();
     if (trimmed.length === 0) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Network interception URL patterns must be non-empty', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Network interception URL patterns must be non-empty',
+        true,
+      );
     }
 
     if (!/^https?:\/\//i.test(trimmed)) {
@@ -484,7 +528,10 @@ export class NetworkInterceptionManager implements INetworkInterceptionManager {
       return [];
     }
 
-    const patterns = new Map<string, { urlPattern: string; requestStage: 'Request'; resourceType?: string }>();
+    const patterns = new Map<
+      string,
+      { urlPattern: string; requestStage: 'Request'; resourceType?: string }
+    >();
     const ruleIds = this.ruleIdsByTab.get(tabId) ?? [];
 
     for (const ruleId of ruleIds) {
@@ -527,7 +574,10 @@ function isFetchRequestPausedPayload(value: unknown): value is FetchRequestPause
     return false;
   }
 
-  return typeof candidate.requestId === 'string' && typeof (request as Record<string, unknown>).url === 'string';
+  return (
+    typeof candidate.requestId === 'string' &&
+    typeof (request as Record<string, unknown>).url === 'string'
+  );
 }
 
 function encodeUtf8ToBase64(value: string): string {

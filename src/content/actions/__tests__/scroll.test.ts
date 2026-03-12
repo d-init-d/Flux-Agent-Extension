@@ -51,7 +51,8 @@ describe('executeScrollAction', () => {
     document.body.innerHTML = '<button id="target">Target</button>';
     const button = document.getElementById('target') as HTMLButtonElement;
     const scrollIntoViewSpy = vi.fn();
-    (button as HTMLElement & { scrollIntoView: typeof scrollIntoViewSpy }).scrollIntoView = scrollIntoViewSpy;
+    (button as HTMLElement & { scrollIntoView: typeof scrollIntoViewSpy }).scrollIntoView =
+      scrollIntoViewSpy;
 
     const action: ScrollIntoViewAction = {
       id: 'scroll-into-view',
@@ -63,7 +64,11 @@ describe('executeScrollAction', () => {
     const result = await executeScrollAction(action, selectorEngine);
 
     expect(result.success).toBe(true);
-    expect(scrollIntoViewSpy).toHaveBeenCalledWith({ block: 'end', inline: 'nearest', behavior: 'auto' });
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith({
+      block: 'end',
+      inline: 'nearest',
+      behavior: 'auto',
+    });
   });
 
   it('returns ELEMENT_NOT_FOUND when scroll target is missing', async () => {
@@ -167,7 +172,8 @@ describe('executeScrollAction', () => {
     document.body.innerHTML = '<button id="target">Target</button>';
     const button = document.getElementById('target') as HTMLButtonElement;
     const scrollIntoViewSpy = vi.fn();
-    (button as HTMLElement & { scrollIntoView: typeof scrollIntoViewSpy }).scrollIntoView = scrollIntoViewSpy;
+    (button as HTMLElement & { scrollIntoView: typeof scrollIntoViewSpy }).scrollIntoView =
+      scrollIntoViewSpy;
 
     const action: ScrollIntoViewAction = {
       id: 'into-view-default',
@@ -178,7 +184,11 @@ describe('executeScrollAction', () => {
     const result = await executeScrollAction(action, selectorEngine);
 
     expect(result.success).toBe(true);
-    expect(scrollIntoViewSpy).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'auto',
+    });
   });
 
   it('returns error result for non-ExtensionError thrown during scroll', async () => {

@@ -42,15 +42,11 @@ describe('GeolocationMockManager', () => {
       longitude: -122.4194,
       accuracy: 25,
     });
-    expect(sendSpy).toHaveBeenCalledWith(
-      { tabId: 1 },
-      'Emulation.setGeolocationOverride',
-      {
-        latitude: 37.7749,
-        longitude: -122.4194,
-        accuracy: 25,
-      },
-    );
+    expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Emulation.setGeolocationOverride', {
+      latitude: 37.7749,
+      longitude: -122.4194,
+      accuracy: 25,
+    });
   });
 
   it('clears session geolocation overrides through Emulation.clearGeolocationOverride', async () => {

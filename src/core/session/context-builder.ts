@@ -29,8 +29,7 @@ export class ContextBuilder {
     buildOptions: BuildOptions = {},
   ): string {
     const resolvedOptions = this.resolveOptions(options);
-    const maxContextLength =
-      buildOptions.maxContextLength ?? DEFAULT_MAX_CONTEXT_LENGTH;
+    const maxContextLength = buildOptions.maxContextLength ?? DEFAULT_MAX_CONTEXT_LENGTH;
 
     const sections: string[] = [
       this.buildPageSection(pageContext),
@@ -128,18 +127,12 @@ export class ContextBuilder {
     ];
 
     for (const tab of session.tabSnapshot) {
-      const markers = [
-        tab.isTarget ? 'target' : null,
-        tab.isActive ? 'active' : null,
-        tab.status,
-      ]
+      const markers = [tab.isTarget ? 'target' : null, tab.isActive ? 'active' : null, tab.status]
         .filter((value): value is string => value !== null)
         .join(', ');
       const tabLocation = this.summarizeTabLocation(tab.url);
 
-      lines.push(
-        `- [${tab.tabIndex}] id=${tab.id} markers=${markers} location="${tabLocation}"`,
-      );
+      lines.push(`- [${tab.tabIndex}] id=${tab.id} markers=${markers} location="${tabLocation}"`);
     }
 
     return lines.join('\n');
@@ -187,12 +180,7 @@ export class ContextBuilder {
     }
 
     const serialized = this.safeStringify(session.variables, 2);
-    return [
-      '## Variables',
-      '```json',
-      this.truncate(serialized, 1500),
-      '```',
-    ].join('\n');
+    return ['## Variables', '```json', this.truncate(serialized, 1500), '```'].join('\n');
   }
 
   private buildActionHistorySection(session: Session): string {
@@ -233,8 +221,12 @@ export class ContextBuilder {
           `text="${this.truncate(this.sanitize(element.text), 100)}"`,
           element.type ? `type=${this.sanitize(element.type)}` : null,
           element.role ? `role=${this.sanitize(element.role)}` : null,
-          element.placeholder ? `placeholder="${this.truncate(this.sanitize(element.placeholder), 60)}"` : null,
-          element.ariaLabel ? `aria="${this.truncate(this.sanitize(element.ariaLabel), 60)}"` : null,
+          element.placeholder
+            ? `placeholder="${this.truncate(this.sanitize(element.placeholder), 60)}"`
+            : null,
+          element.ariaLabel
+            ? `aria="${this.truncate(this.sanitize(element.ariaLabel), 60)}"`
+            : null,
           `visible=${element.isVisible}`,
           `enabled=${element.isEnabled}`,
         ]
@@ -254,9 +246,7 @@ export class ContextBuilder {
     if (headings.length > 0) {
       lines.push('- Headings:');
       for (const heading of headings) {
-        lines.push(
-          `  - h${heading.level}: ${this.truncate(this.sanitize(heading.text), 120)}`,
-        );
+        lines.push(`  - h${heading.level}: ${this.truncate(this.sanitize(heading.text), 120)}`);
       }
     }
 
@@ -307,12 +297,7 @@ export class ContextBuilder {
     }
 
     const serialized = this.safeStringify(networkData, 2);
-    return [
-      '## Network',
-      '```json',
-      this.truncate(serialized, 2000),
-      '```',
-    ].join('\n');
+    return ['## Network', '```json', this.truncate(serialized, 2000), '```'].join('\n');
   }
 
   private stringifyMessageContent(content: Session['messages'][number]['content']): string {
@@ -336,11 +321,13 @@ export class ContextBuilder {
   }
 
   private sanitize(value: string): string {
-    return value
-      // eslint-disable-next-line no-control-regex
-      .replace(/[\u0000-\u001F\u007F]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    return (
+      value
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\u0000-\u001F\u007F]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    );
   }
 
   private truncate(value: string, maxLength: number): string {

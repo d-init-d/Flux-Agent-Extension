@@ -146,9 +146,13 @@ const selectorRequiredSchema = {
           label: z.string().optional(),
           index: z.number().int().min(0).optional(),
         })
-        .refine((value) => value.value !== undefined || value.label !== undefined || value.index !== undefined, {
-          message: 'option object must include value, label, or index',
-        }),
+        .refine(
+          (value) =>
+            value.value !== undefined || value.label !== undefined || value.index !== undefined,
+          {
+            message: 'option object must include value, label, or index',
+          },
+        ),
     ]),
   }),
   check: baseActionSchema.extend({ type: z.literal('check'), selector: elementSelectorSchema }),
@@ -186,7 +190,10 @@ const actionSchemas = {
   }),
   goBack: baseActionSchema.extend({ type: z.literal('goBack') }),
   goForward: baseActionSchema.extend({ type: z.literal('goForward') }),
-  reload: baseActionSchema.extend({ type: z.literal('reload'), hardReload: z.boolean().optional() }),
+  reload: baseActionSchema.extend({
+    type: z.literal('reload'),
+    hardReload: z.boolean().optional(),
+  }),
   click: createClickLikeSchema('click'),
   doubleClick: createClickLikeSchema('doubleClick'),
   rightClick: createClickLikeSchema('rightClick'),
@@ -196,7 +203,10 @@ const actionSchemas = {
     key: z.string().min(1),
     selector: elementSelectorSchema.optional(),
   }),
-  hotkey: baseActionSchema.extend({ type: z.literal('hotkey'), keys: z.array(z.string().min(1)).min(1) }),
+  hotkey: baseActionSchema.extend({
+    type: z.literal('hotkey'),
+    keys: z.array(z.string().min(1)).min(1),
+  }),
   scroll: baseActionSchema.extend({
     type: z.literal('scroll'),
     direction: z.enum(['up', 'down', 'left', 'right']),
@@ -215,9 +225,19 @@ const actionSchemas = {
   }),
   screenshot: createScreenshotLikeSchema('screenshot'),
   fullPageScreenshot: createScreenshotLikeSchema('fullPageScreenshot'),
-  newTab: baseActionSchema.extend({ type: z.literal('newTab'), url: z.string().optional(), active: z.boolean().optional() }),
-  closeTab: baseActionSchema.extend({ type: z.literal('closeTab'), tabIndex: z.number().int().min(0).optional() }),
-  switchTab: baseActionSchema.extend({ type: z.literal('switchTab'), tabIndex: z.number().int().min(0) }),
+  newTab: baseActionSchema.extend({
+    type: z.literal('newTab'),
+    url: z.string().optional(),
+    active: z.boolean().optional(),
+  }),
+  closeTab: baseActionSchema.extend({
+    type: z.literal('closeTab'),
+    tabIndex: z.number().int().min(0).optional(),
+  }),
+  switchTab: baseActionSchema.extend({
+    type: z.literal('switchTab'),
+    tabIndex: z.number().int().min(0),
+  }),
   evaluate: baseActionSchema.extend({
     type: z.literal('evaluate'),
     script: z.string().min(1),

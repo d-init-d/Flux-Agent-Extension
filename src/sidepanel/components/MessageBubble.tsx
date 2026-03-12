@@ -4,7 +4,19 @@ import { isValid } from 'date-fns';
 import { marked } from 'marked';
 import { Badge, Button, type ButtonVariant } from '@/ui/components';
 
-const SAFE_MARKDOWN_TAGS = ['a', 'blockquote', 'br', 'code', 'em', 'li', 'ol', 'p', 'pre', 'strong', 'ul'];
+const SAFE_MARKDOWN_TAGS = [
+  'a',
+  'blockquote',
+  'br',
+  'code',
+  'em',
+  'li',
+  'ol',
+  'p',
+  'pre',
+  'strong',
+  'ul',
+];
 const SAFE_MARKDOWN_ATTRS = ['href', 'title'];
 const SAFE_HREF_PATTERN = /^(?:https?:|mailto:|#|\/(?!\/))/i;
 
@@ -92,7 +104,18 @@ function renderMarkdown(markdown: string): string {
   const sanitized = DOMPurify.sanitize(parsed, {
     ALLOWED_TAGS: SAFE_MARKDOWN_TAGS,
     ALLOWED_ATTR: SAFE_MARKDOWN_ATTRS,
-    FORBID_TAGS: ['embed', 'form', 'iframe', 'img', 'input', 'math', 'object', 'style', 'svg', 'video'],
+    FORBID_TAGS: [
+      'embed',
+      'form',
+      'iframe',
+      'img',
+      'input',
+      'math',
+      'object',
+      'style',
+      'svg',
+      'video',
+    ],
     FORBID_ATTR: ['srcset'],
     ALLOW_DATA_ATTR: false,
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[#/])/i,
@@ -115,7 +138,9 @@ function renderMarkdown(markdown: string): string {
   return template.innerHTML;
 }
 
-function getActionStepBadgeVariant(status: ActionStepStatus): 'default' | 'info' | 'success' | 'error' {
+function getActionStepBadgeVariant(
+  status: ActionStepStatus,
+): 'default' | 'info' | 'success' | 'error' {
   switch (status) {
     case 'running':
       return 'info';
@@ -152,7 +177,13 @@ function getBubbleSurfaceClasses(variant: MessageVariant): string {
   }
 }
 
-function MessageTimestamp({ timestamp, align = 'left' }: { timestamp: string; align?: 'left' | 'right' }) {
+function MessageTimestamp({
+  timestamp,
+  align = 'left',
+}: {
+  timestamp: string;
+  align?: 'left' | 'right';
+}) {
   return (
     <time
       dateTime={timestamp}
@@ -205,7 +236,9 @@ function ActionBubbleContent({ message }: { message: ActionMessageBubbleProps })
         <div>
           <p className="text-sm font-semibold tracking-tight">{message.title}</p>
           {message.detail ? (
-            <p className="mt-1 text-sm leading-snug text-[rgb(var(--color-text-secondary))]">{message.detail}</p>
+            <p className="mt-1 text-sm leading-snug text-[rgb(var(--color-text-secondary))]">
+              {message.detail}
+            </p>
           ) : null}
         </div>
 

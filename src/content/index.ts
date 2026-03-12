@@ -82,9 +82,7 @@ declare global {
 }
 
 if (window.__FLUX_AGENT_CS_INITIALIZED__) {
-  new Logger('ContentScript').warn(
-    'Content script already injected — skipping re-initialization',
-  );
+  new Logger('ContentScript').warn('Content script already injected — skipping re-initialization');
 } else {
   window.__FLUX_AGENT_CS_INITIALIZED__ = true;
   bootstrapContentScript();
@@ -115,14 +113,7 @@ const RECORDABLE_CLICK_SELECTOR = [
   '[data-testid]',
   '[aria-label]',
 ].join(', ');
-const RECORDABLE_TEXT_INPUT_TYPES = new Set([
-  'text',
-  'search',
-  'email',
-  'url',
-  'tel',
-  'number',
-]);
+const RECORDABLE_TEXT_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'number']);
 const SENSITIVE_INPUT_AUTOCOMPLETE_TOKENS = new Set([
   'current-password',
   'new-password',
@@ -172,7 +163,10 @@ export class ContentScriptManager {
   private unloadHandler: (() => void) | null = null;
   private commandUnsubscribers: (() => void)[] = [];
   private recordingActive = false;
-  private readonly pendingRecordedInputTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
+  private readonly pendingRecordedInputTimers = new Map<
+    HTMLElement,
+    ReturnType<typeof setTimeout>
+  >();
   private readonly lastRecordedInputValues = new Map<HTMLElement, string>();
   private readonly boundClickCapture = (event: MouseEvent) => {
     this.handleRecordedClick(event);
@@ -264,37 +258,30 @@ export class ContentScriptManager {
 
   private registerCommandHandlers(): void {
     this.commandUnsubscribers.push(
-      this.bridge.onCommand<ExecuteActionPayload>(
-        'EXECUTE_ACTION',
-        (payload) => this.handleExecuteAction(payload),
+      this.bridge.onCommand<ExecuteActionPayload>('EXECUTE_ACTION', (payload) =>
+        this.handleExecuteAction(payload),
       ),
     );
 
     this.commandUnsubscribers.push(
-      this.bridge.onCommand<GetPageContextPayload | undefined>(
-        'GET_PAGE_CONTEXT',
-        (payload) => this.handleGetPageContext(payload),
+      this.bridge.onCommand<GetPageContextPayload | undefined>('GET_PAGE_CONTEXT', (payload) =>
+        this.handleGetPageContext(payload),
       ),
     );
 
     this.commandUnsubscribers.push(
-      this.bridge.onCommand<HighlightPayload>(
-        'HIGHLIGHT_ELEMENT',
-        (payload) => this.handleHighlightElement(payload),
+      this.bridge.onCommand<HighlightPayload>('HIGHLIGHT_ELEMENT', (payload) =>
+        this.handleHighlightElement(payload),
       ),
     );
 
     this.commandUnsubscribers.push(
-      this.bridge.onCommand<undefined>(
-        'CLEAR_HIGHLIGHTS',
-        () => this.handleClearHighlights(),
-      ),
+      this.bridge.onCommand<undefined>('CLEAR_HIGHLIGHTS', () => this.handleClearHighlights()),
     );
 
     this.commandUnsubscribers.push(
-      this.bridge.onCommand<SetRecordingStatePayload>(
-        'SET_RECORDING_STATE',
-        (payload) => this.handleSetRecordingState(payload),
+      this.bridge.onCommand<SetRecordingStatePayload>('SET_RECORDING_STATE', (payload) =>
+        this.handleSetRecordingState(payload),
       ),
     );
   }
@@ -303,9 +290,7 @@ export class ContentScriptManager {
   // EXECUTE_ACTION (C-15: interaction actions)
   // --------------------------------------------------------------------------
 
-  private async handleExecuteAction(
-    payload: ExecuteActionPayload,
-  ): Promise<ActionResultPayload> {
+  private async handleExecuteAction(payload: ExecuteActionPayload): Promise<ActionResultPayload> {
     const { action } = payload;
     this.logger.debug('EXECUTE_ACTION received', { actionType: action.type });
 
@@ -431,23 +416,17 @@ export class ContentScriptManager {
     return executeInputAction(action, this.selectorEngine, uploads);
   }
 
-  private async executeScrollAction(
-    action: ScrollExecutionAction,
-  ): Promise<ActionResultPayload> {
+  private async executeScrollAction(action: ScrollExecutionAction): Promise<ActionResultPayload> {
     const { executeScrollAction } = await this.loadScrollActionModule();
     return executeScrollAction(action, this.selectorEngine);
   }
 
-  private async executeExtractAction(
-    action: ExtractExecutionAction,
-  ): Promise<ActionResultPayload> {
+  private async executeExtractAction(action: ExtractExecutionAction): Promise<ActionResultPayload> {
     const { executeExtractAction } = await this.loadExtractActionModule();
     return executeExtractAction(action, this.selectorEngine);
   }
 
-  private async executeWaitAction(
-    action: WaitExecutionAction,
-  ): Promise<ActionResultPayload> {
+  private async executeWaitAction(action: WaitExecutionAction): Promise<ActionResultPayload> {
     const [{ executeWaitAction }, autoWaitEngine] = await Promise.all([
       this.loadWaitActionModule(),
       this.getAutoWaitEngine(),
@@ -798,7 +777,9 @@ export class ContentScriptManager {
 
   private isRecordableInputTarget(element: HTMLElement): boolean {
     if (element instanceof HTMLTextAreaElement) {
-      return !element.disabled && !element.readOnly && !this.isSensitiveRecordedInputTarget(element);
+      return (
+        !element.disabled && !element.readOnly && !this.isSensitiveRecordedInputTarget(element)
+      );
     }
 
     if (element instanceof HTMLInputElement) {
@@ -827,9 +808,7 @@ export class ContentScriptManager {
         .map((token) => token.trim())
         .filter((token) => token.length > 0);
 
-      if (
-        autocompleteTokens.some((token) => SENSITIVE_INPUT_AUTOCOMPLETE_TOKENS.has(token))
-      ) {
+      if (autocompleteTokens.some((token) => SENSITIVE_INPUT_AUTOCOMPLETE_TOKENS.has(token))) {
         return true;
       }
     }

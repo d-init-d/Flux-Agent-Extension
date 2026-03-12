@@ -98,7 +98,12 @@ describe('DeviceEmulationManager', () => {
     sendSpy.mockClear();
     await manager.clearSession('session-3');
 
-    expect(sendSpy).toHaveBeenNthCalledWith(1, { tabId: 1 }, 'Emulation.clearDeviceMetricsOverride', undefined);
+    expect(sendSpy).toHaveBeenNthCalledWith(
+      1,
+      { tabId: 1 },
+      'Emulation.clearDeviceMetricsOverride',
+      undefined,
+    );
     expect(sendSpy).toHaveBeenNthCalledWith(2, { tabId: 1 }, 'Emulation.setUserAgentOverride', {
       userAgent: expect.any(String),
       platform: expect.any(String),

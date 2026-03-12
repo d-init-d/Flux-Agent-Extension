@@ -34,12 +34,7 @@ describe('ExtensionError', () => {
 
     it('should accept optional details', () => {
       const details = { retryAfter: 30, endpoint: '/api/chat' };
-      const err = new ExtensionError(
-        ErrorCode.AI_RATE_LIMIT,
-        'rate limited',
-        true,
-        details,
-      );
+      const err = new ExtensionError(ErrorCode.AI_RATE_LIMIT, 'rate limited', true, details);
 
       expect(err.details).toEqual(details);
     });
@@ -115,14 +110,11 @@ describe('ExtensionError', () => {
       [ErrorCode.SENSITIVE_DATA_DETECTED, 'Sensitive data detected'],
     ];
 
-    it.each(codeMessagePairs)(
-      'should store code %s with the given message',
-      (code, message) => {
-        const err = new ExtensionError(code, message);
-        expect(err.code).toBe(code);
-        expect(err.message).toBe(message);
-      },
-    );
+    it.each(codeMessagePairs)('should store code %s with the given message', (code, message) => {
+      const err = new ExtensionError(code, message);
+      expect(err.code).toBe(code);
+      expect(err.message).toBe(message);
+    });
 
     it('should cover every value in the ErrorCode enum', () => {
       const enumValues = Object.values(ErrorCode);
@@ -194,24 +186,16 @@ describe('ExtensionError', () => {
 
     it('should include details when provided', () => {
       const details = { statusCode: 500, body: 'Internal Server Error' };
-      const err = new ExtensionError(
-        ErrorCode.AI_API_ERROR,
-        'server error',
-        false,
-        details,
-      );
+      const err = new ExtensionError(ErrorCode.AI_API_ERROR, 'server error', false, details);
       const json = err.toJSON();
 
       expect(json.details).toEqual(details);
     });
 
     it('should produce JSON-safe output (serializable via JSON.stringify)', () => {
-      const err = new ExtensionError(
-        ErrorCode.STORAGE_WRITE_ERROR,
-        'quota exceeded',
-        false,
-        { quotaBytes: 5_242_880 },
-      );
+      const err = new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'quota exceeded', false, {
+        quotaBytes: 5_242_880,
+      });
 
       const serialized = JSON.stringify(err.toJSON());
       const parsed = JSON.parse(serialized);
@@ -273,12 +257,7 @@ describe('ExtensionError', () => {
         request: { url: '/api', method: 'POST', body: { nested: [1, 2, 3] } },
         response: { status: 500, headers: { 'x-request-id': 'abc123' } },
       };
-      const err = new ExtensionError(
-        ErrorCode.AI_API_ERROR,
-        'error',
-        false,
-        details,
-      );
+      const err = new ExtensionError(ErrorCode.AI_API_ERROR, 'error', false, details);
       expect(err.details).toEqual(details);
       expect(err.toJSON().details).toEqual(details);
     });
@@ -302,9 +281,7 @@ describe('ExtensionError', () => {
     });
 
     it('should work with Promise.reject', async () => {
-      const promise = Promise.reject(
-        new ExtensionError(ErrorCode.ABORTED, 'user aborted'),
-      );
+      const promise = Promise.reject(new ExtensionError(ErrorCode.ABORTED, 'user aborted'));
 
       await expect(promise).rejects.toBeInstanceOf(ExtensionError);
       await expect(promise).rejects.toThrow('user aborted');

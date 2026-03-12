@@ -1,9 +1,4 @@
-import type {
-  SessionConfig,
-  Session,
-  SessionEvent,
-  ActionRecord,
-} from '@shared/types';
+import type { SessionConfig, Session, SessionEvent, ActionRecord } from '@shared/types';
 
 /**
  * Session manager interface.
@@ -38,10 +33,7 @@ export interface ISessionManager {
   undo(sessionId: string, steps?: number): Promise<void>;
 
   /** Subscribe to session events */
-  subscribe(
-    sessionId: string,
-    handler: (event: SessionEvent) => void,
-  ): () => void;
+  subscribe(sessionId: string, handler: (event: SessionEvent) => void): () => void;
 
   /** Build page context for AI */
   buildContext(sessionId: string): Promise<string>;

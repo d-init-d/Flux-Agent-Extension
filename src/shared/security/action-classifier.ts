@@ -332,7 +332,8 @@ export function classifyAction(action: Action): ClassificationResult {
     case 'navigate': {
       const url = action.url || '';
       if (isBlockedUrl(url)) {
-        const schemePart = url.indexOf(':') >= 0 ? url.substring(0, url.indexOf(':') + 1) : 'unknown:';
+        const schemePart =
+          url.indexOf(':') >= 0 ? url.substring(0, url.indexOf(':') + 1) : 'unknown:';
         return {
           level: 'blocked',
           reason: 'Navigation to blocked URL scheme: ' + schemePart,

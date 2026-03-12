@@ -380,7 +380,10 @@ describe('InputComposer', () => {
     const onSend = vi.fn().mockResolvedValue(undefined);
     render(<InputComposer onSend={onSend} />);
 
-    const file = new File(['hello'], 'note.txt', { type: 'text/plain', lastModified: 1700000000000 });
+    const file = new File(['hello'], 'note.txt', {
+      type: 'text/plain',
+      lastModified: 1700000000000,
+    });
     const fileInput = screen.getByLabelText('Choose files to upload');
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
 

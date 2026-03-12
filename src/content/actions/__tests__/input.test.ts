@@ -1,5 +1,12 @@
 import { ErrorCode } from '@shared/errors';
-import type { CheckAction, FillAction, SelectAction, SerializedFileUpload, TypeAction, UploadFileAction } from '@shared/types';
+import type {
+  CheckAction,
+  FillAction,
+  SelectAction,
+  SerializedFileUpload,
+  TypeAction,
+  UploadFileAction,
+} from '@shared/types';
 import { SelectorEngine } from '../../dom/selector-engine';
 import { executeInputAction } from '../input';
 
@@ -388,7 +395,16 @@ describe('executeInputAction', () => {
       fileIds: ['f1'],
     };
 
-    const uploads = [{ id: 'f1', name: 'f.txt', mimeType: 'text/plain', size: 1, lastModified: 0, base64Data: 'YQ==' }];
+    const uploads = [
+      {
+        id: 'f1',
+        name: 'f.txt',
+        mimeType: 'text/plain',
+        size: 1,
+        lastModified: 0,
+        base64Data: 'YQ==',
+      },
+    ];
     const result = await executeInputAction(action, selectorEngine, uploads);
 
     expect(result.success).toBe(false);
@@ -405,7 +421,16 @@ describe('executeInputAction', () => {
       fileIds: ['f1'],
     };
 
-    const uploads = [{ id: 'f1', name: 'f.txt', mimeType: 'text/plain', size: 1, lastModified: 0, base64Data: 'YQ==' }];
+    const uploads = [
+      {
+        id: 'f1',
+        name: 'f.txt',
+        mimeType: 'text/plain',
+        size: 1,
+        lastModified: 0,
+        base64Data: 'YQ==',
+      },
+    ];
     const result = await executeInputAction(action, selectorEngine, uploads);
 
     expect(result.success).toBe(false);
@@ -431,7 +456,16 @@ describe('executeInputAction', () => {
   it('keeps existing files when clearFirst is false on uploadFile', async () => {
     document.body.innerHTML = '<input id="target" type="file" multiple />';
 
-    const uploads = [{ id: 'f1', name: 'f.txt', mimeType: 'text/plain', size: 1, lastModified: 0, base64Data: 'YQ==' }];
+    const uploads = [
+      {
+        id: 'f1',
+        name: 'f.txt',
+        mimeType: 'text/plain',
+        size: 1,
+        lastModified: 0,
+        base64Data: 'YQ==',
+      },
+    ];
 
     const action: UploadFileAction = {
       id: 'upload-keep',
@@ -511,8 +545,7 @@ describe('executeInputAction', () => {
   });
 
   it('returns error for disabled select element', async () => {
-    document.body.innerHTML =
-      '<select id="target" disabled><option value="a">A</option></select>';
+    document.body.innerHTML = '<select id="target" disabled><option value="a">A</option></select>';
 
     const action: SelectAction = {
       id: 'select-disabled',
@@ -594,8 +627,7 @@ describe('executeInputAction', () => {
   });
 
   it('returns -1 for option object with no matching fields', async () => {
-    document.body.innerHTML =
-      '<select id="country"><option value="US">US</option></select>';
+    document.body.innerHTML = '<select id="country"><option value="US">US</option></select>';
 
     const action: SelectAction = {
       id: 'select-empty-obj',

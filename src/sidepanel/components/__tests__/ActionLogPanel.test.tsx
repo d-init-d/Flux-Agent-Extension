@@ -43,7 +43,9 @@ describe('ActionLogPanel', () => {
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByText(/4 recent actions/i)).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Executed actions timeline' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Executed actions timeline' }),
+    ).not.toBeInTheDocument();
   });
 
   it('toggles the timeline open and closed', async () => {
@@ -64,7 +66,9 @@ describe('ActionLogPanel', () => {
       'aria-expanded',
       'false',
     );
-    expect(screen.queryByRole('list', { name: 'Executed actions timeline' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Executed actions timeline' }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows the empty state when expanded with no actions', () => {
@@ -84,9 +88,21 @@ describe('ActionLogPanel', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument();
     expect(screen.getByText('Failed')).toBeInTheDocument();
 
-    expect(screen.getByTestId('action-timeline-icon-pending-action')).toHaveAttribute('data-status', 'pending');
-    expect(screen.getByTestId('action-timeline-icon-running-action')).toHaveAttribute('data-status', 'running');
-    expect(screen.getByTestId('action-timeline-icon-done-action')).toHaveAttribute('data-status', 'done');
-    expect(screen.getByTestId('action-timeline-icon-failed-action')).toHaveAttribute('data-status', 'failed');
+    expect(screen.getByTestId('action-timeline-icon-pending-action')).toHaveAttribute(
+      'data-status',
+      'pending',
+    );
+    expect(screen.getByTestId('action-timeline-icon-running-action')).toHaveAttribute(
+      'data-status',
+      'running',
+    );
+    expect(screen.getByTestId('action-timeline-icon-done-action')).toHaveAttribute(
+      'data-status',
+      'done',
+    );
+    expect(screen.getByTestId('action-timeline-icon-failed-action')).toHaveAttribute(
+      'data-status',
+      'failed',
+    );
   });
 });

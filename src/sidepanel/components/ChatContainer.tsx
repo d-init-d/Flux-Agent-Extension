@@ -8,7 +8,6 @@ interface ChatContainerProps {
 }
 
 export function ChatContainer({ messages = [] }: ChatContainerProps) {
-
   if (messages.length === 0) {
     return (
       <section
@@ -35,14 +34,14 @@ export function ChatContainer({ messages = [] }: ChatContainerProps) {
               </svg>
             </div>
 
-             <h2 className="text-lg font-semibold tracking-tight text-[rgb(var(--color-text-primary))]">
-               Start a conversation
-             </h2>
-             <p className="mt-2 text-sm leading-snug text-[rgb(var(--color-text-secondary))]">
-                Create or switch a session, then send a prompt to start a streamed response.
-              </p>
-            </div>
+            <h2 className="text-lg font-semibold tracking-tight text-[rgb(var(--color-text-primary))]">
+              Start a conversation
+            </h2>
+            <p className="mt-2 text-sm leading-snug text-[rgb(var(--color-text-secondary))]">
+              Create or switch a session, then send a prompt to start a streamed response.
+            </p>
           </div>
+        </div>
       </section>
     );
   }

@@ -53,10 +53,9 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
     '[data-theme="dark"]_&:hover:bg-primary-900/20 [data-theme="dark"]_&:hover:border-primary-800',
   ].join(' '),
 
-  ghost: [
-    'text-content-secondary',
-    'hover:bg-surface-secondary hover:text-content-primary',
-  ].join(' '),
+  ghost: ['text-content-secondary', 'hover:bg-surface-secondary hover:text-content-primary'].join(
+    ' ',
+  ),
 
   danger: [
     'bg-error-600 text-white',
@@ -107,8 +106,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const isDisabled = disabled || loading;
 
-    const spinnerColor =
-      variant === 'primary' || variant === 'danger' ? 'white' : 'current';
+    const spinnerColor = variant === 'primary' || variant === 'danger' ? 'white' : 'current';
 
     return (
       <button
@@ -126,11 +124,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {...rest}
       >
         {loading ? (
-          <Spinner
-            size={size === 'lg' ? 'sm' : 'xs'}
-            color={spinnerColor}
-            label="Loading"
-          />
+          <Spinner size={size === 'lg' ? 'sm' : 'xs'} color={spinnerColor} label="Loading" />
         ) : iconLeft ? (
           <span className="shrink-0">{iconLeft}</span>
         ) : null}

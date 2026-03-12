@@ -33,10 +33,7 @@ export class ScriptingAdapter {
     }
   }
 
-  async executeFile(
-    tabId: number,
-    files: string[],
-  ): Promise<chrome.scripting.InjectionResult[]> {
+  async executeFile(tabId: number, files: string[]): Promise<chrome.scripting.InjectionResult[]> {
     await this.ensureUsableTabId(tabId);
 
     if (files.length === 0) {
@@ -101,11 +98,7 @@ export class ScriptingAdapter {
 
   private async ensureUsableTabId(tabId: number): Promise<void> {
     if (!Number.isInteger(tabId) || tabId <= 0) {
-      throw new ExtensionError(
-        ErrorCode.TAB_NOT_FOUND,
-        `Invalid tab id "${tabId}"`,
-        true,
-      );
+      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, `Invalid tab id "${tabId}"`, true);
     }
 
     await this.tabManager.ensureTabExists(tabId);

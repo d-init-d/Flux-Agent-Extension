@@ -176,9 +176,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
             type={resolvedType}
             disabled={disabled}
             aria-invalid={resolvedVariant === 'error' || undefined}
-            aria-describedby={
-              errorMessage ? errorId : helperText ? helperId : undefined
-            }
+            aria-describedby={errorMessage ? errorId : helperText ? helperId : undefined}
             className={`
               w-full rounded-lg border
               bg-surface-primary text-content-primary
@@ -214,9 +212,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
                   <EyeIcon open={!showPassword} />
                 </button>
               ) : (
-                <span className="text-content-tertiary pointer-events-none">
-                  {iconRight}
-                </span>
+                <span className="text-content-tertiary pointer-events-none">{iconRight}</span>
               )}
             </span>
           )}

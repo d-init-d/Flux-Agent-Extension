@@ -127,7 +127,9 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     const themeToggle = screen.getByRole('radiogroup', { name: 'Theme mode' });
     expect(within(themeToggle).getByRole('radio', { name: 'Use light theme' })).toBeInTheDocument();
     expect(within(themeToggle).getByRole('radio', { name: 'Use dark theme' })).toBeInTheDocument();
-    expect(within(themeToggle).getByRole('radio', { name: 'Use system theme' })).toBeInTheDocument();
+    expect(
+      within(themeToggle).getByRole('radio', { name: 'Use system theme' }),
+    ).toBeInTheDocument();
 
     await user.click(within(themeToggle).getByRole('radio', { name: 'Use dark theme' }));
 
@@ -205,7 +207,14 @@ describe('Popup App (U-06 quick actions + page info)', () => {
       await seedStorage({
         onboarding: createDefaultOnboardingState(),
       });
-      (chrome.storage.onChanged as typeof chrome.storage.onChanged & { dispatch: (changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void }).dispatch(
+      (
+        chrome.storage.onChanged as typeof chrome.storage.onChanged & {
+          dispatch: (
+            changes: Record<string, chrome.storage.StorageChange>,
+            areaName: string,
+          ) => void;
+        }
+      ).dispatch(
         {
           onboarding: {
             oldValue: {

@@ -53,7 +53,9 @@ describe('NetworkInterceptionManager', () => {
     await flushAsyncWork();
 
     expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.enable', {
-      patterns: [{ urlPattern: 'https://ads.example.com/*', resourceType: 'XHR', requestStage: 'Request' }],
+      patterns: [
+        { urlPattern: 'https://ads.example.com/*', resourceType: 'XHR', requestStage: 'Request' },
+      ],
     });
     expect(sendSpy).toHaveBeenCalledWith({ tabId: 1 }, 'Fetch.failRequest', {
       requestId: 'req-1',

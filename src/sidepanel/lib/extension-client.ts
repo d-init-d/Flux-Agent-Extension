@@ -36,9 +36,9 @@ export async function sendExtensionRequest<T extends ExtensionMessageType>(
     timestamp: Date.now(),
   };
 
-  const response = (await chrome.runtime.sendMessage(
-    message,
-  )) as ExtensionResponse<ResponsePayloadMap[T]> | undefined;
+  const response = (await chrome.runtime.sendMessage(message)) as
+    | ExtensionResponse<ResponsePayloadMap[T]>
+    | undefined;
 
   if (!response?.success) {
     throw new Error(response?.error?.message ?? `Extension request ${type} failed`);

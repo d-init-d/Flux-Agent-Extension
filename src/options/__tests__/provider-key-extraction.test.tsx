@@ -94,7 +94,9 @@ describe('Provider key extraction resistance', () => {
     await user.type(screen.getByLabelText('API key'), rawKey);
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
-    expect(await screen.findByText(/save blocked: remote provider endpoints must use https/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/save blocked: remote provider endpoints must use https/i),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('API key')).toHaveValue('');
     await expect(readStorage('activeProvider')).resolves.toBeUndefined();
     await expect(readStorage('providerKeyMetadata')).resolves.toBeUndefined();

@@ -19,7 +19,11 @@ export interface AppliedDeviceEmulation {
 
 export interface IDeviceEmulationManager {
   activateSession(sessionId: string, tabId: number | null): void;
-  applyAction(sessionId: string, tabId: number, action: EmulateDeviceAction): Promise<AppliedDeviceEmulation>;
+  applyAction(
+    sessionId: string,
+    tabId: number,
+    action: EmulateDeviceAction,
+  ): Promise<AppliedDeviceEmulation>;
   clearSession(sessionId: string): Promise<void>;
   dispose?(): void;
 }
@@ -203,7 +207,9 @@ export class DeviceEmulationManager implements IDeviceEmulationManager {
     }
   }
 
-  private readonly handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (tabId) => {
+  private readonly handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (
+    tabId,
+  ) => {
     this.logger.debug('Tab removed; dropping device emulation state', { tabId });
     this.dropTabState(tabId);
   };

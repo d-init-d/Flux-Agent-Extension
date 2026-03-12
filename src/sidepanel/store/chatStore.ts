@@ -7,9 +7,19 @@ interface ChatStoreState {
   messagesBySession: Record<string, MessageBubbleProps[]>;
   streamMessageIdsBySession: Record<string, string | null>;
   syncSession: (session: Session) => void;
-  applyStreamChunk: (payload: { sessionId: string; messageId: string; delta: string; done: boolean; error?: string }) => void;
+  applyStreamChunk: (payload: {
+    sessionId: string;
+    messageId: string;
+    delta: string;
+    done: boolean;
+    error?: string;
+  }) => void;
   appendError: (sessionId: string, message: string) => void;
-  sendMessage: (sessionId: string, message: string, uploads?: SerializedFileUpload[]) => Promise<void>;
+  sendMessage: (
+    sessionId: string,
+    message: string,
+    uploads?: SerializedFileUpload[],
+  ) => Promise<void>;
 }
 
 function toTimestamp(timestamp: number | undefined): string {

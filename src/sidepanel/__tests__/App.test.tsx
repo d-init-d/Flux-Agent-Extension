@@ -160,7 +160,9 @@ describe('Side panel App (U-15 integration)', () => {
     await renderApp();
 
     const header = screen.getByTestId('sidepanel-header');
-    expect(within(header).getByRole('heading', { level: 1, name: 'Flux Agent' })).toBeInTheDocument();
+    expect(
+      within(header).getByRole('heading', { level: 1, name: 'Flux Agent' }),
+    ).toBeInTheDocument();
     expect(within(header).getByRole('radiogroup', { name: 'Theme mode' })).toBeInTheDocument();
 
     await waitFor(() => {
@@ -169,13 +171,19 @@ describe('Side panel App (U-15 integration)', () => {
 
     expect(screen.getByRole('button', { name: 'Start recording' })).toBeInTheDocument();
     expect(screen.getByText('Playback recorded actions')).toBeInTheDocument();
-    expect(screen.getByText('Playback is unavailable until this session has recorded actions.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Playback is unavailable until this session has recorded actions.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Saved workflows' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
-    expect(screen.getByText('Create or switch a session, then send a prompt to start a streamed response.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Create or switch a session, then send a prompt to start a streamed response.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('opens the saved workflows library and renders stored workflow metadata with a view toggle', async () => {
@@ -202,7 +210,9 @@ describe('Side panel App (U-15 integration)', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
     expect(within(dialog).getAllByText('Checkout smoke test')).toHaveLength(2);
-    expect(within(dialog).getAllByText('Replays the checkout journey up to payment confirmation.')).toHaveLength(2);
+    expect(
+      within(dialog).getAllByText('Replays the checkout journey up to payment confirmation.'),
+    ).toHaveLength(2);
     expect(within(dialog).getAllByText('qa')).toHaveLength(2);
     expect(within(dialog).getAllByText('checkout')).toHaveLength(2);
     expect(within(dialog).getByText('From Regression pass')).toBeInTheDocument();
@@ -247,11 +257,19 @@ describe('Side panel App (U-15 integration)', () => {
                   status: 'idle',
                   actions: [
                     {
-                      action: { id: 'recorded-nav', type: 'navigate', url: 'https://example.com/cart' },
+                      action: {
+                        id: 'recorded-nav',
+                        type: 'navigate',
+                        url: 'https://example.com/cart',
+                      },
                       timestamp: Date.now() - 4000,
                     },
                     {
-                      action: { id: 'recorded-click', type: 'click', selector: { css: '#checkout' } },
+                      action: {
+                        id: 'recorded-click',
+                        type: 'click',
+                        selector: { css: '#checkout' },
+                      },
                       timestamp: Date.now() - 2000,
                     },
                   ],
@@ -313,7 +331,9 @@ describe('Side panel App (U-15 integration)', () => {
 
     const libraryDialog = await screen.findByRole('dialog', { name: 'Saved workflows' });
     expect(within(libraryDialog).getAllByText('Checkout happy path')).toHaveLength(2);
-    expect(within(libraryDialog).getAllByText('Covers cart review through confirmation.')).toHaveLength(2);
+    expect(
+      within(libraryDialog).getAllByText('Covers cart review through confirmation.'),
+    ).toHaveLength(2);
     expect(within(libraryDialog).getAllByText('smoke')).toHaveLength(2);
   });
 
@@ -434,7 +454,9 @@ describe('Side panel App (U-15 integration)', () => {
 
     const updatedLibrary = await screen.findByRole('dialog', { name: 'Saved workflows' });
     expect(within(updatedLibrary).getAllByText('Checkout recovery path')).toHaveLength(2);
-    expect(within(updatedLibrary).getAllByText('Covers retries before payment confirmation.')).toHaveLength(2);
+    expect(
+      within(updatedLibrary).getAllByText('Covers retries before payment confirmation.'),
+    ).toHaveLength(2);
     expect(within(updatedLibrary).getAllByText('recovery')).toHaveLength(2);
   });
 
@@ -502,15 +524,28 @@ describe('Side panel App (U-15 integration)', () => {
                   status: 'idle',
                   actions: [
                     {
-                      action: { id: 'recorded-click', type: 'click', selector: { css: '#open-menu' } },
+                      action: {
+                        id: 'recorded-click',
+                        type: 'click',
+                        selector: { css: '#open-menu' },
+                      },
                       timestamp: Date.now() - 3000,
                     },
                     {
-                      action: { id: 'recorded-type', type: 'type', selector: { css: '#query' }, text: 'Flux' },
+                      action: {
+                        id: 'recorded-type',
+                        type: 'type',
+                        selector: { css: '#query' },
+                        text: 'Flux',
+                      },
                       timestamp: Date.now() - 2000,
                     },
                     {
-                      action: { id: 'recorded-submit', type: 'click', selector: { css: '#submit' } },
+                      action: {
+                        id: 'recorded-submit',
+                        type: 'click',
+                        selector: { css: '#submit' },
+                      },
                       timestamp: Date.now() - 1000,
                     },
                   ],
@@ -531,7 +566,9 @@ describe('Side panel App (U-15 integration)', () => {
 
     await renderApp();
 
-    expect(await screen.findByText('Ready to replay 3 actions from the start.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Ready to replay 3 actions from the start.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('0 / 3 actions')).toBeInTheDocument();
 
     await user.selectOptions(screen.getByRole('combobox', { name: 'Playback speed' }), '2');
@@ -581,7 +618,11 @@ describe('Side panel App (U-15 integration)', () => {
                   status: 'recording',
                   actions: [
                     {
-                      action: { id: 'recorded-click', type: 'click', selector: { css: '#start-button' } },
+                      action: {
+                        id: 'recorded-click',
+                        type: 'click',
+                        selector: { css: '#start-button' },
+                      },
                       timestamp: Date.now(),
                     },
                   ],
@@ -605,7 +646,11 @@ describe('Side panel App (U-15 integration)', () => {
     expect(await screen.findByTestId('recording-live-indicator')).toHaveTextContent('Live');
     expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
-    expect(screen.getByText('1 action captured so far. New browser steps will keep syncing into this session.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        '1 action captured so far. New browser steps will keep syncing into this session.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('shows paused recording controls without the live indicator', async () => {
@@ -619,11 +664,20 @@ describe('Side panel App (U-15 integration)', () => {
                   status: 'paused',
                   actions: [
                     {
-                      action: { id: 'recorded-click', type: 'click', selector: { css: '#pause-button' } },
+                      action: {
+                        id: 'recorded-click',
+                        type: 'click',
+                        selector: { css: '#pause-button' },
+                      },
                       timestamp: Date.now(),
                     },
                     {
-                      action: { id: 'recorded-type', type: 'type', selector: { css: '#input' }, text: 'hello' },
+                      action: {
+                        id: 'recorded-type',
+                        type: 'type',
+                        selector: { css: '#input' },
+                        text: 'hello',
+                      },
                       timestamp: Date.now(),
                     },
                   ],
@@ -648,7 +702,9 @@ describe('Side panel App (U-15 integration)', () => {
     expect(await screen.findByText('Paused')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
-    expect(screen.getByText('2 actions captured. Resume when you want to keep collecting steps.')).toBeInTheDocument();
+    expect(
+      screen.getByText('2 actions captured. Resume when you want to keep collecting steps.'),
+    ).toBeInTheDocument();
   });
 
   it('shows active playback controls for a playing session', async () => {
@@ -668,11 +724,20 @@ describe('Side panel App (U-15 integration)', () => {
                       timestamp: Date.now() - 4000,
                     },
                     {
-                      action: { id: 'recorded-type', type: 'type', selector: { css: '#field' }, text: 'ok' },
+                      action: {
+                        id: 'recorded-type',
+                        type: 'type',
+                        selector: { css: '#field' },
+                        text: 'ok',
+                      },
                       timestamp: Date.now() - 3000,
                     },
                     {
-                      action: { id: 'recorded-submit', type: 'click', selector: { css: '#submit' } },
+                      action: {
+                        id: 'recorded-submit',
+                        type: 'click',
+                        selector: { css: '#submit' },
+                      },
                       timestamp: Date.now() - 2000,
                     },
                   ],
@@ -734,7 +799,11 @@ describe('Side panel App (U-15 integration)', () => {
                       timestamp: Date.now() - 4000,
                     },
                     {
-                      action: { id: 'recorded-submit', type: 'click', selector: { css: '#second' } },
+                      action: {
+                        id: 'recorded-submit',
+                        type: 'click',
+                        selector: { css: '#second' },
+                      },
                       timestamp: Date.now() - 2000,
                     },
                   ],
@@ -770,7 +839,9 @@ describe('Side panel App (U-15 integration)', () => {
     await renderApp();
 
     expect(await screen.findByText('Paused on step 2 of 2 at 0.5x.')).toBeInTheDocument();
-    expect(screen.getByText('Playback issue: Element #second was not found in the current page state.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Playback issue: Element #second was not found in the current page state.'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument();
 
@@ -808,7 +879,11 @@ describe('Side panel App (U-15 integration)', () => {
                       timestamp: Date.now() - 3000,
                     },
                     {
-                      action: { id: 'recorded-submit', type: 'click', selector: { css: '#finish' } },
+                      action: {
+                        id: 'recorded-submit',
+                        type: 'click',
+                        selector: { css: '#finish' },
+                      },
                       timestamp: Date.now() - 1000,
                     },
                   ],
@@ -839,7 +914,9 @@ describe('Side panel App (U-15 integration)', () => {
     await renderApp();
 
     expect(await screen.findByText('Finished')).toBeInTheDocument();
-    expect(screen.getByText('Playback finished for 2 actions. You can replay it from the start.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Playback finished for 2 actions. You can replay it from the start.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('2 / 2 actions')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
   });
@@ -861,7 +938,11 @@ describe('Side panel App (U-15 integration)', () => {
                       timestamp: Date.now() - 2000,
                     },
                     {
-                      action: { id: 'recorded-click', type: 'click', selector: { testId: 'submit' } },
+                      action: {
+                        id: 'recorded-click',
+                        type: 'click',
+                        selector: { testId: 'submit' },
+                      },
                       timestamp: Date.now() - 1000,
                     },
                   ],
@@ -1037,9 +1118,12 @@ describe('Side panel App (U-15 integration)', () => {
       ([type]) => type === 'SESSION_RECORDING_START',
     );
     expect(recordingStartCalls).toHaveLength(1);
-    expect(recordingStartCalls[0]).toEqual(['SESSION_RECORDING_START', {
-      sessionId: 'session-1',
-    }]);
+    expect(recordingStartCalls[0]).toEqual([
+      'SESSION_RECORDING_START',
+      {
+        sessionId: 'session-1',
+      },
+    ]);
 
     deferred.resolve(undefined);
 
@@ -1193,7 +1277,10 @@ describe('Side panel App (U-15 integration)', () => {
 
     const textbox = screen.getByRole('textbox', { name: 'Message input' });
     const fileInput = screen.getByLabelText('Choose files to upload');
-    const file = new File(['hello'], 'note.txt', { type: 'text/plain', lastModified: 1700000000000 });
+    const file = new File(['hello'], 'note.txt', {
+      type: 'text/plain',
+      lastModified: 1700000000000,
+    });
 
     await user.upload(fileInput, file);
     fireEvent.change(textbox, { target: { value: 'Run extraction' } });

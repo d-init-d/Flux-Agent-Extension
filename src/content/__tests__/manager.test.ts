@@ -192,7 +192,11 @@ describe('ContentScriptManager command routing', () => {
     for (const testCase of actionCases) {
       await executeHandler?.({ action: testCase.action, context: { variables: {}, uploads: [] } });
       if (testCase.called === executeInputAction) {
-        expect(testCase.called).toHaveBeenCalledWith(testCase.action, expect.anything(), expect.anything());
+        expect(testCase.called).toHaveBeenCalledWith(
+          testCase.action,
+          expect.anything(),
+          expect.anything(),
+        );
       } else {
         expect(testCase.called).toHaveBeenCalledWith(testCase.action, expect.anything());
       }
@@ -278,10 +282,15 @@ describe('ContentScriptManager command routing', () => {
       description: 'Submit checkout form',
     };
 
-    const resultPromise = executeHandler?.({ action, context: { variables: {} } }) as Promise<unknown>;
+    const resultPromise = executeHandler?.({
+      action,
+      context: { variables: {} },
+    }) as Promise<unknown>;
 
     await vi.waitFor(() => {
-      const overlay = document.querySelector('[data-flux-action-status="true"]') as HTMLElement | null;
+      const overlay = document.querySelector(
+        '[data-flux-action-status="true"]',
+      ) as HTMLElement | null;
       expect(overlay).not.toBeNull();
       expect(overlay?.textContent).toContain('Running');
       expect(overlay?.textContent).toContain('Submit checkout form');
@@ -475,14 +484,20 @@ describe('ContentScriptManager command routing', () => {
       description: 'Second running action',
     };
 
-    const firstPromise = executeHandler?.({ action: firstAction, context: { variables: {} } }) as Promise<unknown>;
+    const firstPromise = executeHandler?.({
+      action: firstAction,
+      context: { variables: {} },
+    }) as Promise<unknown>;
     await vi.waitFor(() => {
       const overlay = document.querySelector('[data-flux-action-status="true"]');
       expect(overlay?.textContent).toContain('First running action');
       expect(overlay?.textContent).toContain('Running');
     });
 
-    const secondPromise = executeHandler?.({ action: secondAction, context: { variables: {} } }) as Promise<unknown>;
+    const secondPromise = executeHandler?.({
+      action: secondAction,
+      context: { variables: {} },
+    }) as Promise<unknown>;
     await vi.waitFor(() => {
       const overlay = document.querySelector('[data-flux-action-status="true"]');
       expect(overlay?.textContent).toContain('Second running action');

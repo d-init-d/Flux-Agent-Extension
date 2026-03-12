@@ -259,7 +259,10 @@ describe('workflowUIStore', () => {
 
   describe('saveWorkflow', () => {
     it('should return null if already saving', async () => {
-      useWorkflowUIStore.setState({ isSaving: true, saveDraft: { name: 'test', description: '', tags: '' } });
+      useWorkflowUIStore.setState({
+        isSaving: true,
+        saveDraft: { name: 'test', description: '', tags: '' },
+      });
 
       const result = await useWorkflowUIStore.getState().saveWorkflow();
       expect(result).toBeNull();
@@ -292,10 +295,13 @@ describe('workflowUIStore', () => {
       const result = await useWorkflowUIStore.getState().saveWorkflow(payload);
 
       expect(result).toBe(created);
-      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_CREATE', expect.objectContaining({
-        name: 'New workflow',
-        tags: ['a', 'b'],
-      }));
+      expect(sendExtensionRequest).toHaveBeenCalledWith(
+        'WORKFLOW_CREATE',
+        expect.objectContaining({
+          name: 'New workflow',
+          tags: ['a', 'b'],
+        }),
+      );
       expect(useWorkflowUIStore.getState().isSaving).toBe(false);
       expect(useWorkflowUIStore.getState().activeModal).toBe('library');
       expect(useWorkflowUIStore.getState().selectedWorkflowId).toBe('w-new');
@@ -405,9 +411,12 @@ describe('workflowUIStore', () => {
         actions: [{ action: { id: 'a1', type: 'click' }, timestamp: 100 }],
       });
 
-      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_CREATE', expect.objectContaining({
-        description: undefined,
-      }));
+      expect(sendExtensionRequest).toHaveBeenCalledWith(
+        'WORKFLOW_CREATE',
+        expect.objectContaining({
+          description: undefined,
+        }),
+      );
     });
 
     it('should parse and deduplicate tags', async () => {
@@ -423,9 +432,12 @@ describe('workflowUIStore', () => {
         actions: [{ action: { id: 'a1', type: 'click' }, timestamp: 100 }],
       });
 
-      expect(sendExtensionRequest).toHaveBeenCalledWith('WORKFLOW_CREATE', expect.objectContaining({
-        tags: ['a', 'b', 'c'],
-      }));
+      expect(sendExtensionRequest).toHaveBeenCalledWith(
+        'WORKFLOW_CREATE',
+        expect.objectContaining({
+          tags: ['a', 'b', 'c'],
+        }),
+      );
     });
   });
 

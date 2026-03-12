@@ -100,7 +100,10 @@ export class ActionOrchestrator {
     };
   }
 
-  private async executeWithRecovery(action: Action, context: ExecutionContext): Promise<ActionResult> {
+  private async executeWithRecovery(
+    action: Action,
+    context: ExecutionContext,
+  ): Promise<ActionResult> {
     const retries =
       typeof action.retries === 'number' && action.retries >= 0
         ? action.retries

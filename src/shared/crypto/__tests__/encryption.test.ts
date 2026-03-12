@@ -54,9 +54,7 @@ describe('base64ToArrayBuffer', () => {
   });
 
   it('should throw on invalid base64 input', () => {
-    expect(() => base64ToArrayBuffer('not-valid-base64!!!')).toThrow(
-      'Invalid base64 input',
-    );
+    expect(() => base64ToArrayBuffer('not-valid-base64!!!')).toThrow('Invalid base64 input');
   });
 });
 
@@ -114,16 +112,12 @@ describe('deriveKey', () => {
 
   it('should throw for empty passphrase', async () => {
     const salt = generateRandomBytes(16);
-    await expect(deriveKey('', salt)).rejects.toThrow(
-      'Passphrase must not be empty',
-    );
+    await expect(deriveKey('', salt)).rejects.toThrow('Passphrase must not be empty');
   });
 
   it('should throw for incorrect salt length', async () => {
     const badSalt = generateRandomBytes(8); // Too short
-    await expect(deriveKey('passphrase', badSalt)).rejects.toThrow(
-      'Salt must be exactly 16 bytes',
-    );
+    await expect(deriveKey('passphrase', badSalt)).rejects.toThrow('Salt must be exactly 16 bytes');
   });
 });
 
@@ -159,9 +153,7 @@ describe('encrypt', () => {
   });
 
   it('should throw for empty passphrase', async () => {
-    await expect(encrypt('hello', '')).rejects.toThrow(
-      'Passphrase must not be empty',
-    );
+    await expect(encrypt('hello', '')).rejects.toThrow('Passphrase must not be empty');
   });
 });
 
@@ -198,21 +190,15 @@ describe('decrypt', () => {
 
   it('should fail with wrong passphrase', async () => {
     const encrypted = await encrypt('secret data', 'correct-password');
-    await expect(decrypt(encrypted, 'wrong-password')).rejects.toThrow(
-      'Decryption failed',
-    );
+    await expect(decrypt(encrypted, 'wrong-password')).rejects.toThrow('Decryption failed');
   });
 
   it('should throw for empty passphrase', async () => {
-    await expect(decrypt('somedata', '')).rejects.toThrow(
-      'Passphrase must not be empty',
-    );
+    await expect(decrypt('somedata', '')).rejects.toThrow('Passphrase must not be empty');
   });
 
   it('should throw for empty encrypted data', async () => {
-    await expect(decrypt('', 'pass')).rejects.toThrow(
-      'Encrypted data must not be empty',
-    );
+    await expect(decrypt('', 'pass')).rejects.toThrow('Encrypted data must not be empty');
   });
 
   it('should throw for invalid base64 input', async () => {
@@ -222,9 +208,7 @@ describe('decrypt', () => {
   it('should throw for truncated/corrupted payload', async () => {
     // Valid base64 but too short to contain salt+iv+authTag
     const tooShort = arrayBufferToBase64(new Uint8Array(10).buffer);
-    await expect(decrypt(tooShort, 'pass')).rejects.toThrow(
-      'payload too short',
-    );
+    await expect(decrypt(tooShort, 'pass')).rejects.toThrow('payload too short');
   });
 
   it('should throw for tampered ciphertext', async () => {
@@ -234,8 +218,6 @@ describe('decrypt', () => {
     bytes[bytes.length - 1] ^= 0xff; // Flip last byte (in auth tag region)
     const tampered = arrayBufferToBase64(bytes.buffer);
 
-    await expect(decrypt(tampered, 'pass')).rejects.toThrow(
-      'Decryption failed',
-    );
+    await expect(decrypt(tampered, 'pass')).rejects.toThrow('Decryption failed');
   });
 });

@@ -197,37 +197,37 @@ const Modal: React.FC<ModalProps> = ({
       >
         {/* Header – always rendered so the close button is accessible */}
         <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-2">
-            <div className="flex-1 min-w-0">
-              {title && (
-                <h2 className="text-lg font-semibold tracking-tight text-content-primary leading-snug">
-                  {title}
-                </h2>
-              )}
-              {description && (
-                <p
-                  id="modal-description"
-                  className="mt-1 text-sm text-content-secondary leading-relaxed"
-                >
-                  {description}
-                </p>
-              )}
-            </div>
+          <div className="flex-1 min-w-0">
+            {title && (
+              <h2 className="text-lg font-semibold tracking-tight text-content-primary leading-snug">
+                {title}
+              </h2>
+            )}
+            {description && (
+              <p
+                id="modal-description"
+                className="mt-1 text-sm text-content-secondary leading-relaxed"
+              >
+                {description}
+              </p>
+            )}
+          </div>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="
+          <button
+            type="button"
+            onClick={onClose}
+            className="
                 shrink-0 p-1.5 -m-1.5 rounded-lg
                 text-content-tertiary
                 hover:text-content-primary hover:bg-surface-secondary
                 transition-colors duration-fast
                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus
               "
-              aria-label="Close dialog"
-            >
-              <CloseIcon />
-            </button>
-          </div>
+            aria-label="Close dialog"
+          >
+            <CloseIcon />
+          </button>
+        </div>
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>

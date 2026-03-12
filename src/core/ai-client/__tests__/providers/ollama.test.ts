@@ -154,10 +154,15 @@ describe('OllamaProvider', () => {
     const provider = new OllamaProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 404, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'model not found' })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'model not found' })),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -168,10 +173,15 @@ describe('OllamaProvider', () => {
     const provider = new OllamaProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 429, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'too many requests' })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'too many requests' })),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -182,10 +192,15 @@ describe('OllamaProvider', () => {
     const provider = new OllamaProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 500, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue('server error'),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue('server error'),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -196,10 +211,15 @@ describe('OllamaProvider', () => {
     const provider = new OllamaProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 503, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(''),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(''),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -228,13 +248,13 @@ describe('OllamaProvider', () => {
     const fetchMock = createNDJSONFetchMock([ndjson]);
     vi.stubGlobal('fetch', fetchMock);
 
-    await collectChunks(provider.chat([
-      { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
-    ]));
+    await collectChunks(
+      provider.chat([{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]),
+    );
 
-    const requestBody = JSON.parse(
-      String((fetchMock.mock.calls[0][1] as RequestInit).body),
-    ) as { messages: Array<{ content: string; images?: string[] }> };
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)) as {
+      messages: Array<{ content: string; images?: string[] }>;
+    };
     expect(requestBody.messages[0].content).toBe('Hello');
     expect(requestBody.messages[0].images).toBeUndefined();
   });
@@ -247,19 +267,21 @@ describe('OllamaProvider', () => {
     const fetchMock = createNDJSONFetchMock([ndjson]);
     vi.stubGlobal('fetch', fetchMock);
 
-    await collectChunks(provider.chat([
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: 'Look' },
-          { type: 'image', image_url: { url: 'rawBase64Data' } },
-        ],
-      },
-    ]));
+    await collectChunks(
+      provider.chat([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Look' },
+            { type: 'image', image_url: { url: 'rawBase64Data' } },
+          ],
+        },
+      ]),
+    );
 
-    const requestBody = JSON.parse(
-      String((fetchMock.mock.calls[0][1] as RequestInit).body),
-    ) as { messages: Array<{ images?: string[] }> };
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)) as {
+      messages: Array<{ images?: string[] }>;
+    };
     expect(requestBody.messages[0].images).toEqual(['rawBase64Data']);
   });
 
@@ -286,9 +308,9 @@ describe('OllamaProvider', () => {
 
     await collectChunks(provider.chat([{ role: 'user', content: 'hello' }]));
 
-    const requestBody = JSON.parse(
-      String((fetchMock.mock.calls[0][1] as RequestInit).body),
-    ) as { messages: Array<{ role: string; content: string }> };
+    const requestBody = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
     expect(requestBody.messages[0]).toEqual({ role: 'user', content: 'hello' });
   });
 
@@ -296,10 +318,15 @@ describe('OllamaProvider', () => {
     const provider = new OllamaProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 400, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'bad model' })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'bad model' })),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),

@@ -1,10 +1,4 @@
-import type {
-  Action,
-  ActionResult,
-  TabState,
-  PageContext,
-  ScreenshotOptions,
-} from '@shared/types';
+import type { Action, ActionResult, TabState, PageContext, ScreenshotOptions } from '@shared/types';
 
 /**
  * Main browser controller interface.

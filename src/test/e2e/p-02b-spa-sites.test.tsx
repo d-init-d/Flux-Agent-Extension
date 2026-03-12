@@ -60,9 +60,9 @@ vi.mock('../../sidepanel/lib/extension-client', () => ({
       throw new Error('Runtime is not initialized for E2E test');
     }
 
-    const request = activeRuntime.handleMessage(
-      createExtensionMessage(type, payload),
-    ) as Promise<ExtensionResponse<ResponsePayloadMap[T]>>;
+    const request = activeRuntime.handleMessage(createExtensionMessage(type, payload)) as Promise<
+      ExtensionResponse<ResponsePayloadMap[T]>
+    >;
 
     pendingExtensionRequests.add(request);
     const response = await request.finally(() => {
@@ -241,12 +241,14 @@ function createPageContext(base: Partial<PageContext>): PageContext {
 
 async function runScenario(scenario: SpaScenario): Promise<void> {
   const user = userEvent.setup();
-  const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-    actionId: action.id,
-    success: true,
-    duration: 8,
-    data: { executed: true, type: action.type },
-  }));
+  const actionHandler = vi.fn(
+    async (action: Action): Promise<ActionResult> => ({
+      actionId: action.id,
+      success: true,
+      duration: 8,
+      data: { executed: true, type: action.type },
+    }),
+  );
 
   activeRuntime = new UISessionRuntime({
     bridge: createBridge(scenario.pageContext, actionHandler),
@@ -266,9 +268,9 @@ async function runScenario(scenario: SpaScenario): Promise<void> {
     expect(actionHandler).toHaveBeenCalledTimes(scenario.expectedExecutedActions.length);
   });
 
-  expect(actionHandler.mock.calls.map(([action]) => ({ id: action.id, type: action.type }))).toEqual(
-    scenario.expectedExecutedActions,
-  );
+  expect(
+    actionHandler.mock.calls.map(([action]) => ({ id: action.id, type: action.type })),
+  ).toEqual(scenario.expectedExecutedActions);
   expect(await screen.findByText(scenario.prompt)).toBeInTheDocument();
   expect(await screen.findByText(scenario.summary)).toBeInTheDocument();
 
@@ -336,12 +338,15 @@ describe('P-02b SPA-style E2E expansion', () => {
 
   it('P-02b covers a React-style dashboard route transition flow', async () => {
     await runScenario({
-      prompt: 'Open the Analytics route in the React admin and refresh the revenue chart for this quarter',
-      summary: 'React-style dashboard actions move through sidebar routing, tab state, and a chart refresh without a full page load.',
+      prompt:
+        'Open the Analytics route in the React admin and refresh the revenue chart for this quarter',
+      summary:
+        'React-style dashboard actions move through sidebar routing, tab state, and a chart refresh without a full page load.',
       pageContext: createPageContext({
         url: 'https://spa.example.test/react-admin#/overview',
         title: 'Acme Ops Console',
-        summary: 'Single-page React admin shell with sidebar routing, nested tabs, and panel actions.',
+        summary:
+          'Single-page React admin shell with sidebar routing, nested tabs, and panel actions.',
         interactiveElements: [
           {
             index: 1,
@@ -417,8 +422,10 @@ describe('P-02b SPA-style E2E expansion', () => {
 
   it('P-02b covers a Vue-style filter and list refinement flow', async () => {
     await runScenario({
-      prompt: 'In the Vue customer list, filter to enterprise accounts in Europe and open the Acme GmbH row',
-      summary: 'Vue-style reactive filtering applies chips and search criteria before opening the matching list row.',
+      prompt:
+        'In the Vue customer list, filter to enterprise accounts in Europe and open the Acme GmbH row',
+      summary:
+        'Vue-style reactive filtering applies chips and search criteria before opening the matching list row.',
       pageContext: createPageContext({
         url: 'https://spa.example.test/customers',
         title: 'Customers | Vue CRM',
@@ -519,12 +526,15 @@ describe('P-02b SPA-style E2E expansion', () => {
 
   it('P-02b covers an Angular-style wizard and stateful step flow', async () => {
     await runScenario({
-      prompt: 'In the Angular onboarding wizard, enter the workspace name, continue to Review, and finish setup',
-      summary: 'Angular-style wizard actions preserve form state across steps and finish on the final confirmation view.',
+      prompt:
+        'In the Angular onboarding wizard, enter the workspace name, continue to Review, and finish setup',
+      summary:
+        'Angular-style wizard actions preserve form state across steps and finish on the final confirmation view.',
       pageContext: createPageContext({
         url: 'https://spa.example.test/onboarding/organization',
         title: 'Workspace setup | Angular Portal',
-        summary: 'Stepper-based Angular onboarding flow with form state, next actions, and final confirmation.',
+        summary:
+          'Stepper-based Angular onboarding flow with form state, next actions, and final confirmation.',
         interactiveElements: [
           {
             index: 1,

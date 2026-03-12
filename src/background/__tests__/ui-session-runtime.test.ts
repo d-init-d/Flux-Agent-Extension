@@ -116,7 +116,11 @@ function createSavedWorkflow(id: string, overrides: Partial<SavedWorkflow> = {})
     description: 'Replays the checkout journey up to payment confirmation.',
     actions: [
       {
-        action: { id: `${id}-click-1`, type: 'click', selector: { css: '[data-testid="continue"]' } },
+        action: {
+          id: `${id}-click-1`,
+          type: 'click',
+          selector: { css: '[data-testid="continue"]' },
+        },
         timestamp: 100,
       },
       {
@@ -157,7 +161,8 @@ class MockProvider implements IAIProvider {
     _options?: AIRequestOptions,
   ): AsyncGenerator<AIStreamChunk, void, unknown> {
     this.lastMessages = messages;
-    const responseText = this.responseQueue.shift() ?? this.responseQueue.at(-1) ?? '{"summary":"noop","actions":[]}';
+    const responseText =
+      this.responseQueue.shift() ?? this.responseQueue.at(-1) ?? '{"summary":"noop","actions":[]}';
     const midpoint = Math.max(1, Math.floor(responseText.length / 2));
     yield { type: 'text', content: responseText.slice(0, midpoint) };
     yield { type: 'text', content: responseText.slice(midpoint) };
@@ -182,7 +187,10 @@ function createAIManager(responseText: string | string[]): {
   return { manager, provider };
 }
 
-function createLazyLoadedProvider(type: IAIProvider['name'], responseText = '{"summary":"noop","actions":[]}'): IAIProvider {
+function createLazyLoadedProvider(
+  type: IAIProvider['name'],
+  responseText = '{"summary":"noop","actions":[]}',
+): IAIProvider {
   return {
     name: type,
     supportsVision: false,
@@ -209,9 +217,17 @@ function createBridge(
   send: ReturnType<typeof vi.fn>;
   ensureContentScript: ReturnType<typeof vi.fn>;
   sendOneWay: ReturnType<typeof vi.fn>;
-  emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
+  emitEvent: (
+    type: string,
+    tabId: number,
+    frame: Record<string, unknown>,
+    payload?: unknown,
+  ) => void;
 } {
-  const eventHandlers = new Map<string, (tabId: number, frame: unknown, payload: unknown) => void>();
+  const eventHandlers = new Map<
+    string,
+    (tabId: number, frame: unknown, payload: unknown) => void
+  >();
   const send = vi.fn(async (_tabId: number, type: string, payload: unknown) => {
     if (type === 'GET_PAGE_CONTEXT') {
       return { context: createPageContext() };
@@ -229,12 +245,14 @@ function createBridge(
     send,
     ensureContentScript: vi.fn(async () => undefined),
     sendOneWay: vi.fn(),
-    onEvent: vi.fn((type: string, handler: (tabId: number, frame: unknown, payload: unknown) => void) => {
-      eventHandlers.set(type, handler);
-      return () => {
-        eventHandlers.delete(type);
-      };
-    }),
+    onEvent: vi.fn(
+      (type: string, handler: (tabId: number, frame: unknown, payload: unknown) => void) => {
+        eventHandlers.set(type, handler);
+        return () => {
+          eventHandlers.delete(type);
+        };
+      },
+    ),
     isReady: vi.fn(async () => true),
     emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => {
       eventHandlers.get(type)?.(tabId, frame, payload);
@@ -243,7 +261,12 @@ function createBridge(
     send: ReturnType<typeof vi.fn>;
     ensureContentScript: ReturnType<typeof vi.fn>;
     sendOneWay: ReturnType<typeof vi.fn>;
-    emitEvent: (type: string, tabId: number, frame: Record<string, unknown>, payload?: unknown) => void;
+    emitEvent: (
+      type: string,
+      tabId: number,
+      frame: Record<string, unknown>,
+      payload?: unknown,
+    ) => void;
   };
 }
 
@@ -297,7 +320,10 @@ function createGeolocationManagerStub(): IGeolocationMockManager {
   };
 }
 
-function installNavigationCompletion(url: string, mode: 'load' | 'domContentLoaded' = 'load'): void {
+function installNavigationCompletion(
+  url: string,
+  mode: 'load' | 'domContentLoaded' = 'load',
+): void {
   const tabsApi = chrome.tabs as MockTabsApi;
   const baseUpdate = vi.mocked(chrome.tabs.update).getMockImplementation();
 
@@ -338,12 +364,16 @@ function installNavigationCompletion(url: string, mode: 'load' | 'domContentLoad
         });
 
         if (mode === 'load') {
-          chrome.tabs.onUpdated.dispatch(tabId, { status: 'complete', url }, {
-            ...(nextTabs.find((tab) => tab.id === tabId) ?? response),
-            id: tabId,
-            url,
-            status: 'complete',
-          });
+          chrome.tabs.onUpdated.dispatch(
+            tabId,
+            { status: 'complete', url },
+            {
+              ...(nextTabs.find((tab) => tab.id === tabId) ?? response),
+              id: tabId,
+              url,
+              status: 'complete',
+            },
+          );
           chrome.webNavigation.onCompleted.dispatch({
             tabId,
             frameId: 0,
@@ -359,7 +389,10 @@ function installNavigationCompletion(url: string, mode: 'load' | 'domContentLoad
   });
 }
 
-function installCreatedTabCompletion(url: string, mode: 'load' | 'domContentLoaded' = 'load'): void {
+function installCreatedTabCompletion(
+  url: string,
+  mode: 'load' | 'domContentLoaded' = 'load',
+): void {
   const tabsApi = chrome.tabs as MockTabsApi;
   const baseCreate = vi.mocked(chrome.tabs.create).getMockImplementation();
 
@@ -400,12 +433,16 @@ function installCreatedTabCompletion(url: string, mode: 'load' | 'domContentLoad
         });
 
         if (mode === 'load') {
-          chrome.tabs.onUpdated.dispatch(response.id, { status: 'complete', url }, {
-            ...(nextTabs.find((tab) => tab.id === response.id) ?? response),
-            id: response.id,
-            url,
-            status: 'complete',
-          });
+          chrome.tabs.onUpdated.dispatch(
+            response.id,
+            { status: 'complete', url },
+            {
+              ...(nextTabs.find((tab) => tab.id === response.id) ?? response),
+              id: response.id,
+              url,
+              status: 'complete',
+            },
+          );
           chrome.webNavigation.onCompleted.dispatch({
             tabId: response.id,
             frameId: 0,
@@ -479,7 +516,9 @@ describe('UI session runtime', () => {
     expect(createResponse.success).toBe(true);
     expect(createResponse.data?.session.config.id).toBeTruthy();
 
-    const listResponse = await runtime.handleMessage(createExtensionMessage('SESSION_LIST', undefined));
+    const listResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_LIST', undefined),
+    );
     expect(listResponse.success).toBe(true);
     expect(listResponse.data?.sessions).toHaveLength(1);
     expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
@@ -494,7 +533,10 @@ describe('UI session runtime', () => {
     await chrome.storage.local.set({
       savedWorkflows: {
         version: 1,
-        items: [createSavedWorkflow('workflow-1'), createSavedWorkflow('workflow-2', { name: 'Billing retry' })],
+        items: [
+          createSavedWorkflow('workflow-1'),
+          createSavedWorkflow('workflow-2', { name: 'Billing retry' }),
+        ],
       },
     });
 
@@ -508,9 +550,14 @@ describe('UI session runtime', () => {
       aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
     });
 
-    const listResponse = await runtime.handleMessage(createExtensionMessage('WORKFLOW_LIST', undefined));
+    const listResponse = await runtime.handleMessage(
+      createExtensionMessage('WORKFLOW_LIST', undefined),
+    );
     expect(listResponse.success).toBe(true);
-    expect(listResponse.data?.workflows.map((workflow) => workflow.id)).toEqual(['workflow-1', 'workflow-2']);
+    expect(listResponse.data?.workflows.map((workflow) => workflow.id)).toEqual([
+      'workflow-1',
+      'workflow-2',
+    ]);
 
     const updateResponse = await runtime.handleMessage(
       createExtensionMessage('WORKFLOW_UPDATE', {
@@ -618,11 +665,13 @@ describe('UI session runtime', () => {
       },
     });
 
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge: createBridge(actionHandler),
       logger: new Logger('FluxSW:test', 'debug'),
@@ -749,7 +798,9 @@ describe('UI session runtime', () => {
     );
 
     expect(sendResponse.success).toBe(true);
-    const userMessage = [...ai.provider.lastMessages].reverse().find((message) => message.role === 'user');
+    const userMessage = [...ai.provider.lastMessages]
+      .reverse()
+      .find((message) => message.role === 'user');
     expect(typeof userMessage?.content).toBe('string');
     const userContent = userMessage?.content as string;
     expect(userContent).toContain('## Tabs');
@@ -770,12 +821,14 @@ describe('UI session runtime', () => {
   });
 
   it('streams an AI plan, executes the action, and persists the UI-facing summary', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 12,
-      data: { clicked: true },
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 12,
+        data: { clicked: true },
+      }),
+    );
     const bridge = createBridge(actionHandler);
     const runtime = new UISessionRuntime({
       bridge,
@@ -835,7 +888,9 @@ describe('UI session runtime', () => {
     );
     expect(actionHandler).toHaveBeenCalledTimes(1);
 
-    const broadcastCalls = vi.mocked(chrome.runtime.sendMessage).mock.calls.map(([message]) => message);
+    const broadcastCalls = vi
+      .mocked(chrome.runtime.sendMessage)
+      .mock.calls.map(([message]) => message);
     expect(broadcastCalls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'EVENT_AI_STREAM' }),
@@ -907,11 +962,13 @@ describe('UI session runtime', () => {
   });
 
   it('routes iframe DOM actions to the resolved frame target when selector.frame uses url matching', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     const runtime = new UISessionRuntime({
@@ -993,14 +1050,17 @@ describe('UI session runtime', () => {
   });
 
   it('retries recoverable action failures before succeeding', async () => {
-    const actionHandler = vi.fn(async (_action: Action): Promise<ActionResult> => ({
-      actionId: 'action-retry',
-      success: true,
-      duration: 9,
-      data: { clicked: true },
-    }));
+    const actionHandler = vi.fn(
+      async (_action: Action): Promise<ActionResult> => ({
+        actionId: 'action-retry',
+        success: true,
+        duration: 9,
+        data: { clicked: true },
+      }),
+    );
 
-    actionHandler.mockResolvedValueOnce({
+    actionHandler
+      .mockResolvedValueOnce({
         actionId: 'action-retry',
         success: false,
         duration: 10,
@@ -1063,11 +1123,13 @@ describe('UI session runtime', () => {
   });
 
   it('stores recorded click actions with selector position and frame context', async () => {
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1168,11 +1230,13 @@ describe('UI session runtime', () => {
       },
     ]);
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1259,11 +1323,13 @@ describe('UI session runtime', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1331,11 +1397,13 @@ describe('UI session runtime', () => {
   });
 
   it('restarts recording with a fresh action list after an earlier recording', async () => {
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1390,11 +1458,13 @@ describe('UI session runtime', () => {
   });
 
   it('sends start, pause, resume, and stop recording state updates to the target tab', async () => {
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1460,11 +1530,13 @@ describe('UI session runtime', () => {
   });
 
   it('stores recorded fill actions with typed values and iframe frame context', async () => {
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1526,11 +1598,13 @@ describe('UI session runtime', () => {
   });
 
   it('ignores recorded input events when recording is inactive', async () => {
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1593,11 +1667,13 @@ describe('UI session runtime', () => {
       },
     ]);
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1727,11 +1803,13 @@ describe('UI session runtime', () => {
       },
     ]);
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1804,11 +1882,13 @@ describe('UI session runtime', () => {
       },
     ]);
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1874,11 +1954,13 @@ describe('UI session runtime', () => {
       },
     ]);
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -1930,11 +2012,13 @@ describe('UI session runtime', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
 
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
     const runtime = new UISessionRuntime({
       bridge,
@@ -2073,11 +2157,13 @@ describe('UI session runtime', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-09T00:00:00.000Z'));
 
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
     const runtime = new UISessionRuntime({
       bridge,
@@ -2164,11 +2250,13 @@ describe('UI session runtime', () => {
   });
 
   it('rejects invalid playback transitions and invalid speed values', async () => {
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -2220,9 +2308,7 @@ describe('UI session runtime', () => {
       ),
     ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
 
-    await runtime.handleMessage(
-      createExtensionMessage('SESSION_START', { sessionId: sessionId! }),
-    );
+    await runtime.handleMessage(createExtensionMessage('SESSION_START', { sessionId: sessionId! }));
 
     await expect(
       runtime.handleMessage(
@@ -2230,9 +2316,7 @@ describe('UI session runtime', () => {
       ),
     ).rejects.toMatchObject({ code: 'ACTION_INVALID' });
 
-    await runtime.handleMessage(
-      createExtensionMessage('SESSION_PAUSE', { sessionId: sessionId! }),
-    );
+    await runtime.handleMessage(createExtensionMessage('SESSION_PAUSE', { sessionId: sessionId! }));
 
     bridge.emitEvent('RECORDED_CLICK', 1, topFrame, {
       action: {
@@ -2255,11 +2339,13 @@ describe('UI session runtime', () => {
   });
 
   it('routes network interception actions to the background manager instead of the DOM bridge', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
     const networkInterceptionManager = createNetworkManagerStub();
 
@@ -2309,17 +2395,17 @@ describe('UI session runtime', () => {
       }),
     );
     expect(actionHandler).not.toHaveBeenCalled();
-    expect(
-      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
-    ).toHaveLength(0);
+    expect(bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION')).toHaveLength(0);
   });
 
   it('routes device emulation actions to the background manager instead of the DOM bridge', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
     const deviceEmulationManager = createDeviceManagerStub();
 
@@ -2329,7 +2415,9 @@ describe('UI session runtime', () => {
       aiClientManager: createAIManager(
         JSON.stringify({
           summary: 'Use the iPhone preset',
-          actions: [{ id: 'emu-1', type: 'emulateDevice', preset: 'iphone', orientation: 'portrait' }],
+          actions: [
+            { id: 'emu-1', type: 'emulateDevice', preset: 'iphone', orientation: 'portrait' },
+          ],
         }),
       ).manager,
       networkInterceptionManager: createNetworkManagerStub(),
@@ -2361,17 +2449,17 @@ describe('UI session runtime', () => {
       }),
     );
     expect(actionHandler).not.toHaveBeenCalled();
-    expect(
-      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
-    ).toHaveLength(0);
+    expect(bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION')).toHaveLength(0);
   });
 
   it('routes geolocation mock actions to the background manager instead of the DOM bridge', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
     const geolocationMockManager = createGeolocationManagerStub();
 
@@ -2423,18 +2511,18 @@ describe('UI session runtime', () => {
       }),
     );
     expect(actionHandler).not.toHaveBeenCalled();
-    expect(
-      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
-    ).toHaveLength(0);
+    expect(bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION')).toHaveLength(0);
   });
 
   it('stages uploads for the session and resolves them into uploadFile DOM actions', async () => {
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 8,
-      data: { uploaded: true },
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 8,
+        data: { uploaded: true },
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     const runtime = new UISessionRuntime({
@@ -2746,7 +2834,10 @@ describe('UI session runtime', () => {
       ]);
 
       yield { type: 'text', content: '{"summary":"Switch to the second tab",' };
-      yield { type: 'text', content: '"actions":[{"id":"switch-snapshot","type":"switchTab","tabIndex":1}]}' };
+      yield {
+        type: 'text',
+        content: '"actions":[{"id":"switch-snapshot","type":"switchTab","tabIndex":1}]}',
+      };
     });
 
     const runtime = new UISessionRuntime({
@@ -2791,7 +2882,9 @@ describe('UI session runtime', () => {
     }));
 
     bridge.send.mockImplementation(async (tabId: number, type: string, payload: unknown) => {
-      const tab = (chrome.tabs as MockTabsApi)._getTabs?.().find((candidate) => candidate.id === tabId);
+      const tab = (chrome.tabs as MockTabsApi)
+        ._getTabs?.()
+        .find((candidate) => candidate.id === tabId);
 
       if (tabId === 2 && tab?.status !== 'complete') {
         throw new Error(`Tab ${tabId} is still loading`);
@@ -2975,7 +3068,11 @@ describe('UI session runtime', () => {
           actions: [
             { id: 'switch-2', type: 'switchTab', tabIndex: 1 },
             { id: 'close-2', type: 'closeTab' },
-            { id: 'click-after-close', type: 'click', selector: { role: 'button', textExact: 'Submit' } },
+            {
+              id: 'click-after-close',
+              type: 'click',
+              selector: { role: 'button', textExact: 'Submit' },
+            },
           ],
         }),
       ).manager,
@@ -3177,7 +3274,10 @@ describe('UI session runtime', () => {
       ]);
 
       yield { type: 'text', content: '{"summary":"Close the second tab",' };
-      yield { type: 'text', content: '"actions":[{"id":"close-missing","type":"closeTab","tabIndex":1}]}' };
+      yield {
+        type: 'text',
+        content: '"actions":[{"id":"close-missing","type":"closeTab","tabIndex":1}]}',
+      };
     });
 
     const runtime = new UISessionRuntime({
@@ -3271,11 +3371,13 @@ describe('UI session runtime', () => {
   it('routes savePdf actions through CDP debugger and triggers chrome.downloads', async () => {
     vi.spyOn(chrome.debugger, 'sendCommand').mockResolvedValue({ data: 'bW9jay1wZGYtZGF0YQ==' });
 
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const bridge = createBridge(actionHandler);
 
     const runtime = new UISessionRuntime({
@@ -3325,9 +3427,7 @@ describe('UI session runtime', () => {
     );
     expect(chrome.debugger.detach).toHaveBeenCalledWith({ tabId: 1 });
     expect(actionHandler).not.toHaveBeenCalled();
-    expect(
-      bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION'),
-    ).toHaveLength(0);
+    expect(bridge.send.mock.calls.filter(([, type]) => type === 'EXECUTE_ACTION')).toHaveLength(0);
 
     const stateResponse = await runtime.handleMessage(
       createExtensionMessage('SESSION_GET_STATE', { sessionId: sessionId! }),
@@ -3346,11 +3446,13 @@ describe('UI session runtime', () => {
     vi.setSystemTime(new Date('2026-03-09T12:34:56.789Z'));
     vi.mocked(chrome.downloads.download).mockClear();
 
-    const bridge = createBridge(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 5,
-    }));
+    const bridge = createBridge(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      }),
+    );
     const runtime = new UISessionRuntime({
       bridge,
       logger: new Logger('FluxSW:test', 'debug'),
@@ -3455,7 +3557,10 @@ describe('UI session runtime', () => {
     expect(jsonExport.actions[2].action.value).toBe('[REDACTED_EMAIL]');
 
     const playwrightResponse = await runtime.handleMessage(
-      createExtensionMessage('SESSION_RECORDING_EXPORT', { sessionId: sessionId!, format: 'playwright' }),
+      createExtensionMessage('SESSION_RECORDING_EXPORT', {
+        sessionId: sessionId!,
+        format: 'playwright',
+      }),
     );
     expect(playwrightResponse.success).toBe(true);
     expect(playwrightResponse.data).toEqual(
@@ -3482,7 +3587,10 @@ describe('UI session runtime', () => {
     expect(playwrightScript).toContain('recording.actions[index]');
 
     const puppeteerResponse = await runtime.handleMessage(
-      createExtensionMessage('SESSION_RECORDING_EXPORT', { sessionId: sessionId!, format: 'puppeteer' }),
+      createExtensionMessage('SESSION_RECORDING_EXPORT', {
+        sessionId: sessionId!,
+        format: 'puppeteer',
+      }),
     );
     expect(puppeteerResponse.success).toBe(true);
     expect(puppeteerResponse.data).toEqual(
@@ -3502,7 +3610,9 @@ describe('UI session runtime', () => {
     );
     const puppeteerScript = decodeDownloadTextUrl(puppeteerDownloadCall?.url ?? '');
     expect(puppeteerScript).toContain("const puppeteer = require('puppeteer');");
-    expect(puppeteerScript).toContain('await new Promise((resolve) => setTimeout(resolve, delayMs));');
+    expect(puppeteerScript).toContain(
+      'await new Promise((resolve) => setTimeout(resolve, delayMs));',
+    );
     expect(puppeteerScript).toContain('[REDACTED_EMAIL]');
     expect(puppeteerScript).not.toContain('alice@example.com');
     expect(puppeteerScript).toContain('frame-doc-7');

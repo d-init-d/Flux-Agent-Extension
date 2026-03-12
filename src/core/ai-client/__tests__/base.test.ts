@@ -326,13 +326,16 @@ describe('BaseProvider', () => {
     const provider = new TestProvider();
     await provider.initialize(initializedConfig);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers(),
-      body: null,
-      text: vi.fn().mockResolvedValue(''),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        body: null,
+        text: vi.fn().mockResolvedValue(''),
+      }),
+    );
 
     await expect(collectChunks(provider.chat(messages, { maxRetries: 0 }))).rejects.toMatchObject({
       code: ErrorCode.AI_API_ERROR,
@@ -352,9 +355,12 @@ describe('BaseProvider', () => {
     const external = new AbortController();
     external.abort();
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
-      throw new Error('aborted');
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(() => {
+        throw new Error('aborted');
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat(messages, { signal: external.signal })),
@@ -394,9 +400,7 @@ describe('BaseProvider', () => {
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
-    await expect(
-      collectChunks(provider.chat(messages, { maxRetries: 0 })),
-    ).rejects.toMatchObject({
+    await expect(collectChunks(provider.chat(messages, { maxRetries: 0 }))).rejects.toMatchObject({
       code: ErrorCode.AI_API_ERROR,
       message: expect.stringContaining('Network error'),
     });
@@ -409,26 +413,29 @@ describe('BaseProvider', () => {
     const largeBody = 'x'.repeat(8000);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(createErrorResponse(500, largeBody)));
 
-    await expect(
-      collectChunks(provider.chat(messages, { maxRetries: 0 })),
-    ).rejects.toMatchObject({ code: ErrorCode.AI_API_ERROR });
+    await expect(collectChunks(provider.chat(messages, { maxRetries: 0 }))).rejects.toMatchObject({
+      code: ErrorCode.AI_API_ERROR,
+    });
   });
 
   it('handles safeReadBody failure gracefully', async () => {
     const provider = new TestProvider();
     await provider.initialize(initializedConfig);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      headers: new Headers(),
-      body: null,
-      text: vi.fn().mockRejectedValue(new Error('read failed')),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers(),
+        body: null,
+        text: vi.fn().mockRejectedValue(new Error('read failed')),
+      }),
+    );
 
-    await expect(
-      collectChunks(provider.chat(messages, { maxRetries: 0 })),
-    ).rejects.toMatchObject({ code: ErrorCode.AI_API_ERROR });
+    await expect(collectChunks(provider.chat(messages, { maxRetries: 0 }))).rejects.toMatchObject({
+      code: ErrorCode.AI_API_ERROR,
+    });
   });
 
   it('updates rate limiter headers from response', async () => {

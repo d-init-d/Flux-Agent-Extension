@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Bolt,
-  Eye,
-  FileText,
-  MousePointerClick,
-  Sparkles,
-  TimerReset,
-} from 'lucide-react';
+import { Bolt, Eye, FileText, MousePointerClick, Sparkles, TimerReset } from 'lucide-react';
 import {
   Badge,
   Button,
@@ -121,7 +114,8 @@ async function getActiveTabPageInfo(): Promise<PageInfo> {
     return {
       ...DEFAULT_PAGE_INFO,
       status: 'Active tab unavailable',
-      summary: 'The popup could not read the current tab context, so quick actions stay in preview mode.',
+      summary:
+        'The popup could not read the current tab context, so quick actions stay in preview mode.',
     };
   }
 }
@@ -140,7 +134,10 @@ export function App() {
       setIsOnboardingLocked(false);
     }
 
-    function handleStorageChange(changes: Record<string, chrome.storage.StorageChange>, areaName: string): void {
+    function handleStorageChange(
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string,
+    ): void {
       if (!isActive || areaName !== 'local' || !(ONBOARDING_STORAGE_KEY in changes)) {
         return;
       }
@@ -221,7 +218,9 @@ export function App() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[rgb(var(--color-text-secondary))]">
               Flux Agent
             </p>
-            <h1 className="mt-1 text-xl font-semibold leading-snug tracking-tight">Quick actions</h1>
+            <h1 className="mt-1 text-xl font-semibold leading-snug tracking-tight">
+              Quick actions
+            </h1>
             <p className="mt-1 text-sm text-[rgb(var(--color-text-secondary))]">
               Compact command center for the current page.
             </p>
@@ -283,7 +282,10 @@ export function App() {
 
         <section aria-labelledby="popup-quick-actions-heading" className="min-h-0 flex-1">
           {needsOnboarding ? (
-            <Card variant="elevated" className="mb-3 border border-[rgb(var(--color-primary-200))] bg-[linear-gradient(135deg,rgb(var(--color-primary-50))_0%,rgb(var(--color-bg-primary))_100%)]">
+            <Card
+              variant="elevated"
+              className="mb-3 border border-[rgb(var(--color-primary-200))] bg-[linear-gradient(135deg,rgb(var(--color-primary-50))_0%,rgb(var(--color-bg-primary))_100%)]"
+            >
               <CardContent className="flex items-start justify-between gap-3 px-4 py-4">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[rgb(var(--color-primary-700))]">
@@ -293,13 +295,18 @@ export function App() {
                     Open guided setup before your first live workflow.
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                    Review the welcome steps, verify a provider connection, and confirm the capability boundaries in options.
+                    Review the welcome steps, verify a provider connection, and confirm the
+                    capability boundaries in options.
                   </p>
                 </div>
 
-                <Button type="button" className="shrink-0" onClick={() => {
-                  void handleFinishSetup();
-                }}>
+                <Button
+                  type="button"
+                  className="shrink-0"
+                  onClick={() => {
+                    void handleFinishSetup();
+                  }}
+                >
                   Open guided setup
                 </Button>
               </CardContent>
@@ -352,7 +359,11 @@ export function App() {
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-tight">
-              {quickActionsDisabled ? 'Guided setup required' : pageInfo.isFallback ? 'Preview mode' : 'Live tab context'}
+              {quickActionsDisabled
+                ? 'Guided setup required'
+                : pageInfo.isFallback
+                  ? 'Preview mode'
+                  : 'Live tab context'}
             </p>
             <p className="truncate text-xs text-[rgb(var(--color-text-secondary))]">
               {quickActionsDisabled

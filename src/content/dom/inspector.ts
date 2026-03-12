@@ -172,8 +172,7 @@ export class DOMInspector {
       for (const [index, candidate] of limited.entries()) {
         const htmlElement = candidate.element;
         const inputLike =
-          htmlElement instanceof HTMLInputElement ||
-          htmlElement instanceof HTMLTextAreaElement;
+          htmlElement instanceof HTMLInputElement || htmlElement instanceof HTMLTextAreaElement;
 
         elements.push({
           index,
@@ -359,7 +358,8 @@ export class DOMInspector {
     const headingPart = firstHeading?.text
       ? `heading "${firstHeading.text}"`
       : 'no visible headings';
-    const formPart = formCount === 0 ? 'no visible forms' : `${formCount} visible form${formCount > 1 ? 's' : ''}`;
+    const formPart =
+      formCount === 0 ? 'no visible forms' : `${formCount} visible form${formCount > 1 ? 's' : ''}`;
     const interactionPart =
       `${interactiveCount} interactive elements` +
       ` (${buttonCount} buttons, ${linkCount} links, ${fieldCount} fields)`;
@@ -401,7 +401,8 @@ export class DOMInspector {
   private isElementVisible(element: HTMLElement): boolean {
     const computedStyle = window.getComputedStyle(element);
     if (computedStyle.display === 'none') return false;
-    if (computedStyle.visibility === 'hidden' || computedStyle.visibility === 'collapse') return false;
+    if (computedStyle.visibility === 'hidden' || computedStyle.visibility === 'collapse')
+      return false;
     if (Number.parseFloat(computedStyle.opacity || '1') <= 0) return false;
     if (element.hasAttribute('hidden')) return false;
     if (element.getAttribute('aria-hidden') === 'true') return false;

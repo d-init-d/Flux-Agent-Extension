@@ -149,8 +149,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
           if (pending) {
             clearTimeout(pending.timer);
             this.pendingRequests.delete(message.id);
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             pending.reject(
               new ExtensionError(
                 ErrorCode.CONTENT_SCRIPT_NOT_READY,
@@ -178,11 +177,12 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     };
 
     // Fire and forget — swallow any errors
-    chrome.tabs.sendMessage(tabId, message, this.toSendMessageOptions(target)).catch((error: unknown) => {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.warn(`sendOneWay failed for tab ${tabId}: ${errorMessage}`);
-    });
+    chrome.tabs
+      .sendMessage(tabId, message, this.toSendMessageOptions(target))
+      .catch((error: unknown) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(`sendOneWay failed for tab ${tabId}: ${errorMessage}`);
+      });
 
     this.logger.debug(`Sent one-way message type="${type}" id="${message.id}" to tab ${tabId}`);
   }
@@ -256,8 +256,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
         files: [CONTENT_SCRIPT_PATH],
       });
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown injection error';
+      const message = error instanceof Error ? error.message : 'Unknown injection error';
       throw new ExtensionError(
         ErrorCode.CONTENT_SCRIPT_INJECTION_FAILED,
         `Failed to inject content script into tab ${tabId}: ${message}`,
@@ -271,9 +270,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
 
       const ready = await this.isReady(tabId, target);
       if (ready) {
-        this.logger.info(
-          `Content script ready in tab ${tabId} after ${attempt} retry attempt(s)`,
-        );
+        this.logger.info(`Content script ready in tab ${tabId} after ${attempt} retry attempt(s)`);
         return;
       }
 
@@ -384,7 +381,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     if (handlers && handlers.size > 0) {
       for (const handler of handlers) {
         try {
-            handler(tabId, frame, bridgeMessage.payload);
+          handler(tabId, frame, bridgeMessage.payload);
         } catch (error: unknown) {
           this.logger.error(
             `Event handler error for type="${bridgeMessage.type}" from tab ${tabId}`,
@@ -460,8 +457,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
           if (pending) {
             clearTimeout(pending.timer);
             this.pendingRequests.delete(message.id);
-            const errorMessage =
-              error instanceof Error ? error.message : 'Unknown error';
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             pending.reject(
               new ExtensionError(
                 ErrorCode.CONTENT_SCRIPT_NOT_READY,
@@ -497,7 +493,9 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  private toSendMessageOptions(target?: BridgeSendTarget): { frameId?: number; documentId?: string } | undefined {
+  private toSendMessageOptions(
+    target?: BridgeSendTarget,
+  ): { frameId?: number; documentId?: string } | undefined {
     if (!target?.documentId && target?.frameId === undefined) {
       return undefined;
     }

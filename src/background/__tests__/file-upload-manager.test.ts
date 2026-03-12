@@ -59,7 +59,9 @@ describe('FileUploadManager', () => {
     }
 
     try {
-      manager.stageUploads('session-1', [createUpload({ size: FILE_UPLOAD_LIMITS.maxFileSizeBytes + 1 })]);
+      manager.stageUploads('session-1', [
+        createUpload({ size: FILE_UPLOAD_LIMITS.maxFileSizeBytes + 1 }),
+      ]);
       throw new Error('Expected file size limit to throw');
     } catch (error) {
       expect(error).toMatchObject({ code: ErrorCode.FILE_UPLOAD_LIMIT_EXCEEDED });

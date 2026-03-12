@@ -1,6 +1,10 @@
 import { Badge, Button, Input, Modal } from '@/ui/components';
 import type { SavedWorkflow } from '@shared/types';
-import type { WorkflowSaveDraft, WorkflowSaveMode, WorkflowViewMode } from '../store/workflowUIStore';
+import type {
+  WorkflowSaveDraft,
+  WorkflowSaveMode,
+  WorkflowViewMode,
+} from '../store/workflowUIStore';
 
 interface WorkflowLibraryModalProps {
   open: boolean;
@@ -144,7 +148,9 @@ function WorkflowCard({
           </Badge>
         </div>
         {workflow.description ? (
-          <p className="mt-2 text-sm leading-relaxed text-content-secondary">{workflow.description}</p>
+          <p className="mt-2 text-sm leading-relaxed text-content-secondary">
+            {workflow.description}
+          </p>
         ) : (
           <p className="mt-2 text-sm leading-relaxed text-content-tertiary">
             No description added yet.
@@ -153,7 +159,9 @@ function WorkflowCard({
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-content-tertiary">
           <span>{getRelativeTimeLabel(workflow.updatedAt)}</span>
           <span aria-hidden="true">•</span>
-          <span title={formatTimestamp(workflow.updatedAt)}>{formatTimestamp(workflow.updatedAt)}</span>
+          <span title={formatTimestamp(workflow.updatedAt)}>
+            {formatTimestamp(workflow.updatedAt)}
+          </span>
           {sourceLabel ? (
             <>
               <span aria-hidden="true">•</span>
@@ -199,7 +207,8 @@ export function WorkflowLibraryModal({
   onSelectWorkflow,
   onViewModeChange,
 }: WorkflowLibraryModalProps) {
-  const selectedWorkflow = workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? workflows[0] ?? null;
+  const selectedWorkflow =
+    workflows.find((workflow) => workflow.id === selectedWorkflowId) ?? workflows[0] ?? null;
 
   return (
     <Modal
@@ -212,7 +221,9 @@ export function WorkflowLibraryModal({
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface-secondary/60 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold tracking-tight text-content-primary">Workflow library</p>
+            <p className="text-sm font-semibold tracking-tight text-content-primary">
+              Workflow library
+            </p>
             <p className="mt-1 text-sm leading-relaxed text-content-secondary">
               {workflows.length === 0
                 ? 'No saved workflows yet. Capture a recording and save it here to start building a reusable library.'
@@ -245,7 +256,10 @@ export function WorkflowLibraryModal({
         </div>
 
         {error ? (
-          <div className="rounded-2xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-500" role="status">
+          <div
+            className="rounded-2xl border border-error-200 bg-error-50 px-4 py-3 text-sm text-error-500"
+            role="status"
+          >
             {error}
           </div>
         ) : null}
@@ -277,7 +291,8 @@ export function WorkflowLibraryModal({
               Your workflow library is empty
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-content-secondary">
-              Save a recorded session to create a reusable workflow card with tags, action counts, and session context.
+              Save a recorded session to create a reusable workflow card with tags, action counts,
+              and session context.
             </p>
             <div className="mt-5">
               <Button
@@ -295,7 +310,10 @@ export function WorkflowLibraryModal({
         ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(280px,1fr)]">
             <div
-              className={['grid gap-3', viewMode === 'grid' ? 'sm:grid-cols-2' : 'grid-cols-1'].join(' ')}
+              className={[
+                'grid gap-3',
+                viewMode === 'grid' ? 'sm:grid-cols-2' : 'grid-cols-1',
+              ].join(' ')}
             >
               {workflows.map((workflow) => (
                 <WorkflowCard
@@ -319,7 +337,8 @@ export function WorkflowLibraryModal({
                       {selectedWorkflow.name}
                     </h3>
                     <p className="mt-2 text-sm leading-relaxed text-content-secondary">
-                      {selectedWorkflow.description || 'This workflow is saved without a description.'}
+                      {selectedWorkflow.description ||
+                        'This workflow is saved without a description.'}
                     </p>
                   </div>
 
@@ -345,7 +364,9 @@ export function WorkflowLibraryModal({
                   </div>
 
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-content-tertiary">Tags</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-content-tertiary">
+                      Tags
+                    </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {selectedWorkflow.tags.length > 0 ? (
                         selectedWorkflow.tags.map((tag) => (
@@ -384,9 +405,12 @@ export function WorkflowLibraryModal({
                   </div>
 
                   <div className="mt-auto rounded-2xl border border-border bg-surface-secondary/60 p-3">
-                    <p className="text-sm font-medium text-content-primary">Use this workflow in the current session</p>
+                    <p className="text-sm font-medium text-content-primary">
+                      Use this workflow in the current session
+                    </p>
                     <p className="mt-1 text-sm leading-relaxed text-content-secondary">
-                      Run loads these recorded steps into the selected session and starts playback immediately.
+                      Run loads these recorded steps into the selected session and starts playback
+                      immediately.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button

@@ -1,13 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { createRef } from 'react';
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from '../Card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../Card';
 
 describe('Card', () => {
   // -------------------------------------------------------------------------

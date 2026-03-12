@@ -52,9 +52,7 @@ describe('validateUrl', () => {
       const result = validateUrl('http://localhost:3000');
       expect(result.valid).toBe(true);
       // localhost HTTP should NOT generate the "insecure HTTP" warning
-      expect(result.warnings).not.toContain(
-        expect.stringContaining('insecure HTTP'),
-      );
+      expect(result.warnings).not.toContain(expect.stringContaining('insecure HTTP'));
     });
 
     it('should accept 127.0.0.1 as localhost', () => {
@@ -304,9 +302,7 @@ describe('validateUrl', () => {
 
     it('should not warn for plain ASCII domains', () => {
       const result = validateUrl('https://apple.com');
-      const homoglyphWarnings = result.warnings.filter((w) =>
-        /homoglyph/i.test(w),
-      );
+      const homoglyphWarnings = result.warnings.filter((w) => /homoglyph/i.test(w));
       expect(homoglyphWarnings).toHaveLength(0);
     });
   });
@@ -324,9 +320,7 @@ describe('validateUrl', () => {
 
     it('should not warn for normal subdomains (<=4 dots)', () => {
       const result = validateUrl('https://www.us-east.cdn.example.com');
-      const subWarnings = result.warnings.filter((w) =>
-        /excessive subdomains/i.test(w),
-      );
+      const subWarnings = result.warnings.filter((w) => /excessive subdomains/i.test(w));
       expect(subWarnings).toHaveLength(0);
     });
   });
@@ -338,17 +332,13 @@ describe('validateUrl', () => {
     it('should warn when a subdomain segment matches IP pattern', () => {
       const result = validateUrl('https://192-168-1-1.evil.com');
       expect(result.warnings).toEqual(
-        expect.arrayContaining([
-          expect.stringMatching(/IP-like segment/i),
-        ]),
+        expect.arrayContaining([expect.stringMatching(/IP-like segment/i)]),
       );
     });
 
     it('should not warn for normal subdomain segments', () => {
       const result = validateUrl('https://cdn-west.example.com');
-      const ipSegmentWarnings = result.warnings.filter((w) =>
-        /IP-like segment/i.test(w),
-      );
+      const ipSegmentWarnings = result.warnings.filter((w) => /IP-like segment/i.test(w));
       expect(ipSegmentWarnings).toHaveLength(0);
     });
   });

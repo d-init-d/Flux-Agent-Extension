@@ -69,10 +69,20 @@ describe('AutoWaitEngine', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-        width: 100, height: 50, top: 0, left: 0, bottom: 50, right: 100, x: 0, y: 0, toJSON: () => {},
+        width: 100,
+        height: 50,
+        top: 0,
+        left: 0,
+        bottom: 50,
+        right: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       });
       vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-        display: 'block', visibility: 'visible', opacity: '1',
+        display: 'block',
+        visibility: 'visible',
+        opacity: '1',
       } as unknown as CSSStyleDeclaration);
       const { engine, selectorEngine } = createEngine(el);
 
@@ -123,10 +133,20 @@ describe('AutoWaitEngine', () => {
       const el = document.createElement('div');
       document.body.appendChild(el);
       vi.spyOn(el, 'getBoundingClientRect').mockReturnValue({
-        width: 100, height: 50, top: 0, left: 0, bottom: 50, right: 100, x: 0, y: 0, toJSON: () => {},
+        width: 100,
+        height: 50,
+        top: 0,
+        left: 0,
+        bottom: 50,
+        right: 100,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
       });
       vi.spyOn(window, 'getComputedStyle').mockReturnValue({
-        display: 'block', visibility: 'visible', opacity: '1',
+        display: 'block',
+        visibility: 'visible',
+        opacity: '1',
       } as unknown as CSSStyleDeclaration);
       const { engine, selectorEngine } = createEngine(el);
       vi.spyOn(selectorEngine, 'findElement').mockReturnValue(el);
@@ -140,9 +160,9 @@ describe('AutoWaitEngine', () => {
   describe('waitForNavigation', () => {
     it('throws for invalid urlPattern regex', async () => {
       const { engine } = createEngine();
-      await expect(
-        engine.waitForNavigation('[invalid', 100),
-      ).rejects.toThrow(/Invalid urlPattern regex/);
+      await expect(engine.waitForNavigation('[invalid', 100)).rejects.toThrow(
+        /Invalid urlPattern regex/,
+      );
       engine.destroy();
     });
 

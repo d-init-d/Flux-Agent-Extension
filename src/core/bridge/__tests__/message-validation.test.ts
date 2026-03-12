@@ -79,9 +79,7 @@ describe('validateMessage', () => {
 
     it('should accept timestamp slightly in the future (within tolerance)', () => {
       // 3 seconds in the future — within the 5s tolerance
-      const result = validateMessage(
-        validMessage({ timestamp: Date.now() + 3_000 }),
-      );
+      const result = validateMessage(validMessage({ timestamp: Date.now() + 3_000 }));
       expect(result.valid).toBe(true);
     });
   });
@@ -214,17 +212,13 @@ describe('validateMessage', () => {
     });
 
     it('should reject timestamp too far in the future (> 5s)', () => {
-      const result = validateMessage(
-        validMessage({ timestamp: Date.now() + 10_000 }),
-      );
+      const result = validateMessage(validMessage({ timestamp: Date.now() + 10_000 }));
       expect(result.valid).toBe(false);
       expect(result.reason).toMatch(/future/i);
     });
 
     it('should reject timestamp that is too old (> 60s)', () => {
-      const result = validateMessage(
-        validMessage({ timestamp: Date.now() - 120_000 }),
-      );
+      const result = validateMessage(validMessage({ timestamp: Date.now() - 120_000 }));
       expect(result.valid).toBe(false);
       expect(result.reason).toMatch(/old|expired/i);
     });

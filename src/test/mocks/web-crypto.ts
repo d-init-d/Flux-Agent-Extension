@@ -34,8 +34,7 @@ export function installWebCryptoMock(): void {
 
   if (!nodeCrypto || !nodeCrypto.subtle) {
     throw new Error(
-      'web-crypto-mock: Node.js webcrypto is not available. ' +
-        'Ensure you are running Node ≥ 15.',
+      'web-crypto-mock: Node.js webcrypto is not available. ' + 'Ensure you are running Node ≥ 15.',
     );
   }
 

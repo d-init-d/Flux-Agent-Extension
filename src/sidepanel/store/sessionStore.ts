@@ -56,7 +56,10 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     const nextSession = response.session;
 
     set((state) => ({
-      sessions: sortSessions([nextSession, ...state.sessions.filter((session) => session.config.id !== nextSession.config.id)]),
+      sessions: sortSessions([
+        nextSession,
+        ...state.sessions.filter((session) => session.config.id !== nextSession.config.id),
+      ]),
       activeSessionId: nextSession.config.id,
       error: null,
     }));
@@ -76,7 +79,7 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
         const sessions = state.sessions.filter((item) => item.config.id !== sessionId);
         const nextActiveSessionId =
           sessionId === state.activeSessionId
-            ? sessions[0]?.config.id ?? null
+            ? (sessions[0]?.config.id ?? null)
             : state.activeSessionId;
 
         return {

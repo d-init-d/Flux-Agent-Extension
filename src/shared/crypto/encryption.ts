@@ -102,17 +102,12 @@ export function generateRandomBytes(length: number): Uint8Array {
  * @returns A CryptoKey suitable for AES-256-GCM operations.
  * @throws {Error} If passphrase is empty or salt has incorrect length.
  */
-export async function deriveKey(
-  passphrase: string,
-  salt: Uint8Array,
-): Promise<CryptoKey> {
+export async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   if (!passphrase) {
     throw new Error('Passphrase must not be empty');
   }
   if (salt.byteLength !== SALT_LENGTH) {
-    throw new Error(
-      `Salt must be exactly ${SALT_LENGTH} bytes, got ${salt.byteLength}`,
-    );
+    throw new Error(`Salt must be exactly ${SALT_LENGTH} bytes, got ${salt.byteLength}`);
   }
 
   const encoder = new TextEncoder();
@@ -158,10 +153,7 @@ export async function deriveKey(
  * @returns A base64-encoded string containing salt + IV + ciphertext + auth tag.
  * @throws {Error} If passphrase is empty or encryption fails.
  */
-export async function encrypt(
-  plaintext: string,
-  passphrase: string,
-): Promise<string> {
+export async function encrypt(plaintext: string, passphrase: string): Promise<string> {
   if (!passphrase) {
     throw new Error('Passphrase must not be empty');
   }
@@ -181,9 +173,7 @@ export async function encrypt(
   );
 
   // Combine: salt(16) + iv(12) + ciphertext+authTag
-  const combined = new Uint8Array(
-    SALT_LENGTH + IV_LENGTH + ciphertext.byteLength,
-  );
+  const combined = new Uint8Array(SALT_LENGTH + IV_LENGTH + ciphertext.byteLength);
   combined.set(salt, 0);
   combined.set(iv, SALT_LENGTH);
   combined.set(new Uint8Array(ciphertext), SALT_LENGTH + IV_LENGTH);
@@ -206,10 +196,7 @@ export async function encrypt(
  * @returns The original plaintext string.
  * @throws {Error} If the passphrase is wrong, data is corrupted, or format is invalid.
  */
-export async function decrypt(
-  encryptedData: string,
-  passphrase: string,
-): Promise<string> {
+export async function decrypt(encryptedData: string, passphrase: string): Promise<string> {
   if (!passphrase) {
     throw new Error('Passphrase must not be empty');
   }
@@ -247,9 +234,7 @@ export async function decrypt(
       ciphertext,
     );
   } catch {
-    throw new Error(
-      'Decryption failed: wrong passphrase or corrupted data',
-    );
+    throw new Error('Decryption failed: wrong passphrase or corrupted data');
   }
 
   return new TextDecoder().decode(decrypted);

@@ -10,7 +10,10 @@ function createWorkflow(id: string, overrides: Partial<SavedWorkflow> = {}): Sav
     name: `Workflow ${id}`,
     description: 'Test description',
     actions: [
-      { action: { id: `${id}-nav`, type: 'navigate', url: 'https://example.com' }, timestamp: Date.now() - 2000 },
+      {
+        action: { id: `${id}-nav`, type: 'navigate', url: 'https://example.com' },
+        timestamp: Date.now() - 2000,
+      },
     ],
     tags: ['test'],
     createdAt: Date.now() - 5000,
@@ -54,9 +57,7 @@ const defaultSaveProps = {
 
 describe('WorkflowLibraryModal', () => {
   it('renders nothing when closed', () => {
-    const { container } = render(
-      <WorkflowLibraryModal {...defaultLibraryProps} open={false} />,
-    );
+    const { container } = render(<WorkflowLibraryModal {...defaultLibraryProps} open={false} />);
     expect(container.innerHTML).toBe('');
   });
 
@@ -72,9 +73,7 @@ describe('WorkflowLibraryModal', () => {
   });
 
   it('shows error banner when error is present', () => {
-    render(
-      <WorkflowLibraryModal {...defaultLibraryProps} error="Something went wrong" />,
-    );
+    render(<WorkflowLibraryModal {...defaultLibraryProps} error="Something went wrong" />);
     expect(screen.getByRole('status')).toHaveTextContent('Something went wrong');
   });
 
@@ -147,7 +146,10 @@ describe('WorkflowLibraryModal', () => {
         tags: ['tag1'],
         actions: [
           { action: { id: 'a1', type: 'click', selector: {} }, timestamp: Date.now() },
-          { action: { id: 'a2', type: 'navigate', url: 'https://test.com' }, timestamp: Date.now() },
+          {
+            action: { id: 'a2', type: 'navigate', url: 'https://test.com' },
+            timestamp: Date.now(),
+          },
         ],
       }),
     ];
@@ -324,12 +326,7 @@ describe('WorkflowLibraryModal', () => {
   });
 
   it('disables save button when canSaveCurrentSession is false', () => {
-    render(
-      <WorkflowLibraryModal
-        {...defaultLibraryProps}
-        canSaveCurrentSession={false}
-      />,
-    );
+    render(<WorkflowLibraryModal {...defaultLibraryProps} canSaveCurrentSession={false} />);
     const buttons = screen.getAllByRole('button', { name: /save/i });
     buttons.forEach((btn) => expect(btn).toBeDisabled());
   });
@@ -478,9 +475,7 @@ describe('WorkflowLibraryModal', () => {
 
 describe('SaveWorkflowModal', () => {
   it('renders nothing when closed', () => {
-    const { container } = render(
-      <SaveWorkflowModal {...defaultSaveProps} open={false} />,
-    );
+    const { container } = render(<SaveWorkflowModal {...defaultSaveProps} open={false} />);
     expect(container.innerHTML).toBe('');
   });
 
@@ -511,32 +506,17 @@ describe('SaveWorkflowModal', () => {
   });
 
   it('shows name validation error inline', () => {
-    render(
-      <SaveWorkflowModal
-        {...defaultSaveProps}
-        error="Workflow name is required."
-      />,
-    );
+    render(<SaveWorkflowModal {...defaultSaveProps} error="Workflow name is required." />);
     expect(screen.getByText('Workflow name is required.')).toBeInTheDocument();
   });
 
   it('shows generic error as separate message', () => {
-    render(
-      <SaveWorkflowModal
-        {...defaultSaveProps}
-        error="Failed to save workflow"
-      />,
-    );
+    render(<SaveWorkflowModal {...defaultSaveProps} error="Failed to save workflow" />);
     expect(screen.getByRole('status')).toHaveTextContent('Failed to save workflow');
   });
 
   it('does not show error banner for name validation error', () => {
-    render(
-      <SaveWorkflowModal
-        {...defaultSaveProps}
-        error="Workflow name is required."
-      />,
-    );
+    render(<SaveWorkflowModal {...defaultSaveProps} error="Workflow name is required." />);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 

@@ -67,11 +67,7 @@ Card.displayName = 'Card';
 const CardHeader = React.forwardRef<HTMLDivElement, CardHeaderProps>(
   ({ className = '', children, ...rest }, ref) => {
     return (
-      <div
-        ref={ref}
-        className={`flex flex-col gap-1.5 px-5 pt-5 pb-2 ${className}`}
-        {...rest}
-      >
+      <div ref={ref} className={`flex flex-col gap-1.5 px-5 pt-5 pb-2 ${className}`} {...rest}>
         {children}
       </div>
     );
@@ -123,11 +119,7 @@ CardContent.displayName = 'CardContent';
 const CardFooter = React.forwardRef<HTMLDivElement, CardFooterProps>(
   ({ className = '', children, ...rest }, ref) => {
     return (
-      <div
-        ref={ref}
-        className={`flex items-center gap-2 px-5 pt-2 pb-5 ${className}`}
-        {...rest}
-      >
+      <div ref={ref} className={`flex items-center gap-2 px-5 pt-2 pb-5 ${className}`} {...rest}>
         {children}
       </div>
     );

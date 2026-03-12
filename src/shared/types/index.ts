@@ -116,11 +116,7 @@ export type {
 } from './storage';
 
 // Workflow types
-export type {
-  SavedWorkflowSource,
-  SavedWorkflow,
-  SavedWorkflowCollection,
-} from './workflow';
+export type { SavedWorkflowSource, SavedWorkflow, SavedWorkflowCollection } from './workflow';
 
 // Message types
 export type {

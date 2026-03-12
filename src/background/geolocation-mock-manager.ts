@@ -12,7 +12,11 @@ export interface AppliedGeolocationMock {
 
 export interface IGeolocationMockManager {
   activateSession(sessionId: string, tabId: number | null): void;
-  applyAction(sessionId: string, tabId: number, action: MockGeolocationAction): Promise<AppliedGeolocationMock>;
+  applyAction(
+    sessionId: string,
+    tabId: number,
+    action: MockGeolocationAction,
+  ): Promise<AppliedGeolocationMock>;
   clearSession(sessionId: string): Promise<void>;
   dispose?(): void;
 }
@@ -138,7 +142,9 @@ export class GeolocationMockManager implements IGeolocationMockManager {
     }
   }
 
-  private readonly handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (tabId) => {
+  private readonly handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (
+    tabId,
+  ) => {
     this.logger.debug('Tab removed; dropping geolocation mock state', { tabId });
     this.dropTabState(tabId);
   };

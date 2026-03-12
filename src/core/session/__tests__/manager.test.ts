@@ -89,7 +89,10 @@ describe('SessionManager', () => {
 
     const session = manager.getSession('s2');
     expect(session?.status).toBe('running');
-    expect(session?.messages.at(-1)).toMatchObject({ role: 'user', content: 'Open the account page' });
+    expect(session?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: 'Open the account page',
+    });
     expect(events).toEqual(['started', 'paused', 'resumed']);
   });
 
@@ -361,7 +364,10 @@ describe('SessionManager', () => {
 
     manager.replaceRecordedActions('replace', [
       { action: { id: 'new1', type: 'click', selector: { css: '#new1' } }, timestamp: 200 },
-      { action: { id: 'new2', type: 'fill', selector: { css: '#new2' }, value: 'x' }, timestamp: 300 },
+      {
+        action: { id: 'new2', type: 'fill', selector: { css: '#new2' }, value: 'x' },
+        timestamp: 300,
+      },
     ]);
 
     const session = manager.getSession('replace');

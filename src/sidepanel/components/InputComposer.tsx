@@ -81,7 +81,10 @@ const INPUT_MAX_HEIGHT_PX = 160;
 function resizeTextarea(textarea: HTMLTextAreaElement): void {
   textarea.style.height = 'auto';
 
-  const nextHeight = Math.min(Math.max(textarea.scrollHeight, INPUT_MIN_HEIGHT_PX), INPUT_MAX_HEIGHT_PX);
+  const nextHeight = Math.min(
+    Math.max(textarea.scrollHeight, INPUT_MIN_HEIGHT_PX),
+    INPUT_MAX_HEIGHT_PX,
+  );
   textarea.style.height = `${nextHeight}px`;
   textarea.style.overflowY = textarea.scrollHeight > INPUT_MAX_HEIGHT_PX ? 'auto' : 'hidden';
 }
@@ -99,7 +102,11 @@ function expandSlashCommandValue(value: string, commands: SlashCommand[]): strin
   return matchedCommand.insertText;
 }
 
-export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = false }: InputComposerProps) {
+export function InputComposer({
+  onSend,
+  commands = DEFAULT_COMMANDS,
+  disabled = false,
+}: InputComposerProps) {
   const [inputValue, setInputValue] = useState('');
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [selectedUploads, setSelectedUploads] = useState<SelectedUpload[]>([]);
@@ -308,22 +315,26 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
                   key={item.id}
                   id={`sidepanel-command-option-${item.id}`}
                   role="option"
-                   aria-selected={index === activeCommandIndex}
-                   onMouseDown={(event) => event.preventDefault()}
-                   onMouseEnter={() => setActiveCommandIndex(index)}
-                   onClick={() => applyCommand(item)}
-                   className={`cursor-pointer px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] transition-colors ${
-                     index === activeCommandIndex
-                       ? 'bg-[rgb(var(--color-border-default)/0.35)]'
+                  aria-selected={index === activeCommandIndex}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveCommandIndex(index)}
+                  onClick={() => applyCommand(item)}
+                  className={`cursor-pointer px-3 py-2 text-sm leading-snug text-[rgb(var(--color-text-primary))] transition-colors ${
+                    index === activeCommandIndex
+                      ? 'bg-[rgb(var(--color-border-default)/0.35)]'
                       : 'hover:bg-[rgb(var(--color-border-default)/0.25)]'
                   }`}
                 >
                   <span className="font-medium tracking-tight">{item.command}</span>
-                  <span className="ml-2 text-[rgb(var(--color-text-secondary))]">{item.description}</span>
+                  <span className="ml-2 text-[rgb(var(--color-text-secondary))]">
+                    {item.description}
+                  </span>
                 </li>
               ))
             ) : (
-              <li className="px-3 py-2 text-sm text-[rgb(var(--color-text-secondary))]">No commands found.</li>
+              <li className="px-3 py-2 text-sm text-[rgb(var(--color-text-secondary))]">
+                No commands found.
+              </li>
             )}
           </ul>
         </section>
@@ -346,7 +357,9 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
                 className="inline-flex items-center gap-2 rounded-full border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-1 text-xs text-[rgb(var(--color-text-primary))]"
               >
                 <span>{upload.file.name}</span>
-                <span className="text-[rgb(var(--color-text-secondary))]">{formatFileSize(upload.file.size)}</span>
+                <span className="text-[rgb(var(--color-text-secondary))]">
+                  {formatFileSize(upload.file.size)}
+                </span>
                 <span aria-hidden="true">x</span>
               </button>
             ))}
@@ -385,7 +398,11 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
           disabled={disabled}
           onChange={handleInputChange}
           onKeyDown={handleInputKeyDown}
-          placeholder={disabled || isSending ? 'Wait for the current response to finish...' : 'Type a message or command...'}
+          placeholder={
+            disabled || isSending
+              ? 'Wait for the current response to finish...'
+              : 'Type a message or command...'
+          }
           aria-autocomplete="list"
           aria-haspopup={isSlashMode ? 'listbox' : undefined}
           aria-keyshortcuts="Control+Enter Meta+Enter"
@@ -397,7 +414,7 @@ export function InputComposer({ onSend, commands = DEFAULT_COMMANDS, disabled = 
         />
 
         <Button type="submit" size="lg" className="min-w-20" disabled={!canSend}>
-           Send
+          Send
         </Button>
       </form>
     </div>

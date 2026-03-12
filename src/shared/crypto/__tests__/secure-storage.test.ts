@@ -50,10 +50,7 @@ function createMemoryStorage(): ChromeStorageLocal {
 /**
  * Shortcut: read a raw value from the memory storage.
  */
-async function rawGet(
-  storage: ChromeStorageLocal,
-  key: string,
-): Promise<unknown> {
+async function rawGet(storage: ChromeStorageLocal, key: string): Promise<unknown> {
   const result = await storage.get(key);
   return result[key];
 }
@@ -83,9 +80,7 @@ describe('SecureStorage', () => {
     });
 
     it('should throw if passphrase is empty', () => {
-      expect(() => new SecureStorage('', memStorage)).toThrow(
-        'Passphrase must not be empty',
-      );
+      expect(() => new SecureStorage('', memStorage)).toThrow('Passphrase must not be empty');
     });
 
     it('should throw if no storage backend is available and no chrome.storage', () => {
@@ -169,9 +164,7 @@ describe('SecureStorage', () => {
     });
 
     it('should throw for empty key on getEncrypted', async () => {
-      await expect(secureStorage.getEncrypted('')).rejects.toThrow(
-        'Storage key must not be empty',
-      );
+      await expect(secureStorage.getEncrypted('')).rejects.toThrow('Storage key must not be empty');
     });
 
     it('should overwrite existing encrypted value', async () => {
@@ -220,9 +213,7 @@ describe('SecureStorage', () => {
     });
 
     it('should not throw when removing a non-existent key', async () => {
-      await expect(
-        secureStorage.removeEncrypted('nonexistent'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.removeEncrypted('nonexistent')).resolves.toBeUndefined();
     });
 
     it('should throw for empty key', async () => {
@@ -238,10 +229,7 @@ describe('SecureStorage', () => {
       await secureStorage.removeEncrypted('key-a');
 
       // Read raw registry
-      const registryRaw = await rawGet(
-        memStorage,
-        '__encrypted_keys_registry__',
-      );
+      const registryRaw = await rawGet(memStorage, '__encrypted_keys_registry__');
       const registry = JSON.parse(registryRaw as string) as string[];
       expect(registry).not.toContain('key-a');
       expect(registry).toContain('key-b');
@@ -278,9 +266,7 @@ describe('SecureStorage', () => {
     });
 
     it('should throw for empty key on getPlain', async () => {
-      await expect(secureStorage.getPlain('')).rejects.toThrow(
-        'Storage key must not be empty',
-      );
+      await expect(secureStorage.getPlain('')).rejects.toThrow('Storage key must not be empty');
     });
 
     it('should store plain values as JSON strings (not encrypted)', async () => {
@@ -308,10 +294,7 @@ describe('SecureStorage', () => {
       await secureStorage.setEncrypted('alpha', 'a');
       await secureStorage.setEncrypted('beta', 'b');
 
-      const registryRaw = await rawGet(
-        memStorage,
-        '__encrypted_keys_registry__',
-      );
+      const registryRaw = await rawGet(memStorage, '__encrypted_keys_registry__');
       const registry = JSON.parse(registryRaw as string) as string[];
 
       expect(registry).toContain('alpha');
@@ -323,10 +306,7 @@ describe('SecureStorage', () => {
       await secureStorage.setEncrypted('key', 'val2');
       await secureStorage.setEncrypted('key', 'val3');
 
-      const registryRaw = await rawGet(
-        memStorage,
-        '__encrypted_keys_registry__',
-      );
+      const registryRaw = await rawGet(memStorage, '__encrypted_keys_registry__');
       const registry = JSON.parse(registryRaw as string) as string[];
 
       const occurrences = registry.filter((k: string) => k === 'key');
@@ -371,15 +351,15 @@ describe('SecureStorage', () => {
     });
 
     it('should throw if old passphrase is empty', async () => {
-      await expect(
-        secureStorage.changePassphrase('', 'new'),
-      ).rejects.toThrow('Old passphrase must not be empty');
+      await expect(secureStorage.changePassphrase('', 'new')).rejects.toThrow(
+        'Old passphrase must not be empty',
+      );
     });
 
     it('should throw if new passphrase is empty', async () => {
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, ''),
-      ).rejects.toThrow('New passphrase must not be empty');
+      await expect(secureStorage.changePassphrase(PASSPHRASE, '')).rejects.toThrow(
+        'New passphrase must not be empty',
+      );
     });
 
     it('should be a no-op if old and new passphrases are identical', async () => {
@@ -402,15 +382,11 @@ describe('SecureStorage', () => {
       await memStorage.remove('__encrypted__key1');
 
       // Should not throw
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, 'new-pass'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.changePassphrase(PASSPHRASE, 'new-pass')).resolves.toBeUndefined();
     });
 
     it('should handle empty registry (no encrypted keys)', async () => {
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, 'new-pass'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.changePassphrase(PASSPHRASE, 'new-pass')).resolves.toBeUndefined();
     });
   });
 
@@ -423,12 +399,8 @@ describe('SecureStorage', () => {
       await secureStorage.setEncrypted('secret', 'hidden-value');
       await secureStorage.setPlain('preference', 'light-mode');
 
-      expect(await secureStorage.getEncrypted<string>('secret')).toBe(
-        'hidden-value',
-      );
-      expect(await secureStorage.getPlain<string>('preference')).toBe(
-        'light-mode',
-      );
+      expect(await secureStorage.getEncrypted<string>('secret')).toBe('hidden-value');
+      expect(await secureStorage.getPlain<string>('preference')).toBe('light-mode');
     });
 
     it('should not confuse encrypted and plain keys with same name', async () => {
@@ -439,9 +411,7 @@ describe('SecureStorage', () => {
 
       // Both should be independently retrievable
       expect(await secureStorage.getPlain<string>('data')).toBe('plain-value');
-      expect(await secureStorage.getEncrypted<string>('data')).toBe(
-        'encrypted-value',
-      );
+      expect(await secureStorage.getEncrypted<string>('data')).toBe('encrypted-value');
     });
 
     it('removing encrypted should not affect plain with same key', async () => {
@@ -467,9 +437,7 @@ describe('SecureStorage', () => {
       await memStorage.set({ __encrypted_keys_registry__: 12345 });
 
       // changePassphrase reads the registry — should not throw when registry is not a string
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, 'new-pass'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.changePassphrase(PASSPHRASE, 'new-pass')).resolves.toBeUndefined();
     });
 
     it('should handle invalid JSON in registry gracefully', async () => {
@@ -477,9 +445,7 @@ describe('SecureStorage', () => {
       await memStorage.set({ __encrypted_keys_registry__: 'not-valid-json{{{' });
 
       // Should not throw — the catch block returns []
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, 'new-pass'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.changePassphrase(PASSPHRASE, 'new-pass')).resolves.toBeUndefined();
     });
 
     it('should handle non-array parsed registry (e.g., object)', async () => {
@@ -489,9 +455,7 @@ describe('SecureStorage', () => {
       });
 
       // The getRegistry() check `Array.isArray(parsed)` returns false → returns []
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, 'new-pass'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.changePassphrase(PASSPHRASE, 'new-pass')).resolves.toBeUndefined();
     });
 
     it('should skip non-string ciphertext values during changePassphrase', async () => {
@@ -503,18 +467,14 @@ describe('SecureStorage', () => {
 
       // Add 'bad_key' to the registry manually
       const registryRaw = await memStorage.get('__encrypted_keys_registry__');
-      const registry = JSON.parse(
-        registryRaw['__encrypted_keys_registry__'] as string,
-      ) as string[];
+      const registry = JSON.parse(registryRaw['__encrypted_keys_registry__'] as string) as string[];
       registry.push('bad_key');
       await memStorage.set({
         __encrypted_keys_registry__: JSON.stringify(registry),
       });
 
       // changePassphrase should skip the non-string ciphertext and succeed
-      await expect(
-        secureStorage.changePassphrase(PASSPHRASE, 'new-pass'),
-      ).resolves.toBeUndefined();
+      await expect(secureStorage.changePassphrase(PASSPHRASE, 'new-pass')).resolves.toBeUndefined();
 
       // good-key should be readable with new passphrase
       const verifier = new SecureStorage('new-pass', memStorage);

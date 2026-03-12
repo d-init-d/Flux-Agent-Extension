@@ -20,7 +20,10 @@ describe('CommandParser', () => {
     expect(result.thinking).toBe('Need two steps');
     expect(result.summary).toBe('Navigate and click login');
     expect(result.actions).toHaveLength(2);
-    expect(result.actions[0]).toMatchObject({ type: 'navigate', url: 'https://localhost/dashboard' });
+    expect(result.actions[0]).toMatchObject({
+      type: 'navigate',
+      url: 'https://localhost/dashboard',
+    });
     expect(result.actions[0].id).toBeTypeOf('string');
     expect(result.actions[1]).toMatchObject({ type: 'click', selector: { text: 'Login' } });
   });
@@ -336,7 +339,9 @@ describe('CommandParser', () => {
 
   it('normalizes scheme-less URLs to https', () => {
     const parser = new CommandParser({ strictMode: false, allowEvaluate: true });
-    const result = parser.parse(JSON.stringify({ actions: [{ type: 'navigate', url: 'example.com/path' }] }));
+    const result = parser.parse(
+      JSON.stringify({ actions: [{ type: 'navigate', url: 'example.com/path' }] }),
+    );
 
     expect(result.actions[0]).toMatchObject({
       type: 'navigate',

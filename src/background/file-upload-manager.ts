@@ -26,7 +26,11 @@ export class FileUploadManager implements IFileUploadManager {
 
   stageUploads(sessionId: string, uploads: SerializedFileUpload[]): FileUploadMetadata[] {
     if (!sessionId.trim()) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, 'Session id is required for staged uploads', true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        'Session id is required for staged uploads',
+        true,
+      );
     }
 
     this.validateUploads(uploads);
@@ -62,7 +66,11 @@ export class FileUploadManager implements IFileUploadManager {
 
   resolveUploads(sessionId: string, fileIds: string[]): SerializedFileUpload[] {
     if (fileIds.length === 0) {
-      throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, 'uploadFile action requires at least one file id', true);
+      throw new ExtensionError(
+        ErrorCode.FILE_UPLOAD_INVALID,
+        'uploadFile action requires at least one file id',
+        true,
+      );
     }
 
     const uploads = this.uploadsBySession.get(sessionId);
@@ -106,16 +114,28 @@ export class FileUploadManager implements IFileUploadManager {
 
     for (const upload of uploads) {
       if (!upload.id.trim() || seenIds.has(upload.id)) {
-        throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, 'Each staged upload must have a unique id', true);
+        throw new ExtensionError(
+          ErrorCode.FILE_UPLOAD_INVALID,
+          'Each staged upload must have a unique id',
+          true,
+        );
       }
       seenIds.add(upload.id);
 
       if (!upload.name.trim()) {
-        throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, 'Each staged upload must include a file name', true);
+        throw new ExtensionError(
+          ErrorCode.FILE_UPLOAD_INVALID,
+          'Each staged upload must include a file name',
+          true,
+        );
       }
 
       if (!Number.isInteger(upload.size) || upload.size < 0) {
-        throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, `Invalid file size for "${upload.name}"`, true);
+        throw new ExtensionError(
+          ErrorCode.FILE_UPLOAD_INVALID,
+          `Invalid file size for "${upload.name}"`,
+          true,
+        );
       }
 
       if (upload.size > FILE_UPLOAD_LIMITS.maxFileSizeBytes) {
@@ -136,15 +156,27 @@ export class FileUploadManager implements IFileUploadManager {
       }
 
       if (!Number.isFinite(upload.lastModified) || upload.lastModified < 0) {
-        throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, `Invalid lastModified for "${upload.name}"`, true);
+        throw new ExtensionError(
+          ErrorCode.FILE_UPLOAD_INVALID,
+          `Invalid lastModified for "${upload.name}"`,
+          true,
+        );
       }
 
       if (upload.base64Data.length > 0 && !BASE64_PATTERN.test(upload.base64Data)) {
-        throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, `Invalid base64 payload for "${upload.name}"`, true);
+        throw new ExtensionError(
+          ErrorCode.FILE_UPLOAD_INVALID,
+          `Invalid base64 payload for "${upload.name}"`,
+          true,
+        );
       }
 
       if (upload.size > 0 && upload.base64Data.length === 0) {
-        throw new ExtensionError(ErrorCode.FILE_UPLOAD_INVALID, `Missing file data for "${upload.name}"`, true);
+        throw new ExtensionError(
+          ErrorCode.FILE_UPLOAD_INVALID,
+          `Missing file data for "${upload.name}"`,
+          true,
+        );
       }
     }
   }

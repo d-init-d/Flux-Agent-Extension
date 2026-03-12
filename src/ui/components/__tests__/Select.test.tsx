@@ -31,18 +31,14 @@ describe('Select', () => {
   });
 
   it('renders with errorMessage', () => {
-    render(
-      <Select options={OPTIONS} label="Pick" errorMessage="Required field" />,
-    );
+    render(<Select options={OPTIONS} label="Pick" errorMessage="Required field" />);
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent('Required field');
     expect(screen.getByLabelText('Pick')).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('renders with helperText when no error', () => {
-    render(
-      <Select options={OPTIONS} label="Pick" helperText="Choose wisely" />,
-    );
+    render(<Select options={OPTIONS} label="Pick" helperText="Choose wisely" />);
     expect(screen.getByText('Choose wisely')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -85,9 +81,7 @@ describe('Select', () => {
   it('handles onChange events', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
-      <Select options={OPTIONS} label="Pick" onChange={onChange} />,
-    );
+    render(<Select options={OPTIONS} label="Pick" onChange={onChange} />);
     await user.selectOptions(screen.getByLabelText('Pick'), 'b');
     expect(onChange).toHaveBeenCalled();
   });
@@ -100,30 +94,18 @@ describe('Select', () => {
   });
 
   it('applies custom className to select element', () => {
-    render(
-      <Select options={OPTIONS} className="custom-select" aria-label="Test" />,
-    );
+    render(<Select options={OPTIONS} className="custom-select" aria-label="Test" />);
     expect(screen.getByRole('combobox')).toHaveClass('custom-select');
   });
 
   it('sets aria-describedby to error id when errorMessage exists', () => {
-    render(
-      <Select options={OPTIONS} id="sel" errorMessage="Err" aria-label="Test" />,
-    );
-    expect(screen.getByRole('combobox')).toHaveAttribute(
-      'aria-describedby',
-      'sel-error',
-    );
+    render(<Select options={OPTIONS} id="sel" errorMessage="Err" aria-label="Test" />);
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-describedby', 'sel-error');
   });
 
   it('sets aria-describedby to helper id when helperText exists and no error', () => {
-    render(
-      <Select options={OPTIONS} id="sel" helperText="Help" aria-label="Test" />,
-    );
-    expect(screen.getByRole('combobox')).toHaveAttribute(
-      'aria-describedby',
-      'sel-helper',
-    );
+    render(<Select options={OPTIONS} id="sel" helperText="Help" aria-label="Test" />);
+    expect(screen.getByRole('combobox')).toHaveAttribute('aria-describedby', 'sel-helper');
   });
 
   it('sets no aria-describedby when neither error nor helper', () => {

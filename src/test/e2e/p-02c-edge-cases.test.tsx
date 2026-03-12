@@ -65,9 +65,9 @@ vi.mock('../../sidepanel/lib/extension-client', () => ({
       throw new Error('Runtime is not initialized for E2E test');
     }
 
-    const request = activeRuntime.handleMessage(
-      createExtensionMessage(type, payload),
-    ) as Promise<ExtensionResponse<ResponsePayloadMap[T]>>;
+    const request = activeRuntime.handleMessage(createExtensionMessage(type, payload)) as Promise<
+      ExtensionResponse<ResponsePayloadMap[T]>
+    >;
 
     pendingExtensionRequests.add(request);
     const response = await request.finally(() => {
@@ -211,7 +211,10 @@ async function sendPrompt(user: ReturnType<typeof userEvent.setup>, prompt: stri
   await settleAsyncSideEffects(2);
 }
 
-async function startPrompt(user: ReturnType<typeof userEvent.setup>, prompt: string): Promise<void> {
+async function startPrompt(
+  user: ReturnType<typeof userEvent.setup>,
+  prompt: string,
+): Promise<void> {
   fireEvent.change(screen.getByRole('textbox', { name: 'Message input' }), {
     target: { value: prompt },
   });
@@ -401,7 +404,8 @@ describe('P-02c edge-case E2E expansion', () => {
       logger: new Logger('FluxSW:p-02c-e2e', 'debug'),
       aiClientManager: createAIManager({
         responseText: JSON.stringify({
-          summary: 'The assistant waits for the slow page context to arrive, then responds without freezing the UI.',
+          summary:
+            'The assistant waits for the slow page context to arrive, then responds without freezing the UI.',
           actions: [],
         }),
       }),
@@ -414,11 +418,17 @@ describe('P-02c edge-case E2E expansion', () => {
       expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
     });
 
-    expect(await screen.findByText('Confirm the order once the delayed checkout data is ready')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Confirm the order once the delayed checkout data is ready'),
+    ).toBeInTheDocument();
     await settleAsyncSideEffects(2);
 
     expect(actionHandler).not.toHaveBeenCalled();
-    expect(await screen.findByText('The assistant waits for the slow page context to arrive, then responds without freezing the UI.')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'The assistant waits for the slow page context to arrive, then responds without freezing the UI.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     await openActionLog(user);
@@ -428,12 +438,14 @@ describe('P-02c edge-case E2E expansion', () => {
   it('P-02c trims large page context before planning and still executes a deterministic action', async () => {
     const user = userEvent.setup();
     const observedUserMessageLengths: number[] = [];
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 12,
-      data: { executed: true, type: action.type },
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 12,
+        data: { executed: true, type: action.type },
+      }),
+    );
 
     await chrome.storage.local.set({
       settings: createSettings({ maxContextLength: 4_000 }),
@@ -447,12 +459,16 @@ describe('P-02c edge-case E2E expansion', () => {
       logger: new Logger('FluxSW:p-02c-e2e', 'debug'),
       aiClientManager: createAIManager({
         responseText: JSON.stringify({
-          summary: 'The assistant trims oversized page context and still targets the requested bulk action.',
+          summary:
+            'The assistant trims oversized page context and still targets the requested bulk action.',
           actions: [
             {
               id: 'large-dom-bulk-action',
               type: 'click',
-              selector: { role: 'button', textExact: 'Bulk action 60 for enterprise analytics review' },
+              selector: {
+                role: 'button',
+                textExact: 'Bulk action 60 for enterprise analytics review',
+              },
               description: 'Open the requested bulk action from the oversized dashboard',
             },
           ],
@@ -475,20 +491,28 @@ describe('P-02c edge-case E2E expansion', () => {
 
     expect(observedUserMessageLengths).toHaveLength(1);
     expect(observedUserMessageLengths[0]).toBeLessThan(5_000);
-    expect(await screen.findByText('The assistant trims oversized page context and still targets the requested bulk action.')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'The assistant trims oversized page context and still targets the requested bulk action.',
+      ),
+    ).toBeInTheDocument();
 
     await openActionLog(user);
-    expect(await screen.findByText('Open the requested bulk action from the oversized dashboard')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Open the requested bulk action from the oversized dashboard'),
+    ).toBeInTheDocument();
   });
 
   it('P-02c degrades gracefully when page-context collection fails under edge conditions', async () => {
     const user = userEvent.setup();
-    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => ({
-      actionId: action.id,
-      success: true,
-      duration: 8,
-      data: { executed: true, type: action.type },
-    }));
+    const actionHandler = vi.fn(
+      async (action: Action): Promise<ActionResult> => ({
+        actionId: action.id,
+        success: true,
+        duration: 8,
+        data: { executed: true, type: action.type },
+      }),
+    );
 
     activeRuntime = new UISessionRuntime({
       bridge: createBridge({
@@ -496,12 +520,15 @@ describe('P-02c edge-case E2E expansion', () => {
           summary: 'Unused fallback page context',
         }),
         actionHandler,
-        getPageContextError: new Error('Synthetic timeout while collecting a very large page context'),
+        getPageContextError: new Error(
+          'Synthetic timeout while collecting a very large page context',
+        ),
       }),
       logger: new Logger('FluxSW:p-02c-e2e', 'debug'),
       aiClientManager: createAIManager({
         responseText: JSON.stringify({
-          summary: 'The assistant falls back to a no-op response when live page context is unavailable.',
+          summary:
+            'The assistant falls back to a no-op response when live page context is unavailable.',
           actions: [],
         }),
         chunkDelayMs: 15,
@@ -512,11 +539,19 @@ describe('P-02c edge-case E2E expansion', () => {
     await sendPrompt(user, 'Summarize what you can do if the page context fetch keeps timing out');
 
     expect(actionHandler).not.toHaveBeenCalled();
-    expect(await screen.findByText('The assistant falls back to a no-op response when live page context is unavailable.')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        'The assistant falls back to a no-op response when live page context is unavailable.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     await openActionLog(user);
     expect(await screen.findByText('Planning automation steps')).toBeInTheDocument();
-    expect(await screen.findAllByText('The assistant falls back to a no-op response when live page context is unavailable.')).toHaveLength(2);
+    expect(
+      await screen.findAllByText(
+        'The assistant falls back to a no-op response when live page context is unavailable.',
+      ),
+    ).toHaveLength(2);
   });
 });

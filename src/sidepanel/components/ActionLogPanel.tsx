@@ -79,7 +79,10 @@ export function ActionLogPanel({
           </div>
 
           {isExpanded ? (
-            <div id={panelId} className="border-t border-[rgb(var(--color-border-default)/0.8)] px-4 py-4 sm:px-5">
+            <div
+              id={panelId}
+              className="border-t border-[rgb(var(--color-border-default)/0.8)] px-4 py-4 sm:px-5"
+            >
               {actions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary))] px-5 py-8 text-center">
                   <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[rgb(var(--color-primary-100))] text-[rgb(var(--color-primary-700))]">
@@ -101,7 +104,8 @@ export function ActionLogPanel({
                     No actions yet
                   </h2>
                   <p className="mt-2 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
-                    Executed actions will appear here as a readable timeline once the agent starts working.
+                    Executed actions will appear here as a readable timeline once the agent starts
+                    working.
                   </p>
                 </div>
               ) : (

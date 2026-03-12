@@ -23,9 +23,7 @@ function normalizeString(value: unknown): string | undefined {
 }
 
 function normalizeTimestamp(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.trunc(value)
-    : fallback;
+  return typeof value === 'number' && Number.isFinite(value) ? Math.trunc(value) : fallback;
 }
 
 function normalizeTags(value: unknown): string[] {
@@ -71,7 +69,9 @@ function normalizeRecordedSessionAction(value: unknown): RecordedSessionAction |
   }
 
   return {
-    action: JSON.parse(redactPII(JSON.stringify(candidate.action))) as RecordedSessionAction['action'],
+    action: JSON.parse(
+      redactPII(JSON.stringify(candidate.action)),
+    ) as RecordedSessionAction['action'],
     timestamp: Math.trunc(candidate.timestamp),
   };
 }
@@ -117,7 +117,9 @@ function normalizeSavedWorkflow(value: unknown, index = 0): SavedWorkflow | null
 
   return {
     id: normalizeString(candidate.id) ?? generateId(),
-    name: normalizeString(candidate.name) ?? `${DEFAULT_WORKFLOW_NAME}${index > 0 ? ` ${index + 1}` : ''}`,
+    name:
+      normalizeString(candidate.name) ??
+      `${DEFAULT_WORKFLOW_NAME}${index > 0 ? ` ${index + 1}` : ''}`,
     description: normalizeString(candidate.description),
     actions,
     tags: normalizeTags(candidate.tags),
@@ -149,7 +151,8 @@ export function normalizeSavedWorkflowCollection(value: unknown): SavedWorkflowC
     : defaults.items;
 
   return {
-    version: typeof candidate.version === 'number' ? Math.trunc(candidate.version) : defaults.version,
+    version:
+      typeof candidate.version === 'number' ? Math.trunc(candidate.version) : defaults.version,
     items,
   };
 }

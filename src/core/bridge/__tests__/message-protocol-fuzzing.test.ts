@@ -121,9 +121,7 @@ describe('message protocol fuzzing', () => {
       ];
 
       for (const input of hostileInputs) {
-        expect(validateMessage(input)).toEqual(
-          expect.objectContaining({ valid: false }),
-        );
+        expect(validateMessage(input)).toEqual(expect.objectContaining({ valid: false }));
       }
     });
   });

@@ -61,14 +61,8 @@ import {
   NetworkInterceptionManager,
   type INetworkInterceptionManager,
 } from './network-interception-manager';
-import {
-  DeviceEmulationManager,
-  type IDeviceEmulationManager,
-} from './device-emulation-manager';
-import {
-  GeolocationMockManager,
-  type IGeolocationMockManager,
-} from './geolocation-mock-manager';
+import { DeviceEmulationManager, type IDeviceEmulationManager } from './device-emulation-manager';
+import { GeolocationMockManager, type IGeolocationMockManager } from './geolocation-mock-manager';
 import { FileUploadManager, type IFileUploadManager } from './file-upload-manager';
 import { buildSessionRecordingExportArtifact } from './session-recording-export';
 
@@ -106,15 +100,47 @@ const DEFAULT_RUNTIME_SETTINGS: ExtensionSettings = {
 };
 
 const DEFAULT_PROVIDER_CONFIG: Record<SessionConfig['provider'], ProviderConfig> = {
-  claude: { enabled: true, model: DEFAULT_PROVIDER_MODELS.claude, maxTokens: 4096, temperature: 0.2 },
-  openai: { enabled: true, model: DEFAULT_PROVIDER_MODELS.openai, maxTokens: 4096, temperature: 0.2 },
-  gemini: { enabled: true, model: DEFAULT_PROVIDER_MODELS.gemini, maxTokens: 4096, temperature: 0.2 },
-  ollama: { enabled: true, model: DEFAULT_PROVIDER_MODELS.ollama, maxTokens: 4096, temperature: 0.2 },
-  openrouter: { enabled: true, model: DEFAULT_PROVIDER_MODELS.openrouter, maxTokens: 4096, temperature: 0.2 },
-  custom: { enabled: true, model: DEFAULT_PROVIDER_MODELS.custom, maxTokens: 4096, temperature: 0.2 },
+  claude: {
+    enabled: true,
+    model: DEFAULT_PROVIDER_MODELS.claude,
+    maxTokens: 4096,
+    temperature: 0.2,
+  },
+  openai: {
+    enabled: true,
+    model: DEFAULT_PROVIDER_MODELS.openai,
+    maxTokens: 4096,
+    temperature: 0.2,
+  },
+  gemini: {
+    enabled: true,
+    model: DEFAULT_PROVIDER_MODELS.gemini,
+    maxTokens: 4096,
+    temperature: 0.2,
+  },
+  ollama: {
+    enabled: true,
+    model: DEFAULT_PROVIDER_MODELS.ollama,
+    maxTokens: 4096,
+    temperature: 0.2,
+  },
+  openrouter: {
+    enabled: true,
+    model: DEFAULT_PROVIDER_MODELS.openrouter,
+    maxTokens: 4096,
+    temperature: 0.2,
+  },
+  custom: {
+    enabled: true,
+    model: DEFAULT_PROVIDER_MODELS.custom,
+    maxTokens: 4096,
+    temperature: 0.2,
+  },
 };
 
-type RuntimeHandlerResponse<T extends keyof ResponsePayloadMap> = Promise<ExtensionResponse<ResponsePayloadMap[T]>>;
+type RuntimeHandlerResponse<T extends keyof ResponsePayloadMap> = Promise<
+  ExtensionResponse<ResponsePayloadMap[T]>
+>;
 
 type AbortableAIClientManager = IAIClientManager & { abort?: () => void };
 
@@ -162,7 +188,10 @@ export class UISessionRuntime {
   private readonly geolocationMockManager: IGeolocationMockManager;
   private readonly fileUploadManager: IFileUploadManager;
   private readonly usesDefaultAIClientManager: boolean;
-  private readonly defaultProviderRegistrations = new Map<SessionConfig['provider'], Promise<void>>();
+  private readonly defaultProviderRegistrations = new Map<
+    SessionConfig['provider'],
+    Promise<void>
+  >();
   private readonly registeredDefaultProviders = new Set<SessionConfig['provider']>();
   private readonly frameRegistry: FrameRegistry = new Map();
   private readonly bridgeFrameUnsubscribers: Array<() => void> = [];
@@ -323,7 +352,9 @@ export class UISessionRuntime {
       case 'SESSION_CREATE':
         return this.handleSessionCreate(message.payload as RequestPayloadMap['SESSION_CREATE']);
       case 'SESSION_GET_STATE':
-        return this.handleSessionGetState(message.payload as RequestPayloadMap['SESSION_GET_STATE']);
+        return this.handleSessionGetState(
+          message.payload as RequestPayloadMap['SESSION_GET_STATE'],
+        );
       case 'SESSION_RECORDING_START':
         return this.handleSessionRecordingStart(
           message.payload as RequestPayloadMap['SESSION_RECORDING_START'],
@@ -383,7 +414,9 @@ export class UISessionRuntime {
       case 'SESSION_ABORT':
         return this.handleSessionAbort(message.payload as RequestPayloadMap['SESSION_ABORT']);
       case 'SESSION_SEND_MESSAGE':
-        return this.handleSessionSendMessage(message.payload as RequestPayloadMap['SESSION_SEND_MESSAGE']);
+        return this.handleSessionSendMessage(
+          message.payload as RequestPayloadMap['SESSION_SEND_MESSAGE'],
+        );
       case 'ACTION_ABORT':
         return this.handleActionAbort(message.payload as RequestPayloadMap['ACTION_ABORT']);
       default:
@@ -450,15 +483,27 @@ export class UISessionRuntime {
   ): RuntimeHandlerResponse<'SESSION_RECORDING_START'> {
     const session = this.sessionManager.getSession(payload.sessionId);
     if (!session) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, `Session "${payload.sessionId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Session "${payload.sessionId}" was not found`,
+        true,
+      );
     }
 
     if (!session.targetTabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for recording', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for recording',
+        true,
+      );
     }
 
     if (session.playback.status !== 'idle') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Stop playback before starting recording', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Stop playback before starting recording',
+        true,
+      );
     }
 
     if (this.activeRecordingSessionId && this.activeRecordingSessionId !== payload.sessionId) {
@@ -545,9 +590,10 @@ export class UISessionRuntime {
     const session = this.requireSession(payload.sessionId);
     this.assertPlaybackCanStart(session);
 
-    const speed = payload.speed !== undefined
-      ? this.normalizePlaybackSpeed(payload.speed)
-      : session.playback.speed;
+    const speed =
+      payload.speed !== undefined
+        ? this.normalizePlaybackSpeed(payload.speed)
+        : session.playback.speed;
     this.stopPlaybackExecution(payload.sessionId);
     this.sessionManager.startPlayback(payload.sessionId, speed);
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
@@ -577,9 +623,10 @@ export class UISessionRuntime {
     const session = this.requireSession(payload.sessionId);
     this.assertPlaybackCanResume(session);
 
-    const speed = payload.speed !== undefined
-      ? this.normalizePlaybackSpeed(payload.speed)
-      : session.playback.speed;
+    const speed =
+      payload.speed !== undefined
+        ? this.normalizePlaybackSpeed(payload.speed)
+        : session.playback.speed;
 
     this.stopPlaybackExecution(payload.sessionId);
     this.sessionManager.resumePlayback(payload.sessionId, speed);
@@ -603,7 +650,10 @@ export class UISessionRuntime {
     payload: RequestPayloadMap['SESSION_PLAYBACK_SET_SPEED'],
   ): RuntimeHandlerResponse<'SESSION_PLAYBACK_SET_SPEED'> {
     this.requireSession(payload.sessionId);
-    this.sessionManager.setPlaybackSpeed(payload.sessionId, this.normalizePlaybackSpeed(payload.speed));
+    this.sessionManager.setPlaybackSpeed(
+      payload.sessionId,
+      this.normalizePlaybackSpeed(payload.speed),
+    );
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
     return { success: true };
   }
@@ -625,7 +675,11 @@ export class UISessionRuntime {
     const name = this.normalizeWorkflowName(payload.name);
     const actions = this.cloneRecordedActions(payload.actions);
     if (actions.length === 0) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Workflow requires at least one recorded action', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Workflow requires at least one recorded action',
+        true,
+      );
     }
 
     const now = Date.now();
@@ -643,7 +697,10 @@ export class UISessionRuntime {
     const workflows = await getSavedWorkflows();
     workflows.unshift(workflow);
     const stored = await setSavedWorkflows(workflows);
-    const savedWorkflow = stored.items.find(function (item) { return item.id === workflow.id; }) ?? workflow;
+    const savedWorkflow =
+      stored.items.find(function (item) {
+        return item.id === workflow.id;
+      }) ?? workflow;
 
     return {
       success: true,
@@ -661,7 +718,11 @@ export class UISessionRuntime {
     const workflow = workflows.find((item) => item.id === payload.workflowId);
 
     if (!workflow) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, `Workflow "${payload.workflowId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Workflow "${payload.workflowId}" was not found`,
+        true,
+      );
     }
 
     workflow.name = name;
@@ -684,7 +745,11 @@ export class UISessionRuntime {
     const nextWorkflows = workflows.filter((workflow) => workflow.id !== payload.workflowId);
 
     if (nextWorkflows.length === workflows.length) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, `Workflow "${payload.workflowId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Workflow "${payload.workflowId}" was not found`,
+        true,
+      );
     }
 
     await setSavedWorkflows(nextWorkflows);
@@ -703,7 +768,11 @@ export class UISessionRuntime {
     const workflow = await this.getSavedWorkflowById(payload.workflowId);
 
     if (session.recording.status !== 'idle') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Stop recording before running a saved workflow', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Stop recording before running a saved workflow',
+        true,
+      );
     }
 
     if (session.status === 'running') {
@@ -715,7 +784,11 @@ export class UISessionRuntime {
     }
 
     if (!session.targetTabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for workflow playback', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for workflow playback',
+        true,
+      );
     }
 
     this.abortStream(payload.sessionId);
@@ -724,9 +797,10 @@ export class UISessionRuntime {
     this.sessionManager.replaceRecordedActions(payload.sessionId, workflow.actions);
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
 
-    const speed = payload.speed !== undefined
-      ? this.normalizePlaybackSpeed(payload.speed)
-      : session.playback.speed;
+    const speed =
+      payload.speed !== undefined
+        ? this.normalizePlaybackSpeed(payload.speed)
+        : session.playback.speed;
     this.sessionManager.startPlayback(payload.sessionId, speed);
     await this.broadcastCurrentSession(payload.sessionId, 'updated');
 
@@ -984,8 +1058,12 @@ export class UISessionRuntime {
       providers: {},
     });
 
-    const rawSettings = stored.settings as { defaultProvider?: SessionConfig['provider'] } | undefined;
-    const rawProviders = stored.providers as Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>> | undefined;
+    const rawSettings = stored.settings as
+      | { defaultProvider?: SessionConfig['provider'] }
+      | undefined;
+    const rawProviders = stored.providers as
+      | Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>
+      | undefined;
     const provider = requested.provider ?? rawSettings?.defaultProvider ?? 'openai';
     const configuredModel = rawProviders?.[provider]?.model;
     const model =
@@ -1010,7 +1088,10 @@ export class UISessionRuntime {
     return tabs[0]?.id ?? 1;
   }
 
-  private async broadcastCurrentSession(sessionId: string, reason: SessionUpdateEventPayload['reason']): Promise<void> {
+  private async broadcastCurrentSession(
+    sessionId: string,
+    reason: SessionUpdateEventPayload['reason'],
+  ): Promise<void> {
     const session = this.sessionManager.getSession(sessionId);
     await this.broadcastSessionUpdate({
       sessionId,
@@ -1086,7 +1167,11 @@ export class UISessionRuntime {
   private async pauseSessionRecording(sessionId: string): Promise<void> {
     const session = this.sessionManager.getSession(sessionId);
     if (!session) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, `Session "${sessionId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Session "${sessionId}" was not found`,
+        true,
+      );
     }
 
     if (session.recording.status !== 'recording') {
@@ -1104,7 +1189,11 @@ export class UISessionRuntime {
   private async resumeSessionRecording(sessionId: string): Promise<void> {
     const session = this.sessionManager.getSession(sessionId);
     if (!session) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, `Session "${sessionId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Session "${sessionId}" was not found`,
+        true,
+      );
     }
 
     if (session.recording.status !== 'paused') {
@@ -1112,11 +1201,19 @@ export class UISessionRuntime {
     }
 
     if (session.playback.status !== 'idle') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Stop playback before resuming recording', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Stop playback before resuming recording',
+        true,
+      );
     }
 
     if (!session.targetTabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for recording', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for recording',
+        true,
+      );
     }
 
     await this.seedRecordingNavigationUrl(session);
@@ -1156,7 +1253,10 @@ export class UISessionRuntime {
       deduped.set(key, target);
     }
 
-    if (!deduped.has('frame:0') && !Array.from(deduped.values()).some((target) => target.frameId === 0)) {
+    if (
+      !deduped.has('frame:0') &&
+      !Array.from(deduped.values()).some((target) => target.frameId === 0)
+    ) {
       deduped.set('frame:0', { frameId: 0 });
     }
 
@@ -1314,7 +1414,12 @@ export class UISessionRuntime {
 
     const recordedPayload = payload as Partial<RecordedNavigationPayload>;
     const action = recordedPayload.action;
-    if (!action || action.type !== 'navigate' || typeof action.url !== 'string' || action.url.length === 0) {
+    if (
+      !action ||
+      action.type !== 'navigate' ||
+      typeof action.url !== 'string' ||
+      action.url.length === 0
+    ) {
       return null;
     }
 
@@ -1428,7 +1533,8 @@ export class UISessionRuntime {
   }
 
   private async registerDefaultProvider(type: SessionConfig['provider']): Promise<void> {
-    const provider = type === 'custom' ? await this.createCustomProvider() : await createProvider(type);
+    const provider =
+      type === 'custom' ? await this.createCustomProvider() : await createProvider(type);
     this.aiClientManager.registerProvider(provider);
   }
 
@@ -1454,7 +1560,9 @@ export class UISessionRuntime {
         ...(stored.settings as Partial<ExtensionSettings> | undefined),
       },
       providers:
-        (stored.providers as Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>> | undefined) ?? {},
+        (stored.providers as
+          | Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>
+          | undefined) ?? {},
     };
   }
 
@@ -1505,7 +1613,11 @@ export class UISessionRuntime {
   ): Promise<AIMessage[]> {
     const session = this.sessionManager.getSession(sessionId);
     if (!session) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, `Session "${sessionId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Session "${sessionId}" was not found`,
+        true,
+      );
     }
 
     const context = await this.sessionManager.buildContext(sessionId);
@@ -1513,7 +1625,8 @@ export class UISessionRuntime {
       sessionId,
       session.tabSnapshot.map((tab) => ({ ...tab })),
     );
-    const trimmedContext = context.length > maxContextLength ? context.slice(0, maxContextLength) : context;
+    const trimmedContext =
+      context.length > maxContextLength ? context.slice(0, maxContextLength) : context;
     const uploadMetadata = this.fileUploadManager.listMetadata(sessionId);
     const priorMessages = session.messages.slice(-6, -1).map((message) => ({
       role: message.role,
@@ -1529,7 +1642,11 @@ export class UISessionRuntime {
       ...priorMessages,
       {
         role: 'user',
-        content: [trimmedContext, availableUploadsBlock, `<user_request>\n## User Request\n${sanitizeUserMessage(prompt.trim())}\n</user_request>`]
+        content: [
+          trimmedContext,
+          availableUploadsBlock,
+          `<user_request>\n## User Request\n${sanitizeUserMessage(prompt.trim())}\n</user_request>`,
+        ]
           .filter((value) => value.length > 0)
           .join('\n\n'),
       },
@@ -1560,7 +1677,11 @@ export class UISessionRuntime {
   ): Promise<string> {
     const session = this.sessionManager.getSession(sessionId);
     if (!session) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, `Session "${sessionId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Session "${sessionId}" was not found`,
+        true,
+      );
     }
 
     const providerConfig = this.resolveProviderConfig(session.config.provider, runtimeState);
@@ -1585,7 +1706,10 @@ export class UISessionRuntime {
       }
 
       if (chunk.type === 'error') {
-        throw chunk.error ?? new ExtensionError(ErrorCode.AI_API_ERROR, 'AI provider returned an error chunk', true);
+        throw (
+          chunk.error ??
+          new ExtensionError(ErrorCode.AI_API_ERROR, 'AI provider returned an error chunk', true)
+        );
       }
 
       if (chunk.type !== 'text' || !chunk.content) {
@@ -1627,7 +1751,13 @@ export class UISessionRuntime {
     const totalSteps = actions.length;
 
     for (let index = 0; index < actions.length; index += 1) {
-      await this.executeActionWithProgress(sessionId, actions[index], index + 1, totalSteps, settings);
+      await this.executeActionWithProgress(
+        sessionId,
+        actions[index],
+        index + 1,
+        totalSteps,
+        settings,
+      );
     }
   }
 
@@ -1639,7 +1769,13 @@ export class UISessionRuntime {
     settings: ExtensionSettings,
   ): Promise<ActionResult> {
     const action = this.applyDefaultRetries(baseAction, settings);
-    const runningEntry = await this.createExecutionEntry(sessionId, action, currentStep, totalSteps, 'running');
+    const runningEntry = await this.createExecutionEntry(
+      sessionId,
+      action,
+      currentStep,
+      totalSteps,
+      'running',
+    );
     await this.broadcastActionProgress({ sessionId, entry: runningEntry });
 
     const result = await this.orchestrator.executeAction(action, { sessionId });
@@ -1767,7 +1903,10 @@ export class UISessionRuntime {
     };
   }
 
-  private resolveFrameTarget(tabId: number, selector?: ElementSelector): BridgeSendTarget | undefined {
+  private resolveFrameTarget(
+    tabId: number,
+    selector?: ElementSelector,
+  ): BridgeSendTarget | undefined {
     const frameTarget = selector?.frame;
     if (!frameTarget || frameTarget.mode === undefined || frameTarget.mode === 'main') {
       return { frameId: 0 };
@@ -1783,7 +1922,9 @@ export class UISessionRuntime {
 
     const frames = Array.from(this.getFrameBucket(tabId, false)?.values() ?? []);
     if (frameTarget.mode === 'url' && frameTarget.urlPattern) {
-      const match = frames.find((frame) => this.matchesUrlPattern(frame.url, frameTarget.urlPattern!));
+      const match = frames.find((frame) =>
+        this.matchesUrlPattern(frame.url, frameTarget.urlPattern!),
+      );
       return match ? { frameId: match.frameId, documentId: match.documentId } : { frameId: 0 };
     }
 
@@ -1867,7 +2008,10 @@ export class UISessionRuntime {
           return;
         }
 
-        if (sessionAfterAction.playback.status === 'idle' && sessionAfterAction.playback.startedAt === null) {
+        if (
+          sessionAfterAction.playback.status === 'idle' &&
+          sessionAfterAction.playback.startedAt === null
+        ) {
           return;
         }
 
@@ -1894,7 +2038,8 @@ export class UISessionRuntime {
         return;
       }
 
-      const nextAction = playbackSession.recording.actions[playbackSession.playback.nextActionIndex];
+      const nextAction =
+        playbackSession.recording.actions[playbackSession.playback.nextActionIndex];
       const message = error instanceof Error ? error.message : 'Playback failed unexpectedly';
       this.sessionManager.pausePlayback(sessionId);
       this.sessionManager.setPlaybackError(sessionId, {
@@ -2023,15 +2168,27 @@ export class UISessionRuntime {
 
   private assertPlaybackCanStart(session: Session): void {
     if (session.recording.actions.length === 0) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Playback requires at least one recorded action', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Playback requires at least one recorded action',
+        true,
+      );
     }
 
     if (!session.targetTabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for playback', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for playback',
+        true,
+      );
     }
 
     if (session.recording.status !== 'idle') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Stop recording before starting playback', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Stop recording before starting playback',
+        true,
+      );
     }
 
     if (session.playback.status === 'playing') {
@@ -2039,21 +2196,37 @@ export class UISessionRuntime {
     }
 
     if (session.status === 'running') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Wait for the current automation run to finish before starting playback', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Wait for the current automation run to finish before starting playback',
+        true,
+      );
     }
   }
 
   private assertPlaybackCanResume(session: Session): void {
     if (session.recording.actions.length === 0) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Playback requires at least one recorded action', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Playback requires at least one recorded action',
+        true,
+      );
     }
 
     if (!session.targetTabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for playback', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for playback',
+        true,
+      );
     }
 
     if (session.recording.status !== 'idle') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Stop recording before resuming playback', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Stop recording before resuming playback',
+        true,
+      );
     }
 
     if (session.playback.status === 'playing') {
@@ -2069,7 +2242,11 @@ export class UISessionRuntime {
     }
 
     if (session.status === 'running') {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Wait for the current automation run to finish before resuming playback', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Wait for the current automation run to finish before resuming playback',
+        true,
+      );
     }
   }
 
@@ -2078,7 +2255,11 @@ export class UISessionRuntime {
     const workflow = workflows.find((item) => item.id === workflowId);
 
     if (!workflow) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, `Workflow "${workflowId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Workflow "${workflowId}" was not found`,
+        true,
+      );
     }
 
     return workflow;
@@ -2103,25 +2284,22 @@ export class UISessionRuntime {
   }
 
   private normalizeWorkflowTags(tags: string[]): string[] {
-    return Array.from(
-      new Set(
-        tags
-          .map((tag) => tag.trim())
-          .filter((tag) => tag.length > 0),
-      ),
-    );
+    return Array.from(new Set(tags.map((tag) => tag.trim()).filter((tag) => tag.length > 0)));
   }
 
-  private normalizeWorkflowSource(source: SavedWorkflowSource | undefined): SavedWorkflowSource | undefined {
+  private normalizeWorkflowSource(
+    source: SavedWorkflowSource | undefined,
+  ): SavedWorkflowSource | undefined {
     if (!source) {
       return undefined;
     }
 
     const sessionId = source.sessionId?.trim();
     const sessionName = source.sessionName?.trim();
-    const recordedAt = typeof source.recordedAt === 'number' && Number.isFinite(source.recordedAt)
-      ? Math.trunc(source.recordedAt)
-      : undefined;
+    const recordedAt =
+      typeof source.recordedAt === 'number' && Number.isFinite(source.recordedAt)
+        ? Math.trunc(source.recordedAt)
+        : undefined;
 
     if (!sessionId && !sessionName && recordedAt === undefined) {
       return undefined;
@@ -2145,7 +2323,11 @@ export class UISessionRuntime {
   private requireSession(sessionId: string): Session {
     const session = this.sessionManager.getSession(sessionId);
     if (!session) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, `Session "${sessionId}" was not found`, true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        `Session "${sessionId}" was not found`,
+        true,
+      );
     }
 
     return session;
@@ -2192,17 +2374,25 @@ export class UISessionRuntime {
     }
   }
 
-  private async executeDomAction(action: Action, sessionId: string | undefined, tabId: number | null): Promise<ActionResult> {
+  private async executeDomAction(
+    action: Action,
+    sessionId: string | undefined,
+    tabId: number | null,
+  ): Promise<ActionResult> {
     if (!sessionId || !tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for DOM execution', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for DOM execution',
+        true,
+      );
     }
 
-    const target = this.resolveFrameTarget(tabId, 'selector' in action ? action.selector : undefined);
+    const target = this.resolveFrameTarget(
+      tabId,
+      'selector' in action ? action.selector : undefined,
+    );
     await this.bridge.ensureContentScript(tabId, target);
-    const payload = await this.bridge.send<
-      ExecuteActionPayload,
-      ActionResultPayload
-    >(
+    const payload = await this.bridge.send<ExecuteActionPayload, ActionResultPayload>(
       tabId,
       'EXECUTE_ACTION',
       {
@@ -2223,18 +2413,27 @@ export class UISessionRuntime {
     tabId: number | null,
   ): Promise<ActionResult> {
     if (!sessionId || !tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for file upload', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for file upload',
+        true,
+      );
     }
 
     const target = this.resolveFrameTarget(tabId, action.selector);
     await this.bridge.ensureContentScript(tabId, target);
-    const payload = await this.bridge.send<ExecuteActionPayload, ActionResultPayload>(tabId, 'EXECUTE_ACTION', {
-      action,
-      context: {
-        variables: this.sessionManager.getSession(sessionId)?.variables ?? {},
-        uploads: this.fileUploadManager.resolveUploads(sessionId, action.fileIds),
+    const payload = await this.bridge.send<ExecuteActionPayload, ActionResultPayload>(
+      tabId,
+      'EXECUTE_ACTION',
+      {
+        action,
+        context: {
+          variables: this.sessionManager.getSession(sessionId)?.variables ?? {},
+          uploads: this.fileUploadManager.resolveUploads(sessionId, action.fileIds),
+        },
       },
-    }, target);
+      target,
+    );
 
     return this.mapBridgeResult(action, payload);
   }
@@ -2245,15 +2444,27 @@ export class UISessionRuntime {
     tabId: number | null,
   ): Promise<ActionResult> {
     if (!sessionId) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, 'No active session available for network interception', true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        'No active session available for network interception',
+        true,
+      );
     }
 
     if (!tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for network interception', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for network interception',
+        true,
+      );
     }
 
     const startedAt = Date.now();
-    const registration = await this.networkInterceptionManager.registerAction(sessionId, tabId, action);
+    const registration = await this.networkInterceptionManager.registerAction(
+      sessionId,
+      tabId,
+      action,
+    );
     return {
       actionId: action.id,
       success: true,
@@ -2268,11 +2479,19 @@ export class UISessionRuntime {
     tabId: number | null,
   ): Promise<ActionResult> {
     if (!sessionId) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, 'No active session available for device emulation', true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        'No active session available for device emulation',
+        true,
+      );
     }
 
     if (!tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for device emulation', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for device emulation',
+        true,
+      );
     }
 
     const startedAt = Date.now();
@@ -2291,11 +2510,19 @@ export class UISessionRuntime {
     tabId: number | null,
   ): Promise<ActionResult> {
     if (!sessionId) {
-      throw new ExtensionError(ErrorCode.SESSION_NOT_FOUND, 'No active session available for geolocation mocking', true);
+      throw new ExtensionError(
+        ErrorCode.SESSION_NOT_FOUND,
+        'No active session available for geolocation mocking',
+        true,
+      );
     }
 
     if (!tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No target tab is available for geolocation mocking', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No target tab is available for geolocation mocking',
+        true,
+      );
     }
 
     const startedAt = Date.now();
@@ -2313,7 +2540,11 @@ export class UISessionRuntime {
     tabId: number | null,
   ): Promise<ActionResult> {
     if (!tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No active tab available for PDF generation', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No active tab available for PDF generation',
+        true,
+      );
     }
 
     const startedAt = Date.now();
@@ -2333,8 +2564,10 @@ export class UISessionRuntime {
       if (action.pageRanges !== undefined) pdfParams.pageRanges = action.pageRanges;
       if (action.headerTemplate !== undefined) pdfParams.headerTemplate = action.headerTemplate;
       if (action.footerTemplate !== undefined) pdfParams.footerTemplate = action.footerTemplate;
-      if (action.displayHeaderFooter !== undefined) pdfParams.displayHeaderFooter = action.displayHeaderFooter;
-      if (action.preferCSSPageSize !== undefined) pdfParams.preferCSSPageSize = action.preferCSSPageSize;
+      if (action.displayHeaderFooter !== undefined)
+        pdfParams.displayHeaderFooter = action.displayHeaderFooter;
+      if (action.preferCSSPageSize !== undefined)
+        pdfParams.preferCSSPageSize = action.preferCSSPageSize;
 
       const base64Data = await debugger_.printToPDF(tabId, pdfParams);
       const dataUrl = `data:application/pdf;base64,${base64Data}`;
@@ -2358,14 +2591,25 @@ export class UISessionRuntime {
     }
   }
 
-  private async executeNavigateAction(action: Extract<Action, { type: 'navigate' }>, tabId: number | null): Promise<ActionResult> {
+  private async executeNavigateAction(
+    action: Extract<Action, { type: 'navigate' }>,
+    tabId: number | null,
+  ): Promise<ActionResult> {
     if (!tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No active tab available for navigation', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No active tab available for navigation',
+        true,
+      );
     }
 
     const startedAt = Date.now();
     await chrome.tabs.update(tabId, { url: action.url });
-    await this.waitForTabReady(tabId, action.waitUntil ?? 'load', action.timeout ?? DEFAULT_RUNTIME_SETTINGS.defaultTimeout);
+    await this.waitForTabReady(
+      tabId,
+      action.waitUntil ?? 'load',
+      action.timeout ?? DEFAULT_RUNTIME_SETTINGS.defaultTimeout,
+    );
     return {
       actionId: action.id,
       success: true,
@@ -2380,7 +2624,11 @@ export class UISessionRuntime {
     direction: 'back' | 'forward',
   ): Promise<ActionResult> {
     if (!tabId) {
-      throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No active tab available for history navigation', true);
+      throw new ExtensionError(
+        ErrorCode.TAB_NOT_FOUND,
+        'No active tab available for history navigation',
+        true,
+      );
     }
 
     const startedAt = Date.now();
@@ -2403,7 +2651,10 @@ export class UISessionRuntime {
     };
   }
 
-  private async executeReloadAction(action: Extract<Action, { type: 'reload' }>, tabId: number | null): Promise<ActionResult> {
+  private async executeReloadAction(
+    action: Extract<Action, { type: 'reload' }>,
+    tabId: number | null,
+  ): Promise<ActionResult> {
     if (!tabId) {
       throw new ExtensionError(ErrorCode.TAB_NOT_FOUND, 'No active tab available for reload', true);
     }
@@ -2454,13 +2705,25 @@ export class UISessionRuntime {
         // between addListener(cb, filter?) and removeListener(cb). The runtime
         // behaviour is identical — removeListener accepts the same callback ref.
         // We work around it by extracting the concrete listener type.
-        type DomContentLoadedListener = Parameters<typeof chrome.webNavigation.onDOMContentLoaded.removeListener>[0];
-        type CompletedListener = Parameters<typeof chrome.webNavigation.onCompleted.removeListener>[0];
-        type ErrorOccurredListener = Parameters<typeof chrome.webNavigation.onErrorOccurred.removeListener>[0];
+        type DomContentLoadedListener = Parameters<
+          typeof chrome.webNavigation.onDOMContentLoaded.removeListener
+        >[0];
+        type CompletedListener = Parameters<
+          typeof chrome.webNavigation.onCompleted.removeListener
+        >[0];
+        type ErrorOccurredListener = Parameters<
+          typeof chrome.webNavigation.onErrorOccurred.removeListener
+        >[0];
 
-        navigationApi?.onDOMContentLoaded.removeListener(handleDomContentLoaded as unknown as DomContentLoadedListener);
-        navigationApi?.onCompleted.removeListener(handleNavigationCompleted as unknown as CompletedListener);
-        navigationApi?.onErrorOccurred.removeListener(handleNavigationError as unknown as ErrorOccurredListener);
+        navigationApi?.onDOMContentLoaded.removeListener(
+          handleDomContentLoaded as unknown as DomContentLoadedListener,
+        );
+        navigationApi?.onCompleted.removeListener(
+          handleNavigationCompleted as unknown as CompletedListener,
+        );
+        navigationApi?.onErrorOccurred.removeListener(
+          handleNavigationError as unknown as ErrorOccurredListener,
+        );
         callback();
       };
 
@@ -2487,17 +2750,27 @@ export class UISessionRuntime {
         }
       };
 
-      const handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (removedTabId) => {
+      const handleTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (
+        removedTabId,
+      ) => {
         if (removedTabId !== tabId) {
           return;
         }
 
         finish(() => {
-          reject(new ExtensionError(ErrorCode.TAB_CLOSED, `Tab ${tabId} was closed during navigation`, true));
+          reject(
+            new ExtensionError(
+              ErrorCode.TAB_CLOSED,
+              `Tab ${tabId} was closed during navigation`,
+              true,
+            ),
+          );
         });
       };
 
-      const handleDomContentLoaded: Parameters<typeof chrome.webNavigation.onDOMContentLoaded.addListener>[0] = (details) => {
+      const handleDomContentLoaded: Parameters<
+        typeof chrome.webNavigation.onDOMContentLoaded.addListener
+      >[0] = (details) => {
         if (details.tabId !== tabId || details.frameId !== 0) {
           return;
         }
@@ -2507,7 +2780,9 @@ export class UISessionRuntime {
         }
       };
 
-      const handleNavigationCompleted: Parameters<typeof chrome.webNavigation.onCompleted.addListener>[0] = (details) => {
+      const handleNavigationCompleted: Parameters<
+        typeof chrome.webNavigation.onCompleted.addListener
+      >[0] = (details) => {
         if (details.tabId !== tabId || details.frameId !== 0) {
           return;
         }
@@ -2515,7 +2790,9 @@ export class UISessionRuntime {
         resolveReady();
       };
 
-      const handleNavigationError: Parameters<typeof chrome.webNavigation.onErrorOccurred.addListener>[0] = (details) => {
+      const handleNavigationError: Parameters<
+        typeof chrome.webNavigation.onErrorOccurred.addListener
+      >[0] = (details) => {
         if (details.tabId !== tabId || details.frameId !== 0) {
           return;
         }
@@ -2533,11 +2810,13 @@ export class UISessionRuntime {
 
       timeoutHandle = setTimeout(() => {
         finish(() => {
-          reject(new ExtensionError(
-            ErrorCode.NAVIGATION_FAILED,
-            `Timed out waiting for tab ${tabId} to reach ${waitUntil}`,
-            true,
-          ));
+          reject(
+            new ExtensionError(
+              ErrorCode.NAVIGATION_FAILED,
+              `Timed out waiting for tab ${tabId} to reach ${waitUntil}`,
+              true,
+            ),
+          );
         });
       }, timeoutMs);
 
@@ -2578,11 +2857,18 @@ export class UISessionRuntime {
     }
   }
 
-  private async executeNewTabAction(action: Extract<Action, { type: 'newTab' }>, sessionId?: string): Promise<ActionResult> {
+  private async executeNewTabAction(
+    action: Extract<Action, { type: 'newTab' }>,
+    sessionId?: string,
+  ): Promise<ActionResult> {
     const startedAt = Date.now();
     const tab = await this.tabManager.createTab(action.url, action.active ?? true);
     if (action.url) {
-      await this.waitForTabReady(tab.id, 'load', action.timeout ?? DEFAULT_RUNTIME_SETTINGS.defaultTimeout);
+      await this.waitForTabReady(
+        tab.id,
+        'load',
+        action.timeout ?? DEFAULT_RUNTIME_SETTINGS.defaultTimeout,
+      );
     }
 
     const resolvedTab = await this.safeGetTab(tab.id);
@@ -2600,7 +2886,10 @@ export class UISessionRuntime {
     };
   }
 
-  private async executeSwitchTabAction(action: Extract<Action, { type: 'switchTab' }>, sessionId?: string): Promise<ActionResult> {
+  private async executeSwitchTabAction(
+    action: Extract<Action, { type: 'switchTab' }>,
+    sessionId?: string,
+  ): Promise<ActionResult> {
     const startedAt = Date.now();
     const session = this.requireSessionForSnapshotAction(sessionId, action.type);
     const targetTab = await this.resolveTabFromPlannedSnapshot(session, action.tabIndex);
@@ -2617,7 +2906,10 @@ export class UISessionRuntime {
     };
   }
 
-  private async executeCloseTabAction(action: Extract<Action, { type: 'closeTab' }>, sessionId?: string): Promise<ActionResult> {
+  private async executeCloseTabAction(
+    action: Extract<Action, { type: 'closeTab' }>,
+    sessionId?: string,
+  ): Promise<ActionResult> {
     const startedAt = Date.now();
     const session = sessionId ? this.sessionManager.getSession(sessionId) : null;
 
@@ -2664,7 +2956,8 @@ export class UISessionRuntime {
     }
 
     const closedTabIndex = tabs.findIndex((tab) => tab.id === closedTabId);
-    const nextTab = remainingTabs[closedTabIndex] ?? remainingTabs[closedTabIndex - 1] ?? remainingTabs[0];
+    const nextTab =
+      remainingTabs[closedTabIndex] ?? remainingTabs[closedTabIndex - 1] ?? remainingTabs[0];
 
     return nextTab.id;
   }
@@ -2677,7 +2970,10 @@ export class UISessionRuntime {
       .map((tab) => this.tabManager.mapChromeTab(tab));
   }
 
-  private requireSessionForSnapshotAction(sessionId: string | undefined, actionType: 'switchTab' | 'closeTab'): Session {
+  private requireSessionForSnapshotAction(
+    sessionId: string | undefined,
+    actionType: 'switchTab' | 'closeTab',
+  ): Session {
     if (!sessionId) {
       throw new ExtensionError(
         ErrorCode.SESSION_NOT_FOUND,
@@ -2698,7 +2994,10 @@ export class UISessionRuntime {
     return session;
   }
 
-  private async resolveTabFromPlannedSnapshot(session: Session, tabIndex: number): Promise<TabState> {
+  private async resolveTabFromPlannedSnapshot(
+    session: Session,
+    tabIndex: number,
+  ): Promise<TabState> {
     const snapshot = this.plannedTabSnapshots.get(session.config.id) ?? session.tabSnapshot;
     const plannedTab = snapshot.find((tab) => tab.tabIndex === tabIndex);
     if (!plannedTab) {
@@ -2737,21 +3036,26 @@ export class UISessionRuntime {
         await this.setSessionTargetTab(session, targetTabId);
       }
 
-      session.tabSnapshot = tabs.map((tab, tabIndex): SessionTabSummary => ({
-        tabIndex,
-        id: tab.id,
-        url: tab.url,
-        title: tab.title,
-        status: tab.status,
-        isActive: tab.isActive,
-        isTarget: tab.id === session.targetTabId,
-      }));
+      session.tabSnapshot = tabs.map(
+        (tab, tabIndex): SessionTabSummary => ({
+          tabIndex,
+          id: tab.id,
+          url: tab.url,
+          title: tab.title,
+          status: tab.status,
+          isActive: tab.isActive,
+          isTarget: tab.id === session.targetTabId,
+        }),
+      );
     } catch (error) {
       this.logger.debug(`Unable to synchronize tab state for session ${sessionId}`, error);
     }
   }
 
-  private resolveSynchronizedTargetTabId(tabs: TabState[], targetTabId: number | null): number | null {
+  private resolveSynchronizedTargetTabId(
+    tabs: TabState[],
+    targetTabId: number | null,
+  ): number | null {
     if (tabs.length === 0) {
       return null;
     }
@@ -2846,7 +3150,11 @@ export class UISessionRuntime {
       return;
     }
 
-    if ('outputVariable' in action && typeof action.outputVariable === 'string' && action.outputVariable.length > 0) {
+    if (
+      'outputVariable' in action &&
+      typeof action.outputVariable === 'string' &&
+      action.outputVariable.length > 0
+    ) {
       session.variables[action.outputVariable] = result.data ?? null;
     }
   }
@@ -2890,7 +3198,10 @@ export class UISessionRuntime {
     }
 
     return parsed.actions
-      .map((action, index) => `${index + 1}. ${action.description?.trim() || this.buildActionTitle(action)}`)
+      .map(
+        (action, index) =>
+          `${index + 1}. ${action.description?.trim() || this.buildActionTitle(action)}`,
+      )
       .join('\n');
   }
 

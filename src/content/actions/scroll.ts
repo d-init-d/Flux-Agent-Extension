@@ -26,15 +26,14 @@ export async function executeScrollAction(
       duration: getDurationMs(startedAt),
     };
   } catch (error: unknown) {
-    const extensionError =
-      ExtensionError.isExtensionError(error)
-        ? error
-        : new ExtensionError(
-            ErrorCode.ACTION_FAILED,
-            `Failed to execute action "${action.type}"`,
-            true,
-            error,
-          );
+    const extensionError = ExtensionError.isExtensionError(error)
+      ? error
+      : new ExtensionError(
+          ErrorCode.ACTION_FAILED,
+          `Failed to execute action "${action.type}"`,
+          true,
+          error,
+        );
 
     return {
       actionId: action.id,
@@ -102,7 +101,10 @@ function performScrollIntoView(action: ScrollIntoViewAction, selectorEngine: Sel
   element.scrollIntoView({ block: action.block ?? 'center', inline: 'nearest', behavior: 'auto' });
 }
 
-function directionToOffset(direction: ScrollAction['direction'], amount: number): { left: number; top: number } {
+function directionToOffset(
+  direction: ScrollAction['direction'],
+  amount: number,
+): { left: number; top: number } {
   switch (direction) {
     case 'up':
       return { left: 0, top: -amount };
@@ -122,5 +124,9 @@ function getDurationMs(startedAt: number): number {
 }
 
 function assertNever(value: never): never {
-  throw new ExtensionError(ErrorCode.ACTION_INVALID, `Unsupported scroll direction: ${String(value)}`, false);
+  throw new ExtensionError(
+    ErrorCode.ACTION_INVALID,
+    `Unsupported scroll direction: ${String(value)}`,
+    false,
+  );
 }

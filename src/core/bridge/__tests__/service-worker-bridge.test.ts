@@ -45,10 +45,7 @@ function getScriptingExecuteScript() {
  * Simulate a content script sending a response message to the service worker
  * via chrome.runtime.onMessage.
  */
-function simulateIncomingMessage(
-  message: Record<string, unknown>,
-  senderTabId: number = 1,
-) {
+function simulateIncomingMessage(message: Record<string, unknown>, senderTabId: number = 1) {
   const sender: chrome.runtime.MessageSender = {
     tab: {
       id: senderTabId,
@@ -128,14 +125,16 @@ describe('ServiceWorkerBridge', () => {
 
   describe('send()', () => {
     it('should send a BridgeMessage via chrome.tabs.sendMessage', async () => {
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        return Promise.resolve({
-          id: message.id,
-          type: 'ACTION_RESULT',
-          timestamp: Date.now(),
-          payload: { ok: true },
-        });
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          return Promise.resolve({
+            id: message.id,
+            type: 'ACTION_RESULT',
+            timestamp: Date.now(),
+            payload: { ok: true },
+          });
+        },
+      );
 
       await bridge.send(1, 'EXECUTE_ACTION', { action: 'click' });
 
@@ -150,14 +149,16 @@ describe('ServiceWorkerBridge', () => {
     });
 
     it('should resolve when tabs.sendMessage returns a BridgeMessage response', async () => {
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        return Promise.resolve({
-          id: message.id,
-          type: 'ACTION_RESULT',
-          timestamp: Date.now(),
-          payload: { success: true },
-        });
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          return Promise.resolve({
+            id: message.id,
+            type: 'ACTION_RESULT',
+            timestamp: Date.now(),
+            payload: { success: true },
+          });
+        },
+      );
 
       const result = await bridge.send(1, 'EXECUTE_ACTION', { action: 'click' });
       expect(result).toEqual({ success: true });
@@ -166,10 +167,12 @@ describe('ServiceWorkerBridge', () => {
     it('should resolve when response arrives via onMessage listener', async () => {
       // tabs.sendMessage returns undefined (content script uses async sendResponse)
       let sentMessageId: string | null = null;
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        sentMessageId = message.id as string;
-        return Promise.resolve(undefined);
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          sentMessageId = message.id as string;
+          return Promise.resolve(undefined);
+        },
+      );
 
       const sendPromise = bridge.send(1, 'GET_PAGE_CONTEXT', null);
 
@@ -203,9 +206,7 @@ describe('ServiceWorkerBridge', () => {
     });
 
     it('should reject with CONTENT_SCRIPT_NOT_READY when tabs.sendMessage fails', async () => {
-      getTabsSendMessage().mockRejectedValue(
-        new Error('Could not establish connection'),
-      );
+      getTabsSendMessage().mockRejectedValue(new Error('Could not establish connection'));
 
       const sendPromise = bridge.send(1, 'PING', null);
       void sendPromise.catch(() => undefined);
@@ -218,10 +219,12 @@ describe('ServiceWorkerBridge', () => {
 
     it('should reject with ACTION_FAILED when content script returns ERROR type', async () => {
       let sentMessageId: string | null = null;
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        sentMessageId = message.id as string;
-        return Promise.resolve(undefined);
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          sentMessageId = message.id as string;
+          return Promise.resolve(undefined);
+        },
+      );
 
       const sendPromise = bridge.send(1, 'EXECUTE_ACTION', { action: 'click' });
       void sendPromise.catch(() => undefined);
@@ -410,14 +413,16 @@ describe('ServiceWorkerBridge', () => {
 
   describe('isReady()', () => {
     it('should return true when content script responds to PING', async () => {
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        return Promise.resolve({
-          id: message.id,
-          type: 'PONG',
-          timestamp: Date.now(),
-          payload: { pong: true },
-        });
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          return Promise.resolve({
+            id: message.id,
+            type: 'PONG',
+            timestamp: Date.now(),
+            payload: { pong: true },
+          });
+        },
+      );
 
       const ready = await bridge.isReady(1);
       expect(ready).toBe(true);
@@ -452,14 +457,16 @@ describe('ServiceWorkerBridge', () => {
 
   describe('ensureContentScript()', () => {
     it('should skip injection if content script is already ready', async () => {
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        return Promise.resolve({
-          id: message.id,
-          type: 'PONG',
-          timestamp: Date.now(),
-          payload: { pong: true },
-        });
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          return Promise.resolve({
+            id: message.id,
+            type: 'PONG',
+            timestamp: Date.now(),
+            payload: { pong: true },
+          });
+        },
+      );
 
       await bridge.ensureContentScript(1);
 
@@ -469,20 +476,22 @@ describe('ServiceWorkerBridge', () => {
     it('should inject and retry when content script is not ready initially', async () => {
       let callCount = 0;
 
-      getTabsSendMessage().mockImplementation((_tabId: number, message: Record<string, unknown>) => {
-        callCount++;
-        if (callCount <= 1) {
-          // First call (isReady check) — fails
-          return Promise.reject(new Error('No connection'));
-        }
-        // Subsequent calls (retry after injection) — succeeds
-        return Promise.resolve({
-          id: message.id,
-          type: 'PONG',
-          timestamp: Date.now(),
-          payload: { pong: true },
-        });
-      });
+      getTabsSendMessage().mockImplementation(
+        (_tabId: number, message: Record<string, unknown>) => {
+          callCount++;
+          if (callCount <= 1) {
+            // First call (isReady check) — fails
+            return Promise.reject(new Error('No connection'));
+          }
+          // Subsequent calls (retry after injection) — succeeds
+          return Promise.resolve({
+            id: message.id,
+            type: 'PONG',
+            timestamp: Date.now(),
+            payload: { pong: true },
+          });
+        },
+      );
 
       const ensurePromise = bridge.ensureContentScript(1);
 
@@ -501,9 +510,7 @@ describe('ServiceWorkerBridge', () => {
 
     it('should throw CONTENT_SCRIPT_INJECTION_FAILED when executeScript fails', async () => {
       getTabsSendMessage().mockRejectedValue(new Error('No connection'));
-      getScriptingExecuteScript().mockRejectedValue(
-        new Error('Cannot access chrome:// URLs'),
-      );
+      getScriptingExecuteScript().mockRejectedValue(new Error('Cannot access chrome:// URLs'));
 
       const ensurePromise = bridge.ensureContentScript(1);
       void ensurePromise.catch(() => undefined);

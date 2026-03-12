@@ -64,10 +64,7 @@ export class ContentScriptBridge implements IContentScriptBridge {
    *
    * @returns An unsubscribe function that removes the handler.
    */
-  onCommand<T>(
-    type: MessageType,
-    handler: (payload: T) => Promise<unknown>,
-  ): () => void {
+  onCommand<T>(type: MessageType, handler: (payload: T) => Promise<unknown>): () => void {
     this.handlers.set(type, handler as CommandHandler);
     this.logger.debug(`Handler registered for "${type}"`);
 
@@ -189,7 +186,9 @@ export class ContentScriptBridge implements IContentScriptBridge {
         id: bridgeMessage.id,
         type: bridgeMessage.type,
       });
-      sendResponse(this.buildErrorResponse(bridgeMessage, 'REPLAY_DETECTED', 'Duplicate message ID'));
+      sendResponse(
+        this.buildErrorResponse(bridgeMessage, 'REPLAY_DETECTED', 'Duplicate message ID'),
+      );
       return true;
     }
 
@@ -235,14 +234,11 @@ export class ContentScriptBridge implements IContentScriptBridge {
 
       sendResponse(responseMessage);
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown handler error';
+      const errorMessage = error instanceof Error ? error.message : 'Unknown handler error';
 
       this.logger.error(`Handler "${incomingMessage.type}" threw`, error);
 
-      sendResponse(
-        this.buildErrorResponse(incomingMessage, 'ACTION_FAILED', errorMessage),
-      );
+      sendResponse(this.buildErrorResponse(incomingMessage, 'ACTION_FAILED', errorMessage));
     }
   }
 

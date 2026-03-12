@@ -190,7 +190,7 @@ describe('SelectorEngine', () => {
   it('deduplicates elements in results', () => {
     document.body.innerHTML = '<button id="btn" role="button">Click</button>';
     const matches = engine.findElements({ role: 'button' });
-    const ids = matches.map(el => (el as HTMLElement).id);
+    const ids = matches.map((el) => (el as HTMLElement).id);
     const uniqueIds = [...new Set(ids)];
     expect(ids.length).toBe(uniqueIds.length);
   });

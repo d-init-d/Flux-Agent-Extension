@@ -57,11 +57,7 @@ const EXTENSION_MESSAGE_MAX_AGE_MS = 60_000;
 const EXTENSION_MESSAGE_MAX_FUTURE_DRIFT_MS = 5_000;
 const EXTENSION_MESSAGE_REPLAY_CACHE_LIMIT = 2_000;
 
-const ALLOWED_EXTENSION_CHANNELS: readonly MessageChannel[] = [
-  'popup',
-  'sidePanel',
-  'offscreen',
-];
+const ALLOWED_EXTENSION_CHANNELS: readonly MessageChannel[] = ['popup', 'sidePanel', 'offscreen'];
 
 const ALLOWED_EXTENSION_MESSAGE_TYPES: readonly ExtensionMessageType[] = [
   'SESSION_CREATE',
@@ -159,9 +155,7 @@ function installFluxPageTrackersInMainWorld(): void {
 
   const originalFetch = window.fetch;
   if (typeof originalFetch === 'function') {
-    window.fetch = function fluxTrackedFetch(
-      ...args: Parameters<typeof fetch>
-    ): Promise<Response> {
+    window.fetch = function fluxTrackedFetch(...args: Parameters<typeof fetch>): Promise<Response> {
       begin();
 
       try {
@@ -423,44 +417,32 @@ export class ServiceWorkerManager {
       try {
         this.onNavigationCommitted(details);
       } catch (error: unknown) {
-        this.logger.error(
-          `Error in webNavigation.onCommitted for tab ${details.tabId}`,
-          error,
-        );
+        this.logger.error(`Error in webNavigation.onCommitted for tab ${details.tabId}`, error);
       }
     });
 
     // -- runtime.onMessage (Extension Messages from UI) ---------------------
-    chrome.runtime.onMessage.addListener(
-      (message, sender, sendResponse): boolean | undefined => {
-        try {
-          const internalHandled = this.handleInternalContentMessage(
-            message,
-            sender,
-            sendResponse,
-          );
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse): boolean | undefined => {
+      try {
+        const internalHandled = this.handleInternalContentMessage(message, sender, sendResponse);
 
-          if (internalHandled !== undefined) {
-            return internalHandled;
-          }
-
-          return this.handleExtensionMessage(message, sender, sendResponse);
-        } catch (error: unknown) {
-          this.logger.error('Error in runtime.onMessage (extension)', error);
-          sendResponse({
-            success: false,
-            error: {
-              code: 'UNKNOWN_ERROR',
-              message:
-                error instanceof Error
-                  ? error.message
-                  : 'Unknown error in message handler',
-            },
-          } satisfies ExtensionResponse);
-          return false;
+        if (internalHandled !== undefined) {
+          return internalHandled;
         }
-      },
-    );
+
+        return this.handleExtensionMessage(message, sender, sendResponse);
+      } catch (error: unknown) {
+        this.logger.error('Error in runtime.onMessage (extension)', error);
+        sendResponse({
+          success: false,
+          error: {
+            code: 'UNKNOWN_ERROR',
+            message: error instanceof Error ? error.message : 'Unknown error in message handler',
+          },
+        } satisfies ExtensionResponse);
+        return false;
+      }
+    });
 
     this.logger.debug('Chrome event listeners registered');
   }
@@ -515,7 +497,11 @@ export class ServiceWorkerManager {
    * `false`. The content script will re-announce itself via a PAGE_LOADED
    * bridge event once it has loaded.
    */
-  private onTabUpdated: Parameters<typeof chrome.tabs.onUpdated.addListener>[0] = (tabId, changeInfo, tab) => {
+  private onTabUpdated: Parameters<typeof chrome.tabs.onUpdated.addListener>[0] = (
+    tabId,
+    changeInfo,
+    tab,
+  ) => {
     const existing = this.tabStates.get(tabId);
     const now = Date.now();
 
@@ -526,12 +512,12 @@ export class ServiceWorkerManager {
       status:
         changeInfo.status === 'loading' || changeInfo.status === 'complete'
           ? changeInfo.status
-          : existing?.status ?? 'loading',
+          : (existing?.status ?? 'loading'),
       isActive: existing?.isActive ?? false,
       contentScriptReady:
         changeInfo.status === 'complete'
           ? false // Reset — content script will re-signal via PAGE_LOADED
-          : existing?.contentScriptReady ?? false,
+          : (existing?.contentScriptReady ?? false),
       lastUpdated: now,
     };
 
@@ -545,7 +531,10 @@ export class ServiceWorkerManager {
   };
 
   /** Clean up state when a tab is closed. */
-  private onTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (tabId, _removeInfo) => {
+  private onTabRemoved: Parameters<typeof chrome.tabs.onRemoved.addListener>[0] = (
+    tabId,
+    _removeInfo,
+  ) => {
     const had = this.tabStates.delete(tabId);
     if (had) {
       this.logger.debug(`Tab ${tabId} removed — state cleaned up`);
@@ -557,7 +546,9 @@ export class ServiceWorkerManager {
    * Marks the newly activated tab as `isActive=true` and the previously active
    * tab in the same window as `isActive=false`.
    */
-  private onTabActivated: Parameters<typeof chrome.tabs.onActivated.addListener>[0] = (activeInfo) => {
+  private onTabActivated: Parameters<typeof chrome.tabs.onActivated.addListener>[0] = (
+    activeInfo,
+  ) => {
     // Deactivate the previous active tab in the same window
     for (const [id, state] of this.tabStates) {
       if (state.isActive && id !== activeInfo.tabId) {
@@ -590,10 +581,7 @@ export class ServiceWorkerManager {
           });
         })
         .catch((error: unknown) => {
-          this.logger.warn(
-            `Failed to query tab ${activeInfo.tabId} on activation`,
-            error,
-          );
+          this.logger.warn(`Failed to query tab ${activeInfo.tabId} on activation`, error);
         });
     }
 
@@ -606,7 +594,9 @@ export class ServiceWorkerManager {
    * Only handles main-frame navigations (frameId === 0). Sub-frame navigations
    * are ignored. Resets contentScriptReady because the page is being replaced.
    */
-  private onNavigationCommitted: Parameters<typeof chrome.webNavigation.onCommitted.addListener>[0] = (details) => {
+  private onNavigationCommitted: Parameters<
+    typeof chrome.webNavigation.onCommitted.addListener
+  >[0] = (details) => {
     // Ignore sub-frame navigations
     if (details.frameId !== 0) {
       return;
@@ -881,7 +871,10 @@ export class ServiceWorkerManager {
       (tabId: number, frame, payload: unknown) => {
         try {
           if (!frame.isTop) {
-            this.logger.debug(`Content script ready in subframe ${frame.frameId} for tab ${tabId}`, payload);
+            this.logger.debug(
+              `Content script ready in subframe ${frame.frameId} for tab ${tabId}`,
+              payload,
+            );
             return;
           }
 
@@ -910,7 +903,9 @@ export class ServiceWorkerManager {
       (tabId: number, frame, _payload: unknown) => {
         try {
           if (!frame.isTop) {
-            this.logger.debug(`Content script unloaded in subframe ${frame.frameId} for tab ${tabId}`);
+            this.logger.debug(
+              `Content script unloaded in subframe ${frame.frameId} for tab ${tabId}`,
+            );
             return;
           }
 

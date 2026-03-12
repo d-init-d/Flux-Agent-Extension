@@ -4,10 +4,22 @@ export const ONBOARDING_STORAGE_KEY = 'onboarding' as const;
 export const ONBOARDING_VERSION = 1;
 export const ONBOARDING_STEP_COUNT = 4;
 
-const ONBOARDING_PROVIDER_TYPES = ['claude', 'openai', 'gemini', 'ollama', 'openrouter', 'custom'] as const;
+const ONBOARDING_PROVIDER_TYPES = [
+  'claude',
+  'openai',
+  'gemini',
+  'ollama',
+  'openrouter',
+  'custom',
+] as const;
 
-function isOnboardingProviderType(value: unknown): value is (typeof ONBOARDING_PROVIDER_TYPES)[number] {
-  return typeof value === 'string' && ONBOARDING_PROVIDER_TYPES.includes(value as (typeof ONBOARDING_PROVIDER_TYPES)[number]);
+function isOnboardingProviderType(
+  value: unknown,
+): value is (typeof ONBOARDING_PROVIDER_TYPES)[number] {
+  return (
+    typeof value === 'string' &&
+    ONBOARDING_PROVIDER_TYPES.includes(value as (typeof ONBOARDING_PROVIDER_TYPES)[number])
+  );
 }
 
 export function createDefaultOnboardingState(): OnboardingState {
@@ -38,8 +50,13 @@ export function normalizeOnboardingState(value: unknown): OnboardingState {
     lastStep,
     completedAt: typeof candidate.completedAt === 'number' ? candidate.completedAt : undefined,
     providerReady: candidate.providerReady === true,
-    configuredProvider: isOnboardingProviderType(candidate.configuredProvider) ? candidate.configuredProvider : undefined,
-    validatedProvider: isOnboardingProviderType(candidate.validatedProvider) ? candidate.validatedProvider : undefined,
-    resumeRequestedAt: typeof candidate.resumeRequestedAt === 'number' ? candidate.resumeRequestedAt : undefined,
+    configuredProvider: isOnboardingProviderType(candidate.configuredProvider)
+      ? candidate.configuredProvider
+      : undefined,
+    validatedProvider: isOnboardingProviderType(candidate.validatedProvider)
+      ? candidate.validatedProvider
+      : undefined,
+    resumeRequestedAt:
+      typeof candidate.resumeRequestedAt === 'number' ? candidate.resumeRequestedAt : undefined,
   };
 }

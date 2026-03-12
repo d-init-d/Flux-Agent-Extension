@@ -44,15 +44,12 @@ const DEFAULT_OPTIONS: Required<UrlValidatorOptions> = {
 
 const BLOCKED_SCHEMES = ['javascript:', 'vbscript:'] as const;
 
-const BLOCKED_INTERNAL_SCHEMES = [
-  'chrome://',
-  'chrome-extension://',
-  'file://',
-] as const;
+const BLOCKED_INTERNAL_SCHEMES = ['chrome://', 'chrome-extension://', 'file://'] as const;
 
 const IPV4_PATTERN = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
 
-const HOMOGLYPH_PATTERN = /[\u0430\u0435\u043E\u0440\u0441\u0443\u0445\u04BB\u0456\u0458\u04CF\u0501]/;
+const HOMOGLYPH_PATTERN =
+  /[\u0430\u0435\u043E\u0440\u0441\u0443\u0445\u04BB\u0456\u0458\u04CF\u0501]/;
 
 // ============================================================================
 // Helpers
@@ -90,16 +87,19 @@ function isLocalhost(hostname: string): boolean {
  * @param options - Optional configuration overrides.
  * @returns A detailed validation result with risk assessment.
  */
-export function validateUrl(
-  url: string,
-  options?: UrlValidatorOptions,
-): UrlValidationResult {
+export function validateUrl(url: string, options?: UrlValidatorOptions): UrlValidationResult {
   const opts: Required<UrlValidatorOptions> = { ...DEFAULT_OPTIONS, ...options };
   const errors: string[] = [];
   const warnings: string[] = [];
 
   if (!url || typeof url !== 'string' || url.trim().length === 0) {
-    return { valid: false, normalized: '', errors: ['URL is empty'], warnings: [], risk: 'blocked' };
+    return {
+      valid: false,
+      normalized: '',
+      errors: ['URL is empty'],
+      warnings: [],
+      risk: 'blocked',
+    };
   }
 
   const trimmed = url.trim();
@@ -213,7 +213,9 @@ export function validateUrl(
 
   // --- Homoglyph detection ---
   if (HOMOGLYPH_PATTERN.test(parsed.hostname)) {
-    warnings.push('Hostname contains characters resembling Latin letters (possible homoglyph/IDN attack)');
+    warnings.push(
+      'Hostname contains characters resembling Latin letters (possible homoglyph/IDN attack)',
+    );
   }
 
   // --- Excessive subdomains ---
@@ -278,9 +280,6 @@ export function validateUrl(
  * @param options - Optional validation overrides.
  * @returns `true` when the URL passes all checks; `false` otherwise.
  */
-export function isSafeUrl(
-  url: string,
-  options?: UrlValidatorOptions,
-): boolean {
+export function isSafeUrl(url: string, options?: UrlValidatorOptions): boolean {
   return validateUrl(url, options).valid;
 }

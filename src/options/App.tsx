@@ -9,9 +9,30 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { createProvider } from '@core/ai-client/provider-loader';
-import { createDefaultOnboardingState, normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@shared/storage/onboarding';
-import type { AIModelConfig, AIProviderType, ExtensionSettings, OnboardingState, ProviderConfig } from '@shared/types';
-import { Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, Input, Select, Switch } from '@ui/components';
+import {
+  createDefaultOnboardingState,
+  normalizeOnboardingState,
+  ONBOARDING_STORAGE_KEY,
+} from '@shared/storage/onboarding';
+import type {
+  AIModelConfig,
+  AIProviderType,
+  ExtensionSettings,
+  OnboardingState,
+  ProviderConfig,
+} from '@shared/types';
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  Input,
+  Select,
+  Switch,
+} from '@ui/components';
 import type { BadgeVariant } from '@ui/components';
 import { ThemeToggle, useTheme } from '@ui/theme';
 import { OnboardingFlow } from './onboarding';
@@ -162,7 +183,8 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
     key: 'allowCustomScripts',
     title: 'Allow custom scripts',
-    description: 'Unlock advanced script execution. Keep this off unless the workflow source is trusted.',
+    description:
+      'Unlock advanced script execution. Keep this off unless the workflow source is trusted.',
     badge: 'High risk',
     tone: 'error',
   },
@@ -190,24 +212,21 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
 ];
 
 function createDefaultProviderConfigs(): ProviderConfigMap {
-  return PROVIDER_DEFINITIONS.reduce(
-    (accumulator, provider) => {
-      accumulator[provider.type] = {
-        enabled: provider.type !== 'custom',
-        model: provider.defaultModel,
-        maxTokens: 4096,
-        temperature: 0.3,
-        customEndpoint:
-          provider.type === 'ollama'
-            ? 'http://localhost:11434'
-            : provider.type === 'openai'
-              ? 'https://api.openai.com'
-              : undefined,
-      };
-      return accumulator;
-    },
-    {} as ProviderConfigMap,
-  );
+  return PROVIDER_DEFINITIONS.reduce((accumulator, provider) => {
+    accumulator[provider.type] = {
+      enabled: provider.type !== 'custom',
+      model: provider.defaultModel,
+      maxTokens: 4096,
+      temperature: 0.3,
+      customEndpoint:
+        provider.type === 'ollama'
+          ? 'http://localhost:11434'
+          : provider.type === 'openai'
+            ? 'https://api.openai.com'
+            : undefined,
+    };
+    return accumulator;
+  }, {} as ProviderConfigMap);
 }
 
 function createDefaultSettings(): ExtensionSettings {
@@ -260,7 +279,9 @@ function normalizeProviderConfigs(value: unknown): ProviderConfigMap {
           ? existingConfig.model
           : defaults[provider.type].model,
       maxTokens:
-        typeof existingConfig.maxTokens === 'number' ? existingConfig.maxTokens : defaults[provider.type].maxTokens,
+        typeof existingConfig.maxTokens === 'number'
+          ? existingConfig.maxTokens
+          : defaults[provider.type].maxTokens,
       temperature:
         typeof existingConfig.temperature === 'number'
           ? existingConfig.temperature
@@ -410,12 +431,16 @@ export function App() {
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfigMap>(() =>
     createDefaultProviderConfigs(),
   );
-  const [onboardingState, setOnboardingState] = useState<OnboardingState>(() => createDefaultOnboardingState());
+  const [onboardingState, setOnboardingState] = useState<OnboardingState>(() =>
+    createDefaultOnboardingState(),
+  );
   const [showOnboarding, setShowOnboarding] = useState(true);
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [isCompletingOnboarding, setIsCompletingOnboarding] = useState(false);
   const [settings, setSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
-  const [savedSettings, setSavedSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
+  const [savedSettings, setSavedSettings] = useState<ExtensionSettings>(() =>
+    createDefaultSettings(),
+  );
   const [apiKeyMetadata, setApiKeyMetadata] = useState<ProviderMetadataMap>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveMessage, setSaveMessage] = useState('');
@@ -520,7 +545,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    function handleStorageChange(changes: Record<string, chrome.storage.StorageChange>, areaName: string): void {
+    function handleStorageChange(
+      changes: Record<string, chrome.storage.StorageChange>,
+      areaName: string,
+    ): void {
       if (areaName !== 'local' || !(STORAGE_KEYS.onboarding in changes)) {
         return;
       }
@@ -579,13 +607,16 @@ export function App() {
 
   function isProviderReadyForOnboarding(): boolean {
     if (selectedDefinition.requiresApiKey) {
-      return onboardingState.configuredProvider === selectedProvider && onboardingState.validatedProvider === selectedProvider;
+      return (
+        onboardingState.configuredProvider === selectedProvider &&
+        onboardingState.validatedProvider === selectedProvider
+      );
     }
 
     if (selectedDefinition.supportsEndpoint) {
       return (
-        onboardingState.configuredProvider === selectedProvider
-        && isAllowedEndpoint(selectedProvider, selectedConfig.customEndpoint?.trim() ?? '')
+        onboardingState.configuredProvider === selectedProvider &&
+        isAllowedEndpoint(selectedProvider, selectedConfig.customEndpoint?.trim() ?? '')
       );
     }
 
@@ -599,7 +630,9 @@ export function App() {
       if (!isProviderReadyForOnboarding()) {
         setOnboardingStep(1);
         setSaveState('error');
-        setSaveMessage('Complete the provider setup step before finishing onboarding. Save the provider and validate the connection first.');
+        setSaveMessage(
+          'Complete the provider setup step before finishing onboarding. Save the provider and validate the connection first.',
+        );
         return;
       }
 
@@ -640,9 +673,9 @@ export function App() {
   function updateProviderConfig(patch: Partial<ProviderConfig>): void {
     const currentOnboarding = onboardingStateRef.current;
     if (
-      currentOnboarding.configuredProvider === selectedProvider
-      || currentOnboarding.validatedProvider === selectedProvider
-      || currentOnboarding.providerReady
+      currentOnboarding.configuredProvider === selectedProvider ||
+      currentOnboarding.validatedProvider === selectedProvider ||
+      currentOnboarding.providerReady
     ) {
       const nextOnboarding: OnboardingState = {
         ...currentOnboarding,
@@ -736,7 +769,8 @@ export function App() {
         configuredProvider: selectedProvider,
         providerReady: selectedDefinition.requiresApiKey ? false : true,
         validatedProvider:
-          selectedDefinition.requiresApiKey || currentOnboarding.validatedProvider !== selectedProvider
+          selectedDefinition.requiresApiKey ||
+          currentOnboarding.validatedProvider !== selectedProvider
             ? undefined
             : currentOnboarding.validatedProvider,
       };
@@ -763,7 +797,6 @@ export function App() {
           ? 'Provider settings saved. The key field was cleared and only masked metadata was retained.'
           : 'Provider settings saved. Re-enter a key later when encrypted persistence is wired.',
       );
-
     } catch {
       setSaveState('error');
       setSaveMessage('Failed to save provider settings.');
@@ -773,10 +806,9 @@ export function App() {
     }
   }
 
-  function pickPermissionSettings(source: ExtensionSettings): Pick<
-    ExtensionSettings,
-    PermissionSettingKey
-  > {
+  function pickPermissionSettings(
+    source: ExtensionSettings,
+  ): Pick<ExtensionSettings, PermissionSettingKey> {
     return {
       includeScreenshotsInContext: source.includeScreenshotsInContext,
       screenshotOnError: source.screenshotOnError,
@@ -800,7 +832,10 @@ export function App() {
     setPermissionSaveState('idle');
   }
 
-  function handlePermissionCardClick(event: MouseEvent<HTMLDivElement>, key: PermissionSettingKey): void {
+  function handlePermissionCardClick(
+    event: MouseEvent<HTMLDivElement>,
+    key: PermissionSettingKey,
+  ): void {
     const target = event.target;
     if (target instanceof HTMLElement && target.closest('[role="switch"]')) {
       return;
@@ -837,7 +872,9 @@ export function App() {
     try {
       if (settings.allowCustomScripts && !customScriptsConfirmed) {
         setPermissionSaveState('error');
-        setPermissionMessage('Acknowledge the custom script warning before saving this permission profile.');
+        setPermissionMessage(
+          'Acknowledge the custom script warning before saving this permission profile.',
+        );
         return;
       }
 
@@ -863,7 +900,9 @@ export function App() {
         ...permissionSettings,
       }));
       setPermissionSaveState('success');
-      setPermissionMessage('Permission toggles saved. Flux will use these capability boundaries on the next run.');
+      setPermissionMessage(
+        'Permission toggles saved. Flux will use these capability boundaries on the next run.',
+      );
     } catch {
       setPermissionSaveState('error');
       setPermissionMessage('Failed to save permission toggles.');
@@ -894,7 +933,9 @@ export function App() {
         language: nextSettings.language,
       }));
       setAppearanceSaveState('success');
-      setAppearanceMessage('Appearance settings saved. Theme and language will stay consistent across Flux surfaces.');
+      setAppearanceMessage(
+        'Appearance settings saved. Theme and language will stay consistent across Flux surfaces.',
+      );
     } catch {
       setAppearanceSaveState('error');
       setAppearanceMessage('Failed to save appearance settings.');
@@ -972,7 +1013,9 @@ export function App() {
         ? 'border-error-500/30 bg-error-50 text-error-700'
         : 'border-border bg-surface-primary text-content-secondary';
 
-  const enabledPermissionCount = PERMISSION_DEFINITIONS.filter((permission) => settings[permission.key]).length;
+  const enabledPermissionCount = PERMISSION_DEFINITIONS.filter(
+    (permission) => settings[permission.key],
+  ).length;
 
   const appearanceTone =
     appearanceSaveState === 'success'
@@ -999,7 +1042,9 @@ export function App() {
           />
         </div>
 
-        <div className={`rounded-2xl border bg-gradient-to-br ${selectedDefinition.accent} border-border px-4 py-4`}>
+        <div
+          className={`rounded-2xl border bg-gradient-to-br ${selectedDefinition.accent} border-border px-4 py-4`}
+        >
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-content-tertiary">
             Recommended default
           </p>
@@ -1060,7 +1105,8 @@ export function App() {
                   {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
                 </p>
                 <p className="mt-1 text-xs text-content-tertiary">
-                  Re-enter the raw key whenever you want to test until encrypted key persistence is wired.
+                  Re-enter the raw key whenever you want to test until encrypted key persistence is
+                  wired.
                 </p>
               </div>
             ) : null}
@@ -1074,7 +1120,9 @@ export function App() {
         )}
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
-          {validationMessage || saveMessage || 'Save changes, then test the selected provider configuration.'}
+          {validationMessage ||
+            saveMessage ||
+            'Save changes, then test the selected provider configuration.'}
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1144,7 +1192,8 @@ export function App() {
                   Configure providers and capability boundaries in one place.
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-content-secondary sm:text-base">
-                  The options workspace now covers provider setup and the first pass of runtime permission toggles without falling back to placeholder settings.
+                  The options workspace now covers provider setup and the first pass of runtime
+                  permission toggles without falling back to placeholder settings.
                 </p>
               </div>
             </div>
@@ -1174,7 +1223,9 @@ export function App() {
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-content-tertiary">
                   Enabled capabilities
                 </p>
-                <p className="mt-2 text-sm font-semibold text-content-primary">{enabledPermissionCount}/{PERMISSION_DEFINITIONS.length}</p>
+                <p className="mt-2 text-sm font-semibold text-content-primary">
+                  {enabledPermissionCount}/{PERMISSION_DEFINITIONS.length}
+                </p>
               </div>
             </div>
           </div>
@@ -1190,16 +1241,15 @@ export function App() {
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-6 pt-6">
-                {providerSetupPanel}
-              </CardContent>
+              <CardContent className="space-y-6 pt-6">{providerSetupPanel}</CardContent>
             </Card>
 
             <Card className="overflow-hidden border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
               <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
                 <CardTitle as="h2">Permission toggles</CardTitle>
                 <CardDescription>
-                  Choose which runtime capabilities the extension is allowed to use before an automation flow starts.
+                  Choose which runtime capabilities the extension is allowed to use before an
+                  automation flow starts.
                 </CardDescription>
               </CardHeader>
 
@@ -1249,14 +1299,19 @@ export function App() {
                             </p>
                             <Badge variant={permission.tone}>{permission.badge}</Badge>
                           </div>
-                          <p id={descriptionId} className="text-sm leading-6 text-content-secondary">
+                          <p
+                            id={descriptionId}
+                            className="text-sm leading-6 text-content-secondary"
+                          >
                             {permission.description}
                           </p>
                         </div>
 
                         <Switch
                           checked={settings[permission.key]}
-                          onCheckedChange={(checked) => handlePermissionToggle(permission.key, checked)}
+                          onCheckedChange={(checked) =>
+                            handlePermissionToggle(permission.key, checked)
+                          }
                           aria-labelledby={titleId}
                           aria-describedby={descriptionId}
                         />
@@ -1269,10 +1324,13 @@ export function App() {
                   <div className="rounded-[22px] border border-error-500/20 bg-error-50 px-4 py-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="error">High-risk capability</Badge>
-                      <p className="text-sm font-semibold text-error-700">Custom scripts can execute arbitrary page logic.</p>
+                      <p className="text-sm font-semibold text-error-700">
+                        Custom scripts can execute arbitrary page logic.
+                      </p>
                     </div>
                     <p className="mt-2 text-sm leading-6 text-error-700">
-                      Leave this off unless you trust the workflow source and understand that scripts can interact with live page state beyond standard guarded actions.
+                      Leave this off unless you trust the workflow source and understand that
+                      scripts can interact with live page state beyond standard guarded actions.
                     </p>
                     <label className="mt-3 flex items-start gap-3 text-sm text-error-700">
                       <input
@@ -1281,14 +1339,18 @@ export function App() {
                         onChange={(event) => setCustomScriptsConfirmed(event.target.checked)}
                         className="mt-1 h-4 w-4 rounded border-error-500/40 text-error-600 focus:ring-error-500"
                       />
-                      <span>I understand the risk and want to allow custom scripts for trusted workflows only.</span>
+                      <span>
+                        I understand the risk and want to allow custom scripts for trusted workflows
+                        only.
+                      </span>
                     </label>
                   </div>
                 ) : null}
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className={`rounded-2xl border px-4 py-3 text-sm ${permissionTone}`}>
-                    {permissionMessage || 'Toggle the capabilities you want to allow, then save the permission profile.'}
+                    {permissionMessage ||
+                      'Toggle the capabilities you want to allow, then save the permission profile.'}
                   </div>
 
                   <Button
@@ -1310,7 +1372,8 @@ export function App() {
               <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
                 <CardTitle as="h2">Appearance settings</CardTitle>
                 <CardDescription>
-                  Set the visual theme and preferred language for Flux surfaces that already read shared settings.
+                  Set the visual theme and preferred language for Flux surfaces that already read
+                  shared settings.
                 </CardDescription>
               </CardHeader>
 
@@ -1320,10 +1383,15 @@ export function App() {
                     <div>
                       <p className="text-sm font-semibold text-content-primary">Theme mode</p>
                       <p className="mt-1 text-sm leading-6 text-content-secondary">
-                        Choose whether Flux follows your system preference or stays pinned to a specific look.
+                        Choose whether Flux follows your system preference or stays pinned to a
+                        specific look.
                       </p>
                     </div>
-                    <ThemeToggle className="w-full" onModeChange={handleThemeChange} persistOnSelect={false} />
+                    <ThemeToggle
+                      className="w-full"
+                      onModeChange={handleThemeChange}
+                      persistOnSelect={false}
+                    />
                   </div>
 
                   <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
@@ -1342,14 +1410,21 @@ export function App() {
                     />
 
                     <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
-                      Current profile: <span className="font-semibold text-content-primary">{settings.theme}</span> theme, <span className="font-semibold text-content-primary">{settings.language}</span> language.
+                      Current profile:{' '}
+                      <span className="font-semibold text-content-primary">{settings.theme}</span>{' '}
+                      theme,{' '}
+                      <span className="font-semibold text-content-primary">
+                        {settings.language}
+                      </span>{' '}
+                      language.
                     </div>
                   </div>
                 </section>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className={`rounded-2xl border px-4 py-3 text-sm ${appearanceTone}`}>
-                    {appearanceMessage || 'Adjust theme or language, then save the appearance profile.'}
+                    {appearanceMessage ||
+                      'Adjust theme or language, then save the appearance profile.'}
                   </div>
 
                   <Button
@@ -1372,7 +1447,9 @@ export function App() {
             <Card className="border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
               <CardHeader>
                 <CardTitle as="h2">What is ready now</CardTitle>
-                <CardDescription>Immediate capabilities available from the current options baseline.</CardDescription>
+                <CardDescription>
+                  Immediate capabilities available from the current options baseline.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
                 <div className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
@@ -1392,19 +1469,31 @@ export function App() {
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <ServerCog className="mt-0.5 h-4 w-4 text-primary-600" />
-                  <p>Provider selection persists through `chrome.storage.local` with a real dropdown control.</p>
+                  <p>
+                    Provider selection persists through `chrome.storage.local` with a real dropdown
+                    control.
+                  </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <KeyRound className="mt-0.5 h-4 w-4 text-primary-600" />
-                  <p>Raw API keys are not written to extension storage; only masked metadata remains after save.</p>
+                  <p>
+                    Raw API keys are not written to extension storage; only masked metadata remains
+                    after save.
+                  </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <RotateCw className="mt-0.5 h-4 w-4 text-primary-600" />
-                  <p>The test action validates the selected provider and clears the key field after the check completes.</p>
+                  <p>
+                    The test action validates the selected provider and clears the key field after
+                    the check completes.
+                  </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary-600" />
-                  <p>Permission toggles now persist capability boundaries like screenshots, highlights, floating UI, and custom scripts.</p>
+                  <p>
+                    Permission toggles now persist capability boundaries like screenshots,
+                    highlights, floating UI, and custom scripts.
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -1420,14 +1509,20 @@ export function App() {
                     <LaptopMinimal className="h-4 w-4 text-primary-600" />
                     U-11 highlight overlay
                   </div>
-                  <p className="mt-1">Visual targeting overlays can inherit the same theme profile for a more consistent feedback layer.</p>
+                  <p className="mt-1">
+                    Visual targeting overlays can inherit the same theme profile for a more
+                    consistent feedback layer.
+                  </p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
                     <Sparkles className="h-4 w-4 text-primary-600" />
                     U-12 action status overlay
                   </div>
-                  <p className="mt-1">Transient run feedback can mirror the permission and theme decisions already stored in shared settings.</p>
+                  <p className="mt-1">
+                    Transient run feedback can mirror the permission and theme decisions already
+                    stored in shared settings.
+                  </p>
                 </div>
               </CardContent>
             </Card>

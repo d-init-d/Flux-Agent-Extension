@@ -44,11 +44,10 @@ describe('DebuggerAdapter', () => {
 
     expect(result).toEqual({ nodeId: 88 });
     expect(chrome.debugger.attach).toHaveBeenCalledWith({ tabId: 1 }, '1.3');
-    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
-      { tabId: 1 },
-      'DOM.querySelector',
-      { nodeId: 1, selector: '#submit' },
-    );
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith({ tabId: 1 }, 'DOM.querySelector', {
+      nodeId: 1,
+      selector: '#submit',
+    });
   });
 
   it('handles detach event and updates attached state', async () => {
@@ -84,22 +83,16 @@ describe('DebuggerAdapter', () => {
     });
 
     expect(response).toEqual({ result: { type: 'string', value: 'ok' } });
-    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
-      { tabId: 1 },
-      'Runtime.evaluate',
-      {
-        expression: 'document.title',
-        returnByValue: true,
-        awaitPromise: true,
-      },
-    );
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith({ tabId: 1 }, 'Runtime.evaluate', {
+      expression: 'document.title',
+      returnByValue: true,
+      awaitPromise: true,
+    });
   });
 
   it('provides DOM helper wrappers', async () => {
     const sendSpy = vi.spyOn(chrome.debugger, 'sendCommand');
-    sendSpy
-      .mockResolvedValueOnce({ root: { nodeId: 1 } })
-      .mockResolvedValueOnce({ nodeId: 12 });
+    sendSpy.mockResolvedValueOnce({ root: { nodeId: 1 } }).mockResolvedValueOnce({ nodeId: 12 });
 
     const documentNode = await adapter.getDocument(1, -1, true);
     const queryResult = await adapter.querySelector(1, 1, '.cta');
@@ -119,7 +112,9 @@ describe('DebuggerAdapter', () => {
   it('provides Fetch interception wrappers', async () => {
     const sendSpy = vi.spyOn(chrome.debugger, 'sendCommand');
 
-    await adapter.enableFetchInterception(1, [{ urlPattern: 'https://api.example.com/*', requestStage: 'Request' }]);
+    await adapter.enableFetchInterception(1, [
+      { urlPattern: 'https://api.example.com/*', requestStage: 'Request' },
+    ]);
     await adapter.continueInterceptedRequest(1, 'req-1');
     await adapter.failInterceptedRequest(1, 'req-2');
     await adapter.fulfillInterceptedRequest(1, 'req-3', {
@@ -132,7 +127,9 @@ describe('DebuggerAdapter', () => {
     expect(sendSpy).toHaveBeenNthCalledWith(1, { tabId: 1 }, 'Fetch.enable', {
       patterns: [{ urlPattern: 'https://api.example.com/*', requestStage: 'Request' }],
     });
-    expect(sendSpy).toHaveBeenNthCalledWith(2, { tabId: 1 }, 'Fetch.continueRequest', { requestId: 'req-1' });
+    expect(sendSpy).toHaveBeenNthCalledWith(2, { tabId: 1 }, 'Fetch.continueRequest', {
+      requestId: 'req-1',
+    });
     expect(sendSpy).toHaveBeenNthCalledWith(3, { tabId: 1 }, 'Fetch.failRequest', {
       requestId: 'req-2',
       errorReason: 'BlockedByClient',
@@ -189,8 +186,18 @@ describe('DebuggerAdapter', () => {
       longitude: -122.4194,
       accuracy: 25,
     });
-    expect(sendSpy).toHaveBeenNthCalledWith(5, { tabId: 1 }, 'Emulation.clearGeolocationOverride', undefined);
-    expect(sendSpy).toHaveBeenNthCalledWith(6, { tabId: 1 }, 'Emulation.clearDeviceMetricsOverride', undefined);
+    expect(sendSpy).toHaveBeenNthCalledWith(
+      5,
+      { tabId: 1 },
+      'Emulation.clearGeolocationOverride',
+      undefined,
+    );
+    expect(sendSpy).toHaveBeenNthCalledWith(
+      6,
+      { tabId: 1 },
+      'Emulation.clearDeviceMetricsOverride',
+      undefined,
+    );
   });
 
   it('subscribes to debugger events with tab ids only', async () => {
@@ -232,11 +239,10 @@ describe('DebuggerAdapter', () => {
     const pdfData = await adapter.printToPDF(1, { landscape: true, printBackground: true });
 
     expect(pdfData).toBe('base64-pdf-data');
-    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith(
-      { tabId: 1 },
-      'Page.printToPDF',
-      { landscape: true, printBackground: true },
-    );
+    expect(chrome.debugger.sendCommand).toHaveBeenCalledWith({ tabId: 1 }, 'Page.printToPDF', {
+      landscape: true,
+      printBackground: true,
+    });
   });
 
   it('generates PDF with default params when none are provided', async () => {
@@ -286,16 +292,22 @@ describe('DebuggerAdapter', () => {
     await adapter.attach(1);
     vi.spyOn(chrome.debugger, 'sendCommand').mockRejectedValueOnce(new Error('Target closed'));
 
-    await expect(adapter.sendCommand(1, 'Runtime.evaluate', { expression: '1+1' })).rejects.toMatchObject({
+    await expect(
+      adapter.sendCommand(1, 'Runtime.evaluate', { expression: '1+1' }),
+    ).rejects.toMatchObject({
       code: ErrorCode.TAB_CLOSED,
     } satisfies Partial<ExtensionError>);
   });
 
   it('maps unknown debugger failures to ACTION_FAILED', async () => {
     await adapter.attach(1);
-    vi.spyOn(chrome.debugger, 'sendCommand').mockRejectedValueOnce(new Error('Something unexpected happened'));
+    vi.spyOn(chrome.debugger, 'sendCommand').mockRejectedValueOnce(
+      new Error('Something unexpected happened'),
+    );
 
-    await expect(adapter.sendCommand(1, 'Runtime.evaluate', { expression: '2+2' })).rejects.toMatchObject({
+    await expect(
+      adapter.sendCommand(1, 'Runtime.evaluate', { expression: '2+2' }),
+    ).rejects.toMatchObject({
       code: ErrorCode.ACTION_FAILED,
     } satisfies Partial<ExtensionError>);
   });

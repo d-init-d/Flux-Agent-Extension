@@ -30,15 +30,14 @@ export async function executeWaitAction(
       duration: getDurationMs(startedAt),
     };
   } catch (error: unknown) {
-    const extensionError =
-      ExtensionError.isExtensionError(error)
-        ? error
-        : new ExtensionError(
-            ErrorCode.ACTION_FAILED,
-            `Failed to execute action "${action.type}"`,
-            true,
-            error,
-          );
+    const extensionError = ExtensionError.isExtensionError(error)
+      ? error
+      : new ExtensionError(
+          ErrorCode.ACTION_FAILED,
+          `Failed to execute action "${action.type}"`,
+          true,
+          error,
+        );
 
     return {
       actionId: action.id,

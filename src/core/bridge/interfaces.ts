@@ -30,10 +30,7 @@ export interface IServiceWorkerBridge {
  */
 export interface IContentScriptBridge {
   /** Listen for commands from service worker */
-  onCommand<T>(
-    type: MessageType,
-    handler: (payload: T) => Promise<unknown>,
-  ): () => void;
+  onCommand<T>(type: MessageType, handler: (payload: T) => Promise<unknown>): () => void;
 
   /** Send event to service worker */
   emit<T>(type: MessageType, payload: T): void;

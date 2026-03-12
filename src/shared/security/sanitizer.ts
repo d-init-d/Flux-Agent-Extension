@@ -96,9 +96,7 @@ export function sanitizeSelector(selector: string): string {
 
   for (const { pattern, name } of BLOCKED_SELECTOR_PATTERNS) {
     if (pattern.test(trimmed)) {
-      throw new Error(
-        `Blocked pattern detected in selector: ${name}`,
-      );
+      throw new Error(`Blocked pattern detected in selector: ${name}`);
     }
   }
 
@@ -139,7 +137,10 @@ const BLOCKED_SCRIPT_PATTERNS: ReadonlyArray<{ pattern: RegExp; name: string }> 
   // Prototype pollution
   { pattern: /__proto__/i, name: '__proto__ access' },
   { pattern: /\bprototype\s*\[/i, name: 'prototype[] bracket access' },
-  { pattern: /constructor\s*\[\s*['"]prototype['"]\s*\]/i, name: 'constructor.prototype manipulation' },
+  {
+    pattern: /constructor\s*\[\s*['"]prototype['"]\s*\]/i,
+    name: 'constructor.prototype manipulation',
+  },
 ];
 
 /**
@@ -171,9 +172,7 @@ export function sanitizeScript(script: string): string {
 
   for (const { pattern, name } of BLOCKED_SCRIPT_PATTERNS) {
     if (pattern.test(trimmed)) {
-      throw new Error(
-        `Blocked pattern detected in script: ${name}`,
-      );
+      throw new Error(`Blocked pattern detected in script: ${name}`);
     }
   }
 

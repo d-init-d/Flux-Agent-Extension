@@ -36,9 +36,7 @@ function getRuntimeSendMessage() {
  * Simulate a service-worker sending a command to this content script
  * via chrome.runtime.onMessage.
  */
-function simulateIncomingCommand(
-  message: Record<string, unknown>,
-): ReturnType<typeof vi.fn> {
+function simulateIncomingCommand(message: Record<string, unknown>): ReturnType<typeof vi.fn> {
   const sender: chrome.runtime.MessageSender = {
     id: 'mock-extension-id',
   };
@@ -193,19 +191,14 @@ describe('ContentScriptBridge', () => {
 
       bridge.emit('CONSOLE_LOG', { level: 'info' });
 
-      const sentMessage = getRuntimeSendMessage().mock.calls[0][0] as Record<
-        string,
-        unknown
-      >;
+      const sentMessage = getRuntimeSendMessage().mock.calls[0][0] as Record<string, unknown>;
       expect(typeof sentMessage.id).toBe('string');
       expect((sentMessage.id as string).length).toBeGreaterThan(0);
       expect(typeof sentMessage.timestamp).toBe('number');
     });
 
     it('should not throw when runtime.sendMessage rejects', () => {
-      getRuntimeSendMessage().mockRejectedValue(
-        new Error('Could not establish connection'),
-      );
+      getRuntimeSendMessage().mockRejectedValue(new Error('Could not establish connection'));
 
       expect(() => bridge.emit('CONSOLE_LOG', { level: 'error' })).not.toThrow();
     });
@@ -431,9 +424,7 @@ describe('ContentScriptBridge', () => {
       // Second response: REPLAY_DETECTED error
       const replayResponse = sendResponse2.mock.calls[0][0] as Record<string, unknown>;
       expect(replayResponse.type).toBe('ERROR');
-      expect(replayResponse.payload).toEqual(
-        expect.objectContaining({ code: 'REPLAY_DETECTED' }),
-      );
+      expect(replayResponse.payload).toEqual(expect.objectContaining({ code: 'REPLAY_DETECTED' }));
 
       expect(callCount).toBe(1);
     });
@@ -509,10 +500,7 @@ describe('ContentScriptBridge', () => {
           expect(sendResponse).toHaveBeenCalled();
         });
 
-        const response = sendResponse.mock.calls[0][0] as Record<
-          string,
-          unknown
-        >;
+        const response = sendResponse.mock.calls[0][0] as Record<string, unknown>;
         expect(response.type).toBe(expectedResponseType);
       },
     );

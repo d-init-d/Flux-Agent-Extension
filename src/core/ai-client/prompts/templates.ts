@@ -244,7 +244,9 @@ export function buildEnrichedUserMessage(
   }
 
   // User's message comes last, sanitized and wrapped with XML delimiters
-  blocks.push(`<user_request>\n## User Request\n${sanitizeUserMessage(userMessage)}\n</user_request>`);
+  blocks.push(
+    `<user_request>\n## User Request\n${sanitizeUserMessage(userMessage)}\n</user_request>`,
+  );
 
   return blocks.join('\n\n---\n\n');
 }
