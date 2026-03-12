@@ -500,6 +500,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-04` is now in progress via `PERMISSIONS.md`, `PRIVACY_POLICY.md`, and `DATA_USE_DISCLOSURE.md`, all aligned to the live manifest and current options/runtime behavior. `P-04a` is PASS because every declared permission and the broad `"<all_urls>"` host scope are now explicitly justified against shipped features. `P-04b` and `P-04c` have substantial prep artifacts, but remain in progress because the privacy policy still needs the publisher's real public contact and the Chrome Web Store disclosure still needs to be entered into the actual CWS form before they can be marked fully complete.
 
+> Update: `P-07` is PASS via `SECURITY_SIGNOFF.md`, backed by completed `P-03a` through `P-03d` evidence plus a dependency remediation that upgraded `@crxjs/vite-plugin` to `2.3.0` and pinned `@crxjs/vite-plugin>rollup` to `2.80.0`. Verification passed with `pnpm typecheck`, `pnpm test` (`74 files / 1156 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, which now reports only `2 moderate` vulnerabilities and no open `critical` or `high` findings. `P-04b` and `P-04c` remain operational/compliance follow-ups, but they do not block the security sign-off target.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |

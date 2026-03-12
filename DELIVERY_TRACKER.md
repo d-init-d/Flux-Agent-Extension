@@ -315,7 +315,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `P-03`, `P-03a`, `P-03b`, `P-03c`, `P-03d`, `P-04a`, `P-05a`, `P-05b`, and `P-06b` are complete; `P-01`, `P-02`, `P-04`, and `P-06` remain in progress pending their final targets.
+Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `P-03`, `P-03a`, `P-03b`, `P-03c`, `P-03d`, `P-04a`, `P-05a`, `P-05b`, `P-06b`, and `P-07` are complete; `P-01`, `P-02`, `P-04`, and `P-06` remain in progress pending their final targets.
 
 ### Sprint 5.1
 
@@ -347,7 +347,7 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `
 
 ### Sprint 5.2
 
-- [ ] `P-07` Final security sign-off
+- [x] `P-07` Final security sign-off
 - [ ] `P-08` CWS submission
 - [ ] `P-08a` Store listing assets
 - [ ] `P-08b` Final package
