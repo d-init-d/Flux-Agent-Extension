@@ -496,6 +496,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-03c` is PASS via `src/options/__tests__/provider-key-extraction.test.tsx`, which adds extraction-resistance coverage over save, validate, blocked-save, unexpected-failure, stale-session, and multi-provider transition paths to prove raw provider keys are not recoverable from storage snapshots or surfaced in the options UI. Verification passed with `pnpm typecheck`, targeted Vitest on `src/options/__tests__/App.test.tsx` plus `src/options/__tests__/provider-key-extraction.test.tsx` (`2 files / 39 tests`), full `pnpm test` (`73 files / 1150 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-03` remains in progress pending `P-03d`.
 
+> Update: `P-03d` is PASS via `src/core/bridge/__tests__/message-protocol-fuzzing.test.ts`, plus small hardening updates in `src/core/bridge/message-validation.ts` and `src/core/bridge/service-worker-bridge.ts` so hostile getter/proxy payloads degrade to invalid-message handling instead of crashing bridge code. Verification passed with `pnpm typecheck`, targeted Vitest on the bridge fuzzing + validation suites (`5 files / 100 tests`), full `pnpm test` (`74 files / 1156 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. With `P-03a` through `P-03d` complete, `P-03` is now PASS with no new critical/high findings observed in the repo-side penetration-test evidence.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |

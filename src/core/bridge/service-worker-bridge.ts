@@ -556,15 +556,19 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
 }
 
 function bridgeMessageLikeUrl(message: unknown): string | undefined {
-  if (typeof message !== 'object' || message === null) {
+  try {
+    if (typeof message !== 'object' || message === null) {
+      return undefined;
+    }
+
+    const payload = (message as { payload?: unknown }).payload;
+    if (typeof payload !== 'object' || payload === null) {
+      return undefined;
+    }
+
+    const url = (payload as { url?: unknown }).url;
+    return typeof url === 'string' ? url : undefined;
+  } catch {
     return undefined;
   }
-
-  const payload = (message as { payload?: unknown }).payload;
-  if (typeof payload !== 'object' || payload === null) {
-    return undefined;
-  }
-
-  const url = (payload as { url?: unknown }).url;
-  return typeof url === 'string' ? url : undefined;
 }

@@ -75,43 +75,58 @@ export function validateMessage(msg: unknown): ValidationResult {
     return { valid: false, reason: 'Message must be a non-null object' };
   }
 
-  const record = msg as Record<string, unknown>;
+  try {
+    const record = msg as Record<string, unknown>;
 
-  // Step 2: id must be a non-empty string
-  if (typeof record['id'] !== 'string' || record['id'].length === 0) {
-    return { valid: false, reason: 'Message id must be a non-empty string' };
-  }
+    // Step 2: id must be a non-empty string
+    if (typeof record['id'] !== 'string' || record['id'].length === 0) {
+      return { valid: false, reason: 'Message id must be a non-empty string' };
+    }
 
-  // Step 3: type must be a valid MessageType
-  if (typeof record['type'] !== 'string' || !VALID_MESSAGE_TYPES.has(record['type'])) {
+    // Step 3: type must be a valid MessageType
+    if (typeof record['type'] !== 'string' || !VALID_MESSAGE_TYPES.has(record['type'])) {
+      return {
+        valid: false,
+        reason: `Invalid message type: ${safeDescribe(record['type'])}`,
+      };
+    }
+
+    // Step 4: timestamp must be a reasonable number
+    if (typeof record['timestamp'] !== 'number' || !Number.isFinite(record['timestamp'])) {
+      return { valid: false, reason: 'Message timestamp must be a finite number' };
+    }
+
+    const now = Date.now();
+    const timestamp = record['timestamp'] as number;
+
+    if (timestamp > now + FUTURE_TOLERANCE_MS) {
+      return { valid: false, reason: 'Message timestamp is too far in the future' };
+    }
+
+    if (timestamp < now - MAX_MESSAGE_AGE_MS) {
+      return { valid: false, reason: 'Message timestamp is too old (expired)' };
+    }
+
+    // Step 5: payload must not be undefined
+    if (record['payload'] === undefined) {
+      return { valid: false, reason: 'Message payload must not be undefined' };
+    }
+  } catch {
     return {
       valid: false,
-      reason: `Invalid message type: ${String(record['type'])}`,
+      reason: 'Message could not be inspected safely',
     };
   }
 
-  // Step 4: timestamp must be a reasonable number
-  if (typeof record['timestamp'] !== 'number' || !Number.isFinite(record['timestamp'])) {
-    return { valid: false, reason: 'Message timestamp must be a finite number' };
-  }
-
-  const now = Date.now();
-  const timestamp = record['timestamp'] as number;
-
-  if (timestamp > now + FUTURE_TOLERANCE_MS) {
-    return { valid: false, reason: 'Message timestamp is too far in the future' };
-  }
-
-  if (timestamp < now - MAX_MESSAGE_AGE_MS) {
-    return { valid: false, reason: 'Message timestamp is too old (expired)' };
-  }
-
-  // Step 5: payload must not be undefined
-  if (record['payload'] === undefined) {
-    return { valid: false, reason: 'Message payload must not be undefined' };
-  }
-
   return { valid: true };
+}
+
+function safeDescribe(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return '[uninspectable]';
+  }
 }
 
 // ============================================================================
