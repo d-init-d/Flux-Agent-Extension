@@ -149,4 +149,160 @@ describe('OllamaProvider', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('connection refused')));
     await expect(provider.validateApiKey('unused')).resolves.toBe(false);
   });
+
+  it('maps HTTP 404 to model not found error', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 404, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'model not found' })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_MODEL_NOT_FOUND });
+  });
+
+  it('maps HTTP 429 to rate limit error', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 429, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'too many requests' })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_RATE_LIMIT });
+  });
+
+  it('maps HTTP 500 with non-JSON body', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 500, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue('server error'),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/server error/);
+  });
+
+  it('maps HTTP error with empty body', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 503, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(''),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Ollama API error/);
+  });
+
+  it('handles streaming chunk with done=false but no content', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    const ndjson = [
+      JSON.stringify({ message: { role: 'assistant', content: '' }, done: false }),
+      JSON.stringify({ done: true, eval_count: 1, prompt_eval_count: 2 }),
+    ].join('\n');
+
+    vi.stubGlobal('fetch', createNDJSONFetchMock([ndjson]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 2, outputTokens: 1 } }]);
+  });
+
+  it('handles multimodal message with text only (no images)', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    const ndjson = JSON.stringify({ done: true }) + '\n';
+    const fetchMock = createNDJSONFetchMock([ndjson]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await collectChunks(provider.chat([
+      { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+    ]));
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: string; images?: string[] }> };
+    expect(requestBody.messages[0].content).toBe('Hello');
+    expect(requestBody.messages[0].images).toBeUndefined();
+  });
+
+  it('handles non-data-url image (raw base64)', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    const ndjson = JSON.stringify({ done: true }) + '\n';
+    const fetchMock = createNDJSONFetchMock([ndjson]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await collectChunks(provider.chat([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look' },
+          { type: 'image', image_url: { url: 'rawBase64Data' } },
+        ],
+      },
+    ]));
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ images?: string[] }> };
+    expect(requestBody.messages[0].images).toEqual(['rawBase64Data']);
+  });
+
+  it('uses default base URL when config has no baseUrl', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize({ ...config, baseUrl: undefined });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+    await provider.validateApiKey('unused');
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'http://localhost:11434/api/tags',
+      expect.anything(),
+    );
+  });
+
+  it('handles simple text message', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    const ndjson = JSON.stringify({ done: true }) + '\n';
+    const fetchMock = createNDJSONFetchMock([ndjson]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hello' }]));
+
+    const requestBody = JSON.parse(
+      String((fetchMock.mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ role: string; content: string }> };
+    expect(requestBody.messages[0]).toEqual({ role: 'user', content: 'hello' });
+  });
+
+  it('maps HTTP error with JSON error message', async () => {
+    const provider = new OllamaProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 400, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: 'bad model' })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/bad model/);
+  });
 });

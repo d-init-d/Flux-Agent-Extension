@@ -203,4 +203,318 @@ describe('ContextBuilder', () => {
 
     expect(context).toContain('Title: Dashboard Title');
   });
+
+  it('handles message content as array with image and unknown blocks', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.messages = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look at this' },
+          { type: 'image', image_url: { url: 'data:image/png;base64,abc' } },
+          { type: 'image' },
+          { type: 'video' } as never,
+        ],
+        timestamp: Date.now(),
+      },
+    ];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('Look at this');
+    expect(context).toContain('[image:attached]');
+    expect(context).toContain('[image:missing-url]');
+    expect(context).toContain('[unknown-content]');
+  });
+
+  it('renders network section when includeNetwork is enabled', () => {
+    const builder = new ContextBuilder();
+    const context = builder.buildContext(createPageContext(), createSession(), {
+      includeDOM: false,
+      includeNetwork: true,
+    });
+
+    expect(context).toContain('## Network');
+    expect(context).toContain('/api/workspaces');
+  });
+
+  it('renders network not-available when network data is undefined', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.variables = {};
+
+    const context = builder.buildContext(createPageContext(), session, {
+      includeDOM: false,
+      includeNetwork: true,
+    });
+
+    expect(context).toContain('## Network');
+    expect(context).toContain('not available');
+  });
+
+  it('handles circular reference in variables via safeStringify', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    session.variables = circular;
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('## Variables');
+    expect(context).toContain('[Circular]');
+  });
+
+  it('shows childFrames count as 0 when undefined', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext();
+    delete (page as Partial<PageContext>).childFrames;
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: false });
+
+    expect(context).toContain('Child Frames: 0');
+  });
+
+  it('renders screenshot section when includeScreenshot and screenshot present', () => {
+    const builder = new ContextBuilder();
+    const context = builder.buildContext(createPageContext(), createSession(), {
+      includeDOM: false,
+      includeScreenshot: true,
+    });
+
+    expect(context).toContain('## Screenshot');
+  });
+
+  it('omits screenshot section when pageContext has no screenshot', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext();
+    page.screenshot = undefined;
+
+    const context = builder.buildContext(page, createSession(), {
+      includeDOM: false,
+      includeScreenshot: true,
+    });
+
+    expect(context).not.toContain('## Screenshot');
+  });
+
+  it('renders empty tabs section when tabSnapshot is empty', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.tabSnapshot = [];
+    session.targetTabId = undefined;
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('## Tabs');
+    expect(context).toContain('(none)');
+    expect(context).toContain('Target Tab: none');
+  });
+
+  it('renders empty messages section when no messages', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.messages = [];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('## Recent Messages');
+    expect(context).toContain('(none)');
+  });
+
+  it('renders empty action history section when no actions', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.actionHistory = [];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('## Action History');
+    expect(context).toContain('(none)');
+  });
+
+  it('renders empty variables section when no variables', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.variables = {};
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('## Variables');
+    expect(context).toContain('(none)');
+  });
+
+  it('normalizes invalid maxElements to default', () => {
+    const builder = new ContextBuilder();
+    const context = builder.buildContext(createPageContext(5), createSession(), {
+      maxElements: -1,
+      includeDOM: true,
+    });
+
+    expect(context).toContain('## DOM Snapshot');
+    expect(context).toContain('0. <button>');
+  });
+
+  it('renders DOM section with no interactive elements', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext(0);
+    page.headings = [];
+    page.links = [];
+    page.forms = [];
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: true });
+
+    expect(context).toContain('Interactive Elements: (none)');
+  });
+
+  it('renders child frames in DOM section', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext(0);
+    page.childFrames = [
+      {
+        frame: { frameId: 1, parentFrameId: 0, url: 'https://embed.test/widget', origin: 'https://embed.test', isTop: false },
+        title: 'Widget Frame',
+        interactiveElementCount: 3,
+      },
+    ];
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: true });
+
+    expect(context).toContain('Child Frames:');
+    expect(context).toContain('embed.test/widget');
+  });
+
+  it('renders action history with error messages', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    const now = Date.now();
+    session.actionHistory = [
+      {
+        action: { id: 'fail-1', type: 'click' },
+        result: { actionId: 'fail-1', success: false, duration: 100, error: { message: 'Element not found' } },
+        timestamp: now,
+      },
+    ];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('failed');
+    expect(context).toContain('Element not found');
+  });
+
+  it('handles page in iframe (non-top frame)', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext();
+    page.frame = { frameId: 5, parentFrameId: 0, url: 'https://iframe.test', origin: 'https://iframe.test', isTop: false };
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: false });
+
+    expect(context).toContain('iframe 5');
+  });
+
+  it('handles summary as null/undefined', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext();
+    page.summary = undefined;
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: false });
+
+    expect(context).toContain('Summary: (none)');
+  });
+
+  it('handles message without timestamp', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.messages = [{ role: 'user', content: 'Test', timestamp: undefined as unknown as number }];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('[user]');
+  });
+
+  it('renders session name as (unnamed) when null', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.config.name = undefined;
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('Name: (unnamed)');
+  });
+
+  it('summarizeTabLocation handles empty URL', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.tabSnapshot = [
+      { tabIndex: 0, id: 1, url: '', title: '', status: 'complete', isActive: true, isTarget: true },
+    ];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('(unknown)');
+  });
+
+  it('summarizeTabLocation handles unparseable URL', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.tabSnapshot = [
+      { tabIndex: 0, id: 1, url: ':::invalid', title: '', status: 'complete', isActive: false, isTarget: false },
+    ];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('location=":::invalid"');
+  });
+
+  it('renders DOM interactive elements with type, placeholder, and ariaLabel', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext(0);
+    page.interactiveElements = [
+      {
+        index: 0,
+        tag: 'input',
+        type: 'email',
+        text: '',
+        placeholder: 'Enter email',
+        ariaLabel: 'Email input',
+        role: 'textbox',
+        isVisible: true,
+        isEnabled: true,
+        boundingBox: { x: 0, y: 0, width: 100, height: 32 },
+      },
+    ];
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: true });
+
+    expect(context).toContain('type=email');
+    expect(context).toContain('placeholder="Enter email"');
+    expect(context).toContain('aria="Email input"');
+    expect(context).toContain('role=textbox');
+  });
+
+  it('renders omitted count when interactive elements exceed maxElements', () => {
+    const builder = new ContextBuilder();
+    const page = createPageContext(50);
+
+    const context = builder.buildContext(page, createSession(), { includeDOM: true, maxElements: 3 });
+
+    expect(context).toContain('47 more interactive element(s) omitted');
+  });
+
+  it('text block with missing text defaults to empty', () => {
+    const builder = new ContextBuilder();
+    const session = createSession();
+    session.messages = [
+      {
+        role: 'user',
+        content: [{ type: 'text' }] as never,
+        timestamp: Date.now(),
+      },
+    ];
+
+    const context = builder.buildContext(createPageContext(), session, { includeDOM: false });
+
+    expect(context).toContain('[user]');
+  });
 });

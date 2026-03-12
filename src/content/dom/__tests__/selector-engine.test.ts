@@ -89,6 +89,136 @@ describe('SelectorEngine', () => {
     expect(match?.closest('section')?.id).toBe('billing');
   });
 
+  it('returns null for non-matching selector', () => {
+    document.body.innerHTML = '<div>nothing here</div>';
+    expect(engine.findElement({ css: '.nonexistent' })).toBeNull();
+    expect(engine.findElements({ css: '.nonexistent' })).toEqual([]);
+  });
+
+  it('handles invalid css selector gracefully', () => {
+    document.body.innerHTML = '<div>test</div>';
+    expect(engine.findElement({ css: '!!invalid' })).toBeNull();
+  });
+
+  it('handles invalid xpath selector gracefully', () => {
+    document.body.innerHTML = '<div>test</div>';
+    expect(engine.findElement({ xpath: '!!invalid' })).toBeNull();
+  });
+
+  it('skips empty string selectors', () => {
+    document.body.innerHTML = '<div>test</div>';
+    expect(engine.findElement({ css: '', text: '' })).toBeNull();
+    expect(engine.findElement({ css: '   ' })).toBeNull();
+  });
+
+  it('resolves implicit link role', () => {
+    document.body.innerHTML = '<a href="/test" id="link">Link</a>';
+    const match = engine.findElement({ role: 'link' });
+    expect((match as HTMLElement).id).toBe('link');
+  });
+
+  it('resolves implicit textbox role', () => {
+    document.body.innerHTML = '<input id="input1" type="text" /><textarea id="ta"></textarea>';
+    const matches = engine.findElements({ role: 'textbox' });
+    expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('resolves implicit checkbox role', () => {
+    document.body.innerHTML = '<input type="checkbox" id="cb" />';
+    const match = engine.findElement({ role: 'checkbox' });
+    expect((match as HTMLElement).id).toBe('cb');
+  });
+
+  it('resolves implicit radio role', () => {
+    document.body.innerHTML = '<input type="radio" id="radio1" />';
+    const match = engine.findElement({ role: 'radio' });
+    expect((match as HTMLElement).id).toBe('radio1');
+  });
+
+  it('returns empty for unknown implicit role', () => {
+    document.body.innerHTML = '<div>test</div>';
+    expect(engine.findElement({ role: 'nonexistent' })).toBeNull();
+  });
+
+  it('applyNth with negative nth returns all elements', () => {
+    document.body.innerHTML = '<div class="t">A</div><div class="t">B</div>';
+    const matches = engine.findElements({ css: '.t', nth: -1 });
+    expect(matches).toHaveLength(2);
+  });
+
+  it('applyNth with out-of-range nth returns empty', () => {
+    document.body.innerHTML = '<div class="t">A</div>';
+    const matches = engine.findElements({ css: '.t', nth: 5 });
+    expect(matches).toHaveLength(0);
+  });
+
+  it('withinSection returns empty when no section matches', () => {
+    document.body.innerHTML = `
+      <section><h2>Account</h2><button id="btn">Click</button></section>
+    `;
+    const match = engine.findElement({ css: '#btn', withinSection: 'Nonexistent' });
+    expect(match).toBeNull();
+  });
+
+  it('withinSection with empty string is ignored', () => {
+    document.body.innerHTML = '<button id="btn">Click</button>';
+    const match = engine.findElement({ css: '#btn', withinSection: '' });
+    expect((match as HTMLElement).id).toBe('btn');
+  });
+
+  it('findElements with root element parameter', () => {
+    document.body.innerHTML = `
+      <div id="container"><span class="item">Inside</span></div>
+      <span class="item">Outside</span>
+    `;
+    const container = document.getElementById('container')!;
+    const matches = engine.findElements({ css: '.item' }, container);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].textContent).toBe('Inside');
+  });
+
+  it('findByTextPredicate with non-Document root', () => {
+    document.body.innerHTML = `
+      <div id="root"><button>Click Me</button></div>
+      <button>Outside</button>
+    `;
+    const root = document.getElementById('root')!;
+    const match = engine.findElement({ text: 'Click Me' }, root);
+    expect(match).not.toBeNull();
+  });
+
+  it('deduplicates elements in results', () => {
+    document.body.innerHTML = '<button id="btn" role="button">Click</button>';
+    const matches = engine.findElements({ role: 'button' });
+    const ids = matches.map(el => (el as HTMLElement).id);
+    const uniqueIds = [...new Set(ids)];
+    expect(ids.length).toBe(uniqueIds.length);
+  });
+
+  it('nearText with no interactive candidates returns empty', () => {
+    document.body.innerHTML = '<div>Some label text</div><p>Just text</p>';
+    const match = engine.findElement({ nearText: 'Some label' });
+    expect(match).toBeNull();
+  });
+
+  it('nearText with no matching anchor text returns empty', () => {
+    document.body.innerHTML = '<div>Label</div><button>Click</button>';
+    const match = engine.findElement({ nearText: 'Nonexistent' });
+    expect(match).toBeNull();
+  });
+
+  it('findSectionRoots with heading element uses parentElement', () => {
+    document.body.innerHTML = `
+      <div id="parent">
+        <h2>Settings</h2>
+        <button id="target">Save</button>
+      </div>
+    `;
+    const match = engine.findElement({ css: '#target', withinSection: 'Settings' });
+    expect(match).not.toBeNull();
+    expect((match as HTMLElement).id).toBe('target');
+  });
+
   it('resolves nearText using label-for mapping and proximity fallback', () => {
     document.body.innerHTML = `
       <label for="email-input">Email</label>

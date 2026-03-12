@@ -166,4 +166,383 @@ describe('ClaudeProvider', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')));
     await expect(provider.validateApiKey('key')).resolves.toBe(true);
   });
+
+  it('validateApiKey returns true when response is ok', async () => {
+    const provider = new ClaudeProvider();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    await expect(provider.validateApiKey('key')).resolves.toBe(true);
+  });
+
+  it('handles ping and empty SSE events', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      'event: ping\ndata: {}\n\n',
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles [DONE] sentinel — base parser terminates the stream', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('content_block_delta', { delta: { type: 'text_delta', text: 'Hi' } }),
+      'data: [DONE]\n\n',
+    ].join('');
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0]).toEqual({ type: 'text', content: 'Hi' });
+  });
+
+  it('handles malformed JSON in SSE data', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const ssePayload = [
+      'event: content_block_delta\ndata: not-json\n\n',
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles error SSE event with message', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = formatSSEEvent('error', { error: { message: 'overloaded' } });
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0].type).toBe('error');
+    expect(chunks[0].error?.message).toBe('overloaded');
+  });
+
+  it('handles error SSE event without message', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = formatSSEEvent('error', { error: {} });
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0].type).toBe('error');
+    expect(chunks[0].error?.message).toBe('Unknown streaming error');
+  });
+
+  it('ignores unknown SSE event types', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      'event: unknown_event\ndata: {}\n\n',
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles content_block_start without content_block', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('content_block_start', {}),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles content_block_delta without delta', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('content_block_delta', {}),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles text_delta in content_block_delta', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('content_block_delta', { delta: { type: 'text_delta', text: 'Hello' } }),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0]).toEqual({ type: 'text', content: 'Hello' });
+  });
+
+  it('handles content_block_stop without active tool call', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('content_block_stop', {}),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles message_start without usage', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('message_start', { message: {} }),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles message_start without message field', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('message_start', {}),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles message_delta without usage', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEEvent('message_delta', {}),
+      formatSSEEvent('message_stop', {}),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('maps HTTP 429 to rate limit error', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+    const body = JSON.stringify({ error: { message: 'Rate limited' } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 429, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(body),
+    }));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow('Rate limited');
+  });
+
+  it('maps HTTP 401 to invalid key error', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+    const body = JSON.stringify({ error: { message: 'Invalid API key' } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 401, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(body),
+    }));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow('Invalid API key');
+  });
+
+  it('maps HTTP 404 to model not found error', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 404, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Not found' } })),
+    }));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow('Not found');
+  });
+
+  it('maps HTTP 400 to API error', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 400, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Bad request' } })),
+    }));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow('Bad request');
+  });
+
+  it('maps HTTP 500 with non-JSON body', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 500, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue('Server error'),
+    }));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Server error/);
+  });
+
+  it('maps HTTP error with empty body', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 502, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(''),
+    }));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Claude API error/);
+  });
+
+  it('converts HTTPS image URL to url source format', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize({ ...config, systemPrompt: undefined });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
+
+    const messages: AIMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look' },
+          { type: 'image', image_url: { url: 'https://example.com/photo.png' } },
+        ],
+      },
+    ];
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: Array<Record<string, unknown>> }> };
+    expect(requestBody.messages[0].content[1]).toEqual({
+      type: 'image',
+      source: { type: 'url', url: 'https://example.com/photo.png' },
+    });
+  });
+
+  it('skips unsupported image URL format', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize({ ...config, systemPrompt: undefined });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
+
+    const messages: AIMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look' },
+          { type: 'image', image_url: { url: 'blob:http://local/1234' } },
+        ],
+      },
+    ];
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: unknown }> };
+    expect(typeof requestBody.messages[0].content).toBe('string');
+  });
+
+  it('simplifies single text block to string', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize({ ...config, systemPrompt: undefined });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
+
+    const messages: AIMessage[] = [
+      { role: 'user', content: [{ type: 'text', text: 'Just text' }] },
+    ];
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: unknown }> };
+    expect(typeof requestBody.messages[0].content).toBe('string');
+    expect(requestBody.messages[0].content).toBe('Just text');
+  });
+
+  it('builds request without system prompt or temperature', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize({ ...config, systemPrompt: undefined, temperature: undefined });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as Record<string, unknown>;
+    expect(requestBody.system).toBeUndefined();
+    expect(requestBody.temperature).toBeUndefined();
+  });
+
+  it('extracts system text from content array', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize({ ...config, systemPrompt: undefined });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
+
+    const messages: AIMessage[] = [
+      { role: 'system', content: [{ type: 'text', text: 'System from array' }] as any },
+      { role: 'user', content: 'hi' },
+    ];
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { system: string };
+    expect(requestBody.system).toBe('System from array');
+  });
+
+  it('includes tools in request when provided', async () => {
+    const provider = new ClaudeProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }], {
+      tools: [{
+        type: 'function',
+        function: { name: 'search', description: 'Search', parameters: {} },
+      }],
+    }));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { tools: Array<{ name: string }> };
+    expect(requestBody.tools).toHaveLength(1);
+    expect(requestBody.tools[0].name).toBe('search');
+  });
 });

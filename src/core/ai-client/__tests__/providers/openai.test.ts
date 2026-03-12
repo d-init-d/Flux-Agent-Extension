@@ -275,4 +275,260 @@ describe('OpenAIProvider', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     await expect(provider.validateApiKey('k3')).resolves.toBe(false);
   });
+
+  it('handles HTTP error responses with JSON error body', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const errorBody = JSON.stringify({ error: { message: 'Rate limited', type: 'rate_limit' } });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(errorBody),
+    }));
+
+    const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
+    await expect(collectChunks(stream)).rejects.toThrow('Rate limited');
+  });
+
+  it('handles HTTP 401 error', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Invalid key' } })),
+    }));
+
+    const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
+    await expect(collectChunks(stream)).rejects.toThrow('Invalid key');
+  });
+
+  it('handles HTTP 404 error', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Model not found' } })),
+    }));
+
+    const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
+    await expect(collectChunks(stream)).rejects.toThrow('Model not found');
+  });
+
+  it('handles HTTP 500 error with raw body fallback', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers({}),
+      text: vi.fn().mockResolvedValue('Internal server error'),
+    }));
+
+    const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
+    await expect(collectChunks(stream)).rejects.toThrow(/Internal server error/);
+  });
+
+  it('handles HTTP error with empty body', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(''),
+    }));
+
+    const stream = provider.chat([{ role: 'user', content: 'hello' }], { maxRetries: 0 });
+    await expect(collectChunks(stream)).rejects.toThrow(/OpenAI API error/);
+  });
+
+  it('formats string message content directly', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = [
+      formatSSEData({
+        choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: null }],
+      }),
+      formatSSEData({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    const messages: AIMessage[] = [
+      { role: 'system', content: 'You are helpful' },
+      { role: 'user', content: 'hello' },
+    ];
+
+    const chunks = await collectChunks(provider.chat(messages));
+    expect(chunks[0]).toEqual({ type: 'text', content: 'OK' });
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: unknown }> };
+    expect(typeof requestBody.messages[0].content).toBe('string');
+    expect(typeof requestBody.messages[1].content).toBe('string');
+  });
+
+  it('simplifies single text content part to string', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = formatSSEData({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    const messages: AIMessage[] = [
+      { role: 'user', content: [{ type: 'text', text: 'Just text' }] },
+    ];
+
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: unknown }> };
+    expect(typeof requestBody.messages[0].content).toBe('string');
+    expect(requestBody.messages[0].content).toBe('Just text');
+  });
+
+  it('handles image content without explicit detail level', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = formatSSEData({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    const messages: AIMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe' },
+          { type: 'image', image_url: { url: 'data:image/png;base64,AAA' } },
+        ],
+      },
+    ];
+
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: Array<Record<string, unknown>> }> };
+    const imgPart = requestBody.messages[0].content[1] as { image_url: { detail: string } };
+    expect(imgPart.image_url.detail).toBe('low');
+  });
+
+  it('handles stream chunk with no choices', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = [
+      formatSSEData({ usage: { prompt_tokens: 5, completion_tokens: 2 } }),
+      formatSSEData({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 5, outputTokens: 2 } }]);
+  });
+
+  it('handles done chunk without usage', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = formatSSEData({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done' }]);
+  });
+
+  it('uses custom base URL from config', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize({ ...config, baseUrl: 'https://custom.api.com' });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200 }));
+    await provider.validateApiKey('key');
+
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      'https://custom.api.com/v1/models',
+      expect.anything(),
+    );
+  });
+
+  it('handles malformed JSON in stream', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = [
+      'data: {invalid json}\n\n',
+      formatSSEData({
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done' }]);
+  });
+
+  it('applies maxTokens and temperature from config', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize({ ...config, maxTokens: 2048, temperature: 0.5 });
+
+    const streamPayload = formatSSEData({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { max_tokens: number; temperature: number };
+    expect(requestBody.max_tokens).toBe(2048);
+    expect(requestBody.temperature).toBe(0.5);
+  });
+
+  it('omits tools from request body when not provided', async () => {
+    const provider = new OpenAIProvider();
+    await provider.initialize(config);
+
+    const streamPayload = formatSSEData({
+      choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([streamPayload]));
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as Record<string, unknown>;
+    expect(requestBody.tools).toBeUndefined();
+  });
 });

@@ -321,4 +321,129 @@ describe('BaseProvider', () => {
 
     await expect(run).rejects.toMatchObject({ code: ErrorCode.ABORTED });
   });
+
+  it('throws when response body is null', async () => {
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: null,
+      text: vi.fn().mockResolvedValue(''),
+    }));
+
+    await expect(collectChunks(provider.chat(messages, { maxRetries: 0 }))).rejects.toMatchObject({
+      code: ErrorCode.AI_API_ERROR,
+    });
+  });
+
+  it('abort() method clears internal controller', () => {
+    const provider = new TestProvider();
+    provider.abort();
+    // No error - abort on uninitialized provider is safe
+  });
+
+  it('handles already-aborted external signal', async () => {
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    const external = new AbortController();
+    external.abort();
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
+      throw new Error('aborted');
+    }));
+
+    await expect(
+      collectChunks(provider.chat(messages, { signal: external.signal })),
+    ).rejects.toMatchObject({ code: ErrorCode.ABORTED });
+  });
+
+  it('wraps non-ExtensionError as AI_API_ERROR and retries', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    const successPayload = createSSEPayload([{ data: { type: 'done' } }]);
+
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(createStreamingResponse([successPayload]));
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const run = collectChunks(provider.chat(messages, { maxRetries: 1 }));
+    await vi.advanceTimersByTimeAsync(2000);
+
+    const chunks = await run;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(chunks).toEqual([{ type: 'done' }]);
+
+    vi.useRealTimers();
+  });
+
+  it('exhausts retries and throws the last error', async () => {
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(
+      collectChunks(provider.chat(messages, { maxRetries: 0 })),
+    ).rejects.toMatchObject({
+      code: ErrorCode.AI_API_ERROR,
+      message: expect.stringContaining('Network error'),
+    });
+  });
+
+  it('caps large error response body in safeReadBody', async () => {
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    const largeBody = 'x'.repeat(8000);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(createErrorResponse(500, largeBody)));
+
+    await expect(
+      collectChunks(provider.chat(messages, { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_API_ERROR });
+  });
+
+  it('handles safeReadBody failure gracefully', async () => {
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      body: null,
+      text: vi.fn().mockRejectedValue(new Error('read failed')),
+    }));
+
+    await expect(
+      collectChunks(provider.chat(messages, { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_API_ERROR });
+  });
+
+  it('updates rate limiter headers from response', async () => {
+    const provider = new TestProvider();
+    await provider.initialize(initializedConfig);
+
+    const limiter = provider.getRateLimiterForTest();
+    expect(limiter).not.toBeNull();
+    const updateSpy = vi.spyOn(limiter!, 'updateFromHeaders');
+
+    const payload = createSSEPayload([{ data: { type: 'done' } }]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(createStreamingResponse([payload])));
+
+    await collectChunks(provider.chat(messages));
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+  });
 });

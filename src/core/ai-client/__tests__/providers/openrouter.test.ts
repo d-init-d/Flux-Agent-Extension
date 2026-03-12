@@ -277,4 +277,233 @@ describe('OpenRouterProvider', () => {
       code: ErrorCode.AI_QUOTA_EXCEEDED,
     });
   });
+
+  it('maps HTTP 401 to invalid key error', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createErrorFetchMock(401, '{"error":{"message":"Unauthorized"}}'));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_KEY });
+  });
+
+  it('maps HTTP 403 to invalid key error', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createErrorFetchMock(403, '{"error":{"message":"Forbidden"}}'));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_KEY });
+  });
+
+  it('maps HTTP 404 to model not found error', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createErrorFetchMock(404, '{"error":{"message":"Not found"}}'));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_MODEL_NOT_FOUND });
+  });
+
+  it('maps HTTP 429 to rate limit error', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createErrorFetchMock(429, '{"error":{"message":"Rate limited"}}'));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_RATE_LIMIT });
+  });
+
+  it('maps HTTP 500 with non-JSON body', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createErrorFetchMock(500, 'Server error'));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Server error/);
+  });
+
+  it('maps HTTP error with empty body', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createErrorFetchMock(503, ''));
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/OpenRouter API error/);
+  });
+
+  it('handles malformed JSON in stream chunk', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      'data: {broken\n\n',
+      formatSSEData({
+        id: 'evt', object: 'c', created: 1, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0].type).toBe('error');
+    expect(chunks[1]).toEqual({ type: 'done' });
+  });
+
+  it('handles [DONE] sentinel in data', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEData({
+        id: 'evt', object: 'c', created: 1, model: config.model,
+        choices: [{ index: 0, delta: { content: 'Hi' }, finish_reason: null }],
+      }),
+      'data: [DONE]\n\n',
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0]).toEqual({ type: 'text', content: 'Hi' });
+  });
+
+  it('handles finish_reason tool_calls without tool_calls in delta', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEData({
+        id: 'evt-1', object: 'c', created: 1, model: config.model,
+        choices: [{
+          index: 0,
+          delta: {
+            tool_calls: [{ index: 0, id: 'c1', function: { name: 'fn', arguments: '{}' } }],
+          },
+          finish_reason: null,
+        }],
+      }),
+      formatSSEData({
+        id: 'evt-2', object: 'c', created: 2, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }],
+      }),
+      formatSSEData({
+        id: 'evt-3', object: 'c', created: 3, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    const toolCalls = chunks.filter(c => c.type === 'tool_call');
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0].toolCall?.name).toBe('fn');
+  });
+
+  it('stores usage from choice-bearing chunk', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEData({
+        id: 'evt', object: 'c', created: 1, model: config.model,
+        choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
+      }),
+      formatSSEData({
+        id: 'evt', object: 'c', created: 2, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[chunks.length - 1]).toEqual({
+      type: 'done',
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
+  });
+
+  it('handles multimodal message with image', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([
+      formatSSEData({
+        id: 'evt', object: 'c', created: 1, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ]));
+
+    const messages = [
+      {
+        role: 'user' as const,
+        content: [
+          { type: 'text' as const, text: 'Describe' },
+          { type: 'image' as const, image_url: { url: 'data:image/png;base64,AAA' } },
+        ],
+      },
+    ];
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { messages: Array<{ content: Array<Record<string, unknown>> }> };
+    const imgPart = requestBody.messages[0].content[1] as { image_url: { detail: string } };
+    expect(imgPart.image_url.detail).toBe('auto');
+  });
+
+  it('validateApiKey returns false for 403', async () => {
+    const provider = new OpenRouterProvider();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+    await expect(provider.validateApiKey('key')).resolves.toBe(false);
+  });
+
+  it('handles stream chunk with no choice', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEData({
+        id: 'evt', object: 'c', created: 1, model: config.model,
+        choices: [],
+      }),
+      formatSSEData({
+        id: 'evt', object: 'c', created: 2, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done' }]);
+  });
+
+  it('passes tools through in request body', async () => {
+    const provider = new OpenRouterProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([
+      formatSSEData({
+        id: 'evt', object: 'c', created: 1, model: config.model,
+        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
+      }),
+    ]));
+
+    const tools = [{
+      type: 'function' as const,
+      function: { name: 'search', description: 'Search', parameters: {} },
+    }];
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { tools }));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { tools: unknown[] };
+    expect(requestBody.tools).toHaveLength(1);
+  });
 });

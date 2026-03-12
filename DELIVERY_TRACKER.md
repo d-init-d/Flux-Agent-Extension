@@ -82,7 +82,7 @@ Status summary: Mostly done, remaining hardening gates on lint and coverage.
 - [x] `F-11` Service worker entry
 - [x] `F-12` Content script entry
 - [x] `F-13` Logger
-- [~] `F-14` Coverage hardening to roadmap target
+- [x] `F-14` Coverage hardening to roadmap target
 - [x] `F-14a` Encryption tests
 - [x] `F-14b` Sanitizer tests
 - [x] `F-14c` Message protocol tests
@@ -91,7 +91,7 @@ Status summary: Mostly done, remaining hardening gates on lint and coverage.
 Phase-1 blockers before final close:
 
 - [x] Migrate ESLint config to v10 flat config and make `pnpm lint` pass.
-- [ ] Lift coverage gate (branch coverage >= 80%).
+- [x] Lift coverage gate (branch coverage >= 80%).
 - [x] Remove full-suite unhandled rejection warnings.
 
 ---

@@ -253,4 +253,213 @@ describe('SessionManager', () => {
     } satisfies Partial<ExtensionError>);
     await expect(manager.sendMessage('missing', 'hello')).rejects.toThrowError(ExtensionError);
   });
+
+  it('throws when creating a session with duplicate id', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('dup'), 1);
+    await expect(manager.createSession(createSessionConfig('dup'), 2)).rejects.toMatchObject({
+      code: ErrorCode.SESSION_LIMIT_REACHED,
+    });
+  });
+
+  it('start without initialPrompt does not send message', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('no-prompt'), 1);
+    await manager.start('no-prompt');
+    const session = manager.getSession('no-prompt');
+    expect(session?.status).toBe('running');
+    expect(session?.messages).toHaveLength(0);
+  });
+
+  it('start with empty initialPrompt does not send message', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('empty-prompt'), 1);
+    await manager.start('empty-prompt', '   ');
+    expect(manager.getSession('empty-prompt')?.messages).toHaveLength(0);
+  });
+
+  it('sendMessage rejects empty/whitespace message', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('msg-test'), 1);
+    await expect(manager.sendMessage('msg-test', '   ')).rejects.toMatchObject({
+      code: ErrorCode.ACTION_INVALID,
+    });
+  });
+
+  it('undo rejects invalid steps', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('undo-test'), 1);
+    manager.pushActionRecord('undo-test', createActionRecord('a-1'));
+    await expect(manager.undo('undo-test', 0)).rejects.toThrow(/positive integer/);
+    await expect(manager.undo('undo-test', -1)).rejects.toThrow(/positive integer/);
+    await expect(manager.undo('undo-test', 1.5)).rejects.toThrow(/positive integer/);
+  });
+
+  it('undo on empty history is a no-op', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('undo-empty'), 1);
+    await manager.undo('undo-empty', 1);
+    expect(manager.getHistory('undo-empty')).toEqual([]);
+  });
+
+  it('subscribe unsubscribe works and handles edge cases', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('sub-test'), 1);
+
+    const handler = vi.fn();
+    const unsubscribe = manager.subscribe('sub-test', handler);
+
+    manager.pause('sub-test');
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    manager.resume('sub-test');
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+  });
+
+  it('buildContext uses fallback page context when none set', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('ctx-fallback'), 1);
+    const context = await manager.buildContext('ctx-fallback');
+    expect(context).toContain('about:blank');
+  });
+
+  it('buildContext uses variables.pageContext when no stored context', async () => {
+    const manager = new SessionManager();
+    const session = await manager.createSession(createSessionConfig('ctx-var'), 1);
+    session.variables.pageContext = createPageContext({ url: 'https://var-context.com' });
+    const context = await manager.buildContext('ctx-var');
+    expect(context).toContain('https://var-context.com');
+  });
+
+  it('buildContext ignores invalid variables.pageContext', async () => {
+    const manager = new SessionManager();
+    const session = await manager.createSession(createSessionConfig('ctx-invalid'), 1);
+    session.variables.pageContext = { invalid: true };
+    const context = await manager.buildContext('ctx-invalid');
+    expect(context).toContain('about:blank');
+  });
+
+  it('buildContext ignores null variables.pageContext', async () => {
+    const manager = new SessionManager();
+    const session = await manager.createSession(createSessionConfig('ctx-null'), 1);
+    session.variables.pageContext = null;
+    const context = await manager.buildContext('ctx-null');
+    expect(context).toContain('about:blank');
+  });
+
+  it('replaceRecordedActions replaces all actions', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('replace'), 1);
+    manager.startRecording('replace');
+    manager.appendRecordedAction('replace', {
+      action: { id: 'old', type: 'click', selector: { css: '#old' } },
+      timestamp: 100,
+    });
+
+    manager.replaceRecordedActions('replace', [
+      { action: { id: 'new1', type: 'click', selector: { css: '#new1' } }, timestamp: 200 },
+      { action: { id: 'new2', type: 'fill', selector: { css: '#new2' }, value: 'x' }, timestamp: 300 },
+    ]);
+
+    const session = manager.getSession('replace');
+    expect(session?.recording.actions).toHaveLength(2);
+    expect(session?.recording.actions[0].action.id).toBe('new1');
+    expect(session?.recording.status).toBe('idle');
+    expect(session?.recording.startedAt).toBe(200);
+  });
+
+  it('replaceRecordedActions with empty array', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('replace-empty'), 1);
+
+    manager.replaceRecordedActions('replace-empty', []);
+
+    const session = manager.getSession('replace-empty');
+    expect(session?.recording.actions).toHaveLength(0);
+    expect(session?.recording.startedAt).toBeNull();
+  });
+
+  it('setPlaybackError without timestamp uses Date.now', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('err-test'), 1);
+    manager.startPlayback('err-test');
+
+    manager.setPlaybackError('err-test', { message: 'Failed' });
+    const session = manager.getSession('err-test');
+    expect(session?.playback.lastError?.message).toBe('Failed');
+    expect(session?.playback.lastError?.timestamp).toBeGreaterThan(0);
+  });
+
+  it('clearPlaybackError clears the error', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('clear-err'), 1);
+    manager.startPlayback('clear-err');
+    manager.setPlaybackError('clear-err', { message: 'Error' });
+    manager.clearPlaybackError('clear-err');
+    expect(manager.getSession('clear-err')?.playback.lastError).toBeNull();
+  });
+
+  it('resumePlayback without speed keeps existing speed', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('resume-speed'), 1);
+    manager.startPlayback('resume-speed', 2);
+    manager.pausePlayback('resume-speed');
+    manager.resumePlayback('resume-speed');
+    expect(manager.getSession('resume-speed')?.playback.speed).toBe(2);
+  });
+
+  it('setPlaybackSpeed updates speed', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('set-speed'), 1);
+    manager.startPlayback('set-speed');
+    manager.setPlaybackSpeed('set-speed', 0.5);
+    expect(manager.getSession('set-speed')?.playback.speed).toBe(0.5);
+  });
+
+  it('setPlaybackNextActionIndex updates index', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('set-index'), 1);
+    manager.startPlayback('set-index');
+    manager.setPlaybackNextActionIndex('set-index', 5);
+    expect(manager.getSession('set-index')?.playback.nextActionIndex).toBe(5);
+  });
+
+  it('getSession returns null for unknown session', () => {
+    const manager = new SessionManager();
+    expect(manager.getSession('nonexistent')).toBeNull();
+  });
+
+  it('getActiveSessions excludes completed sessions', async () => {
+    const manager = new SessionManager();
+    const session = await manager.createSession(createSessionConfig('completed'), 1);
+    session.status = 'completed';
+    expect(manager.getActiveSessions()).toHaveLength(0);
+  });
+
+  it('addAIResponse emits ai_response event', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('ai-resp'), 1);
+
+    const events: string[] = [];
+    manager.subscribe('ai-resp', (event) => events.push(event.type));
+    manager.addAIResponse('ai-resp', 'AI says hello');
+
+    expect(events).toEqual(['ai_response']);
+    const session = manager.getSession('ai-resp');
+    expect(session?.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'AI says hello' });
+  });
+
+  it('pushActionRecord emits action_executed event', async () => {
+    const manager = new SessionManager();
+    await manager.createSession(createSessionConfig('push-action'), 1);
+
+    const events: string[] = [];
+    manager.subscribe('push-action', (event) => events.push(event.type));
+    manager.pushActionRecord('push-action', createActionRecord('a-1'));
+
+    expect(events).toEqual(['action_executed']);
+  });
 });

@@ -110,4 +110,77 @@ describe('ThemeToggle', () => {
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(localStorage.getItem('flux-agent-theme')).toBeNull();
   });
+
+  it('navigates using ArrowDown and ArrowUp keys', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider defaultMode="light">
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+
+    const lightRadio = screen.getByRole('radio', { name: 'Use light theme' });
+    const darkRadio = screen.getByRole('radio', { name: 'Use dark theme' });
+
+    lightRadio.focus();
+    await user.keyboard('{ArrowDown}');
+
+    expect(darkRadio).toHaveFocus();
+    expect(darkRadio).toHaveAttribute('aria-checked', 'true');
+
+    await user.keyboard('{ArrowUp}');
+
+    expect(lightRadio).toHaveFocus();
+    expect(lightRadio).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('ignores non-arrow key presses', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider defaultMode="light">
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+
+    const lightRadio = screen.getByRole('radio', { name: 'Use light theme' });
+    lightRadio.focus();
+    await user.keyboard('x');
+
+    expect(lightRadio).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('wraps around from last to first with ArrowRight', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <ThemeProvider defaultMode="system">
+        <ThemeToggle />
+      </ThemeProvider>,
+    );
+
+    const systemRadio = screen.getByRole('radio', { name: 'Use system theme' });
+    const lightRadio = screen.getByRole('radio', { name: 'Use light theme' });
+
+    systemRadio.focus();
+    await user.keyboard('{ArrowRight}');
+
+    expect(lightRadio).toHaveFocus();
+    expect(lightRadio).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('calls onModeChange callback when provided', async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+
+    render(
+      <ThemeProvider defaultMode="light">
+        <ThemeToggle onModeChange={onModeChange} />
+      </ThemeProvider>,
+    );
+
+    await user.click(screen.getByRole('radio', { name: 'Use dark theme' }));
+    expect(onModeChange).toHaveBeenCalledWith('dark');
+  });
 });

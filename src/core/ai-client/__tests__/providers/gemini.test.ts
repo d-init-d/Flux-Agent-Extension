@@ -226,4 +226,262 @@ describe('GeminiProvider', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     await expect(provider.validateApiKey('k3')).resolves.toBe(false);
   });
+
+  it('handles stream chunk with no data', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      'data: \n\n',
+      formatSSEData({
+        candidates: [{ finishReason: 'STOP', content: { parts: [] } }],
+        usageMetadata: { promptTokenCount: 1, candidatesTokenCount: 1 },
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 1, outputTokens: 1 } }]);
+  });
+
+  it('handles malformed JSON in stream', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      'data: {invalid}\n\n',
+      formatSSEData({
+        candidates: [{ finishReason: 'STOP', content: { parts: [] } }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles API error inside stream payload', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    const ssePayload = formatSSEData({
+      error: { code: 400, message: 'Bad request', status: 'INVALID_ARGUMENT' },
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks[0].type).toBe('error');
+    expect(chunks[0].error?.message).toContain('Bad request');
+  });
+
+  it('handles stream with no candidates', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEData({ usageMetadata: { promptTokenCount: 5 } }),
+      formatSSEData({
+        candidates: [{ finishReason: 'STOP', content: { parts: [] } }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('handles text content with empty text', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    const ssePayload = [
+      formatSSEData({
+        candidates: [{ content: { parts: [{ text: '' }] } }],
+      }),
+      formatSSEData({
+        candidates: [{ finishReason: 'STOP', content: { parts: [] } }],
+      }),
+    ].join('');
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
+
+  it('maps HTTP 400 with API_KEY_INVALID to invalid key error', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 400, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({
+        error: { message: 'API key not valid', status: 'API_KEY_INVALID' },
+      })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Invalid Gemini API key/);
+  });
+
+  it('maps HTTP 403 to access denied error', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 403, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Forbidden' } })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/access denied/i);
+  });
+
+  it('maps HTTP 404 to model not found error', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 404, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Model not found' } })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/model not found/i);
+  });
+
+  it('maps HTTP 429 to rate limit error', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 429, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Too many requests' } })),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/rate limit/i);
+  });
+
+  it('maps HTTP 500 with non-JSON body', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 500, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue('Internal error'),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Internal error/);
+  });
+
+  it('maps HTTP error with empty body', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 503, headers: new Headers({}),
+      text: vi.fn().mockResolvedValue(''),
+    }));
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
+    ).rejects.toThrow(/Gemini API error/);
+  });
+
+  it('skips non-data-url images with warning', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([
+      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+    ]));
+
+    const messages: AIMessage[] = [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look' },
+          { type: 'image', image_url: { url: 'https://example.com/img.png' } },
+        ],
+      },
+    ];
+    await collectChunks(provider.chat(messages));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { contents: Array<{ parts: Array<Record<string, unknown>> }> };
+    expect(requestBody.contents[0].parts).toHaveLength(1);
+    expect(requestBody.contents[0].parts[0]).toEqual({ text: 'Look' });
+  });
+
+  it('builds request without temperature and maxTokens', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize({ ...config, temperature: undefined, maxTokens: undefined });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([
+      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+    ]));
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { generationConfig: Record<string, unknown> };
+    expect(requestBody.generationConfig.temperature).toBeUndefined();
+    expect(requestBody.generationConfig.maxOutputTokens).toBeUndefined();
+  });
+
+  it('builds request without system instruction when no system messages', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([
+      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+    ]));
+
+    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as Record<string, unknown>;
+    expect(requestBody.systemInstruction).toBeUndefined();
+  });
+
+  it('handles system content as array', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([
+      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+    ]));
+
+    await collectChunks(provider.chat([
+      { role: 'system', content: [{ type: 'text', text: 'System' }] as any },
+      { role: 'user', content: 'hi' },
+    ]));
+
+    const requestBody = JSON.parse(
+      String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),
+    ) as { systemInstruction: { parts: Array<{ text: string }> } };
+    expect(requestBody.systemInstruction.parts[0].text).toBe('System');
+  });
+
+  it('handles STOP with missing usageMetadata', async () => {
+    const provider = new GeminiProvider();
+    await provider.initialize(config);
+
+    const ssePayload = formatSSEData({
+      candidates: [{ finishReason: 'STOP', content: { parts: [] } }],
+    });
+
+    vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
+    const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
+    expect(chunks).toEqual([{ type: 'done', usage: { inputTokens: 0, outputTokens: 0 } }]);
+  });
 });
