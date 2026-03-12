@@ -52,8 +52,32 @@ Prepare five Chrome Web Store screenshots that map directly to live product surf
 - Avoid blank or empty states unless the screenshot is explicitly about onboarding lock behavior.
 - Keep captions short enough to fit cleanly in Chrome Web Store image metadata and internal asset tracking.
 
-## Still Needed Before Submission
+## P-08a Deliverables
 
-- Capture the five final PNG screenshots at store-ready dimensions.
-- Seed stable demo data so chat, action log, workflows, and provider states look intentional across all shots.
-- Review captions against the final chosen title and short description for tone consistency.
+- Captured five final PNG screenshots at store-ready `1280x800` dimensions.
+- Recorded the final asset paths so the listing package can reference them directly.
+- Kept the shot list and captions aligned with the current title and short description draft.
+
+## Demo Capture Routes
+
+- Popup locked: `src/popup/index.html?demo=popup-locked`
+- Popup unlocked: `src/popup/index.html?demo=popup-unlocked`
+- Side panel workspace: `src/sidepanel/index.html?demo=sidepanel-workspace`
+- Side panel workflows: `src/sidepanel/index.html?demo=sidepanel-workflows`
+- Options control surface: `src/options/index.html?demo=options-control-surface`
+
+## Final Asset Paths
+
+- `store-assets/p-08a-popup-locked.png`
+- `store-assets/p-08a-popup-unlocked.png`
+- `store-assets/p-08a-sidepanel-workspace.png`
+- `store-assets/p-08a-sidepanel-workflows.png`
+- `store-assets/p-08a-options-control-surface.png`
+
+## Capture Notes
+
+- Demo mode only activates when the `demo` query parameter is present; shipped extension surfaces still use the normal runtime.
+- The popup shots should be centered on a neutral browser-like stage during capture so the fixed `360x480` surface reads clearly inside a `1280x800` asset.
+- For the workspace shot, expand the action log before capture.
+- For the workflows shot, open `Saved workflows` before capture.
+- For the options shot, save the permission profile during capture so the success message is visible.

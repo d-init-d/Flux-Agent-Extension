@@ -457,6 +457,8 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 
 ---
 
+> P-08a asset pack: five store-ready Chrome Web Store screenshots now live in `store-assets/`, with captions and file mapping tracked in `STORE_SCREENSHOTS.md`.
+
 ## 5. File Structure
 
 ```
