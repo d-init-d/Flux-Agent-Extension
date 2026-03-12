@@ -502,6 +502,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-07` is PASS via `SECURITY_SIGNOFF.md`, backed by completed `P-03a` through `P-03d` evidence plus a dependency remediation that upgraded `@crxjs/vite-plugin` to `2.3.0` and pinned `@crxjs/vite-plugin>rollup` to `2.80.0`. Verification passed with `pnpm typecheck`, `pnpm test` (`74 files / 1156 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, which now reports only `2 moderate` vulnerabilities and no open `critical` or `high` findings. `P-04b` and `P-04c` remain operational/compliance follow-ups, but they do not block the security sign-off target.
 
+> Update: `P-08a` is now in progress via `STORE_LISTING.md` and `STORE_SCREENSHOTS.md`, which prepare the Chrome Web Store title/description copy, keywords, screenshot captions, and a five-shot asset plan aligned to the live popup, sidepanel, and options surfaces. The copy/shot-list portion is ready for review, while the final `5` screenshot PNG assets still need to be produced from seeded demo states before `P-08a` can be marked fully complete.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |

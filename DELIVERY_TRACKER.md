@@ -349,7 +349,7 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `
 
 - [x] `P-07` Final security sign-off
 - [ ] `P-08` CWS submission
-- [ ] `P-08a` Store listing assets
+- [~] `P-08a` Store listing assets
 - [ ] `P-08b` Final package
 - [ ] `P-08c` Review response loop
 - [ ] `P-09` Post-launch monitoring
