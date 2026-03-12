@@ -26,6 +26,7 @@ function mockSuccessfulProviderValidation() {
     supportsFunctionCalling: true,
     initialize,
     validateApiKey,
+    // eslint-disable-next-line require-yield
     chat: async function* () {
       return;
     },
@@ -56,6 +57,7 @@ function mockPendingProviderValidation() {
     supportsFunctionCalling: true,
     initialize,
     validateApiKey,
+    // eslint-disable-next-line require-yield
     chat: async function* () {
       return;
     },
@@ -115,7 +117,11 @@ describe('Options App', () => {
 
     renderOptionsApp();
 
-    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', {
+        name: /configure providers and capability boundaries/i,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Provider')).toHaveValue('claude');
     expect(screen.getByDisplayValue('claude-3-opus-20240229')).toBeInTheDocument();
     expect(screen.getByText(/saved key metadata/i)).toBeInTheDocument();
@@ -166,12 +172,15 @@ describe('Options App', () => {
       supportsFunctionCalling: true,
       initialize,
       validateApiKey,
+      // eslint-disable-next-line require-yield
       chat: async function* () {
         return;
       },
       abort: vi.fn(),
     };
-    const createProviderSpy = vi.spyOn(providerLoader, 'createProvider').mockResolvedValue(provider);
+    const createProviderSpy = vi
+      .spyOn(providerLoader, 'createProvider')
+      .mockResolvedValue(provider);
 
     renderOptionsApp();
 
@@ -261,7 +270,9 @@ describe('Options App', () => {
     await user.type(apiKeyInput, 'sk-should-clear');
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
-    expect(await screen.findByText(/save blocked: remote provider endpoints must use https/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/save blocked: remote provider endpoints must use https/i),
+    ).toBeInTheDocument();
     expect(apiKeyInput).toHaveValue('');
   });
 
@@ -290,7 +301,9 @@ describe('Options App', () => {
     await user.type(screen.getByLabelText('Provider endpoint'), 'http://example.com/v1');
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
-    expect(await screen.findByText(/save blocked: remote provider endpoints must use https/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/save blocked: remote provider endpoints must use https/i),
+    ).toBeInTheDocument();
     await expect(readStorage('activeProvider')).resolves.toBeUndefined();
   });
 
@@ -337,10 +350,21 @@ describe('Options App', () => {
     renderOptionsApp();
 
     expect(await screen.findByRole('heading', { name: /permission toggles/i })).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('switch', { name: /capture screenshots on failures/i })).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByRole('switch', { name: /allow custom scripts/i })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('switch', { name: /show floating bar/i })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(
+      screen.getByRole('switch', { name: /capture screenshots on failures/i }),
+    ).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('switch', { name: /allow custom scripts/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('switch', { name: /show floating bar/i })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
   });
 
   it('saves permission toggles to extension settings', async () => {
@@ -379,7 +403,10 @@ describe('Options App', () => {
     await screen.findByRole('heading', { name: /permission toggles/i });
     await user.click(screen.getByText(/share screenshots with ai/i));
 
-    expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('exposes a single keyboard focus stop for each permission toggle', async () => {
@@ -388,8 +415,12 @@ describe('Options App', () => {
     await screen.findByRole('heading', { name: /permission toggles/i });
 
     const screenshotToggle = screen.getByRole('switch', { name: /share screenshots with ai/i });
-    expect(screen.queryByRole('button', { name: /share screenshots with ai context/i })).not.toBeInTheDocument();
-    expect(screenshotToggle).toHaveAccessibleDescription(/attach page captures as additional context/i);
+    expect(
+      screen.queryByRole('button', { name: /share screenshots with ai context/i }),
+    ).not.toBeInTheDocument();
+    expect(screenshotToggle).toHaveAccessibleDescription(
+      /attach page captures as additional context/i,
+    );
   });
 
   it('loads appearance settings from stored preferences', async () => {
@@ -405,7 +436,10 @@ describe('Options App', () => {
 
     await screen.findByRole('heading', { name: /appearance settings/i });
     expect(screen.getByLabelText('Language')).toHaveValue('vi');
-    expect(screen.getByRole('radio', { name: /use dark theme/i })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: /use dark theme/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('saves appearance settings to extension settings', async () => {
@@ -511,7 +545,10 @@ describe('Options App', () => {
     permissionSwitch.focus();
     await user.keyboard('{Enter}');
 
-    expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('switch', { name: /share screenshots with ai/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
   });
 
   it('blocks saving custom scripts until the warning is acknowledged', async () => {
@@ -584,7 +621,11 @@ describe('Options App', () => {
 
     await user.click(screen.getByRole('button', { name: /skip for now/i }));
 
-    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', {
+        name: /configure providers and capability boundaries/i,
+      }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /resume onboarding/i }));
 
@@ -622,7 +663,11 @@ describe('Options App', () => {
 
     expect(await screen.findByTestId('onboarding-step-permissions')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /skip for now/i }));
-    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', {
+        name: /configure providers and capability boundaries/i,
+      }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /resume onboarding/i }));
 
@@ -686,7 +731,11 @@ describe('Options App', () => {
       );
     });
 
-    expect(await screen.findByRole('heading', { name: /configure providers and capability boundaries/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', {
+        name: /configure providers and capability boundaries/i,
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /restart onboarding/i })).toBeInTheDocument();
   });
 

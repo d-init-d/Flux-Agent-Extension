@@ -177,10 +177,7 @@ describe('ClaudeProvider', () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
 
-    const ssePayload = [
-      'event: ping\ndata: {}\n\n',
-      formatSSEEvent('message_stop', {}),
-    ].join('');
+    const ssePayload = ['event: ping\ndata: {}\n\n', formatSSEEvent('message_stop', {})].join('');
 
     vi.stubGlobal('fetch', createStreamingFetchMock([ssePayload]));
     const chunks = await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
@@ -356,10 +353,15 @@ describe('ClaudeProvider', () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
     const body = JSON.stringify({ error: { message: 'Rate limited' } });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 429, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(body),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(body),
+      }),
+    );
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
     ).rejects.toThrow('Rate limited');
@@ -369,10 +371,15 @@ describe('ClaudeProvider', () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
     const body = JSON.stringify({ error: { message: 'Invalid API key' } });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 401, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(body),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(body),
+      }),
+    );
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
     ).rejects.toThrow('Invalid API key');
@@ -381,10 +388,15 @@ describe('ClaudeProvider', () => {
   it('maps HTTP 404 to model not found error', async () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 404, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Not found' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Not found' } })),
+      }),
+    );
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
     ).rejects.toThrow('Not found');
@@ -393,10 +405,15 @@ describe('ClaudeProvider', () => {
   it('maps HTTP 400 to API error', async () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 400, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Bad request' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Bad request' } })),
+      }),
+    );
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
     ).rejects.toThrow('Bad request');
@@ -405,10 +422,15 @@ describe('ClaudeProvider', () => {
   it('maps HTTP 500 with non-JSON body', async () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 500, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue('Server error'),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue('Server error'),
+      }),
+    );
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
     ).rejects.toThrow(/Server error/);
@@ -417,10 +439,15 @@ describe('ClaudeProvider', () => {
   it('maps HTTP error with empty body', async () => {
     const provider = new ClaudeProvider();
     await provider.initialize(config);
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 502, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(''),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(''),
+      }),
+    );
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
     ).rejects.toThrow(/Claude API error/);
@@ -515,7 +542,10 @@ describe('ClaudeProvider', () => {
     vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
 
     const messages: AIMessage[] = [
-      { role: 'system', content: [{ type: 'text', text: 'System from array' }] as any },
+      {
+        role: 'system',
+        content: [{ type: 'text', text: 'System from array' }] as unknown as string,
+      },
       { role: 'user', content: 'hi' },
     ];
     await collectChunks(provider.chat(messages));
@@ -532,12 +562,16 @@ describe('ClaudeProvider', () => {
 
     vi.stubGlobal('fetch', createStreamingFetchMock([formatSSEEvent('message_stop', {})]));
 
-    await collectChunks(provider.chat([{ role: 'user', content: 'hi' }], {
-      tools: [{
-        type: 'function',
-        function: { name: 'search', description: 'Search', parameters: {} },
-      }],
-    }));
+    await collectChunks(
+      provider.chat([{ role: 'user', content: 'hi' }], {
+        tools: [
+          {
+            type: 'function',
+            function: { name: 'search', description: 'Search', parameters: {} },
+          },
+        ],
+      }),
+    );
 
     const requestBody = JSON.parse(
       String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),

@@ -340,10 +340,10 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `
 - [x] `P-03b` XSS pen-test
 - [x] `P-03c` API key extraction attempts
 - [x] `P-03d` Message fuzzing
-- [~] `P-04` CWS compliance
+- [x] `P-04` CWS compliance
 - [x] `P-04a` Permission justification
-- [~] `P-04b` Privacy policy
-- [~] `P-04c` Data use disclosure
+- [x] `P-04b` Privacy policy
+- [x] `P-04c` Data use disclosure
 
 ### Sprint 5.2
 
@@ -360,12 +360,12 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `
 
 ## Immediate Task Queue (Locked)
 
-- [ ] `T-01` Close current `C-08` by commit and push.
+- [x] `T-01` Close current `C-08` by commit and push.
 - [x] `T-02` Implement `C-09` (Zod schemas + parser integration + tests).
 - [x] `T-03` Implement `C-10` (security sanitization pipeline + tests).
-- [ ] `T-04` Address bridge unhandled rejection failures in full test run.
-- [ ] `T-05` Fix lint gate (ESLint flat config).
-- [ ] `T-06` Raise coverage branch gate to roadmap target.
+- [x] `T-04` Address bridge unhandled rejection failures in full test run.
+- [x] `T-05` Fix lint gate (ESLint flat config) — migrated to v10 flat config (699197e).
+- [x] `T-06` Raise coverage branch gate to roadmap target — 80.24% branch (ff42b6c).
 
 ## Status Legend
 

@@ -312,12 +312,19 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 400, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({
-        error: { message: 'API key not valid', status: 'API_KEY_INVALID' },
-      })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            error: { message: 'API key not valid', status: 'API_KEY_INVALID' },
+          }),
+        ),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -328,10 +335,15 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 403, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Forbidden' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 403,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Forbidden' } })),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -342,10 +354,15 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 404, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Model not found' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Model not found' } })),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -356,10 +373,17 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 429, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(JSON.stringify({ error: { message: 'Too many requests' } })),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 429,
+        headers: new Headers({}),
+        text: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ error: { message: 'Too many requests' } })),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -370,10 +394,15 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 500, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue('Internal error'),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue('Internal error'),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -384,10 +413,15 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false, status: 503, headers: new Headers({}),
-      text: vi.fn().mockResolvedValue(''),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        headers: new Headers({}),
+        text: vi.fn().mockResolvedValue(''),
+      }),
+    );
 
     await expect(
       collectChunks(provider.chat([{ role: 'user', content: 'hi' }], { maxRetries: 0 })),
@@ -398,9 +432,12 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', createStreamingFetchMock([
-      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
-    ]));
+    vi.stubGlobal(
+      'fetch',
+      createStreamingFetchMock([
+        formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+      ]),
+    );
 
     const messages: AIMessage[] = [
       {
@@ -424,9 +461,12 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize({ ...config, temperature: undefined, maxTokens: undefined });
 
-    vi.stubGlobal('fetch', createStreamingFetchMock([
-      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
-    ]));
+    vi.stubGlobal(
+      'fetch',
+      createStreamingFetchMock([
+        formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+      ]),
+    );
 
     await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
 
@@ -441,9 +481,12 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', createStreamingFetchMock([
-      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
-    ]));
+    vi.stubGlobal(
+      'fetch',
+      createStreamingFetchMock([
+        formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+      ]),
+    );
 
     await collectChunks(provider.chat([{ role: 'user', content: 'hi' }]));
 
@@ -457,14 +500,19 @@ describe('GeminiProvider', () => {
     const provider = new GeminiProvider();
     await provider.initialize(config);
 
-    vi.stubGlobal('fetch', createStreamingFetchMock([
-      formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
-    ]));
+    vi.stubGlobal(
+      'fetch',
+      createStreamingFetchMock([
+        formatSSEData({ candidates: [{ finishReason: 'STOP', content: { parts: [] } }] }),
+      ]),
+    );
 
-    await collectChunks(provider.chat([
-      { role: 'system', content: [{ type: 'text', text: 'System' }] as any },
-      { role: 'user', content: 'hi' },
-    ]));
+    await collectChunks(
+      provider.chat([
+        { role: 'system', content: [{ type: 'text', text: 'System' }] as unknown as string },
+        { role: 'user', content: 'hi' },
+      ]),
+    );
 
     const requestBody = JSON.parse(
       String((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body),

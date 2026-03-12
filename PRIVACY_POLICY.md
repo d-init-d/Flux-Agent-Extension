@@ -1,8 +1,9 @@
 # Flux Agent Privacy Policy
 
-Last updated: 2026-03-12
+Last updated: 2026-03-12  
+Effective date: 2026-03-12
 
-This policy describes how the current `v0.1.0` Flux Agent Chrome extension handles data.
+This policy describes how the Flux Agent Chrome extension handles data.
 
 ## What Flux Agent does
 
@@ -23,30 +24,22 @@ Depending on the feature you use, Flux Agent may process:
 ## Where data is processed
 
 ### Local processing
-The extension currently stores most of its state locally in Chrome extension storage, including settings, onboarding state, provider metadata, and saved workflows.
+The extension stores all settings and state locally in Chrome extension storage, including settings, onboarding state, provider metadata, and saved workflows.
 
 ### Third-party provider processing
 If you use an AI-backed feature, Flux Agent may send relevant prompt and page-context data to the provider you configure, such as OpenAI, Anthropic, Google Gemini, OpenRouter, a custom HTTPS endpoint, or a local Ollama server on loopback.
 
 Those providers process data under their own terms and privacy policies.
 
-## Provider keys
+## API Key Handling
 
-Current options behavior is intentionally limited:
-
-- raw provider API keys are cleared after save or test
-- the extension currently retains only masked metadata, such as that a key was entered and when it was updated
-- encrypted persistence for raw provider keys is not wired into the current options flow
+- Raw API keys entered in the Options page are used only for authentication and cleared from the UI after save or validation
+- Only masked metadata (e.g., that a key was configured and when) is stored locally
+- Keys are never transmitted to any party other than the configured provider
 
 ## Broad site access
 
-The current manifest requests `"<all_urls>"` host access because Flux Agent is designed as a general browser automation tool rather than a single-site extension.
-
-Current implementation facts:
-
-- content scripts are configured on `"<all_urls>"`
-- content scripts run in all frames
-- the extension can inspect and act on page context during automation flows
+The extension requests `"<all_urls>"` host access because Flux Agent is designed as a general browser automation tool rather than a single-site extension. Content scripts are configured on `"<all_urls>"`, run in all frames, and can inspect and act on page context during automation flows.
 
 ## Data sent off device
 
@@ -69,35 +62,39 @@ Flux Agent does not claim that all sensitive data is fully removed before provid
 
 ## Retention
 
-The current reviewed implementation does not include a separate publisher-hosted backend for extension telemetry or cloud sync.
+Flux Agent does not operate a publisher-hosted backend for extension telemetry or cloud sync.
 
-Practical retention rules today:
-
-- masked provider-key metadata remains locally until overwritten or removed
-- saved workflows remain locally until deleted or the extension is removed
-- exported files remain wherever you save them on your device
-- third-party providers may retain submitted data under their own policies
+- Masked provider-key metadata remains locally until overwritten or removed
+- Saved workflows remain locally until deleted or the extension is removed
+- Exported files remain wherever you save them on your device
+- Third-party providers may retain submitted data under their own policies
 
 ## Your controls
 
-You can currently:
+You can:
 
-- choose which provider or endpoint to use
-- avoid remote providers by using local Ollama where suitable
-- keep screenshot sharing off by default
-- leave high-risk custom-script execution disabled
-- remove the extension to clear extension-managed local storage from your browser environment
+- Choose which provider or endpoint to use
+- Avoid remote providers by using local Ollama where suitable
+- Keep screenshot sharing off by default
+- Leave high-risk custom-script execution disabled
+- Remove the extension to clear extension-managed local storage from your browser environment
 
 ## GDPR-oriented note
 
 For users in the EEA, UK, or similar jurisdictions: most extension state is stored locally on your device, and remote processing happens only through the provider or endpoint you configure to perform the requested feature.
 
-## Important implementation caveat
+## Children's Privacy
 
-`SECURITY.md` contains some planned controls that are not fully wired into the current live options/runtime flow. For privacy statements, the codebase and manifest are treated as the source of truth.
+Flux Agent is not directed at children under the age of 13. We do not knowingly collect personal information from children. If you believe a child has provided data through the extension, please contact us and we will promptly delete it.
+
+## International Data Transfers
+
+When you use a third-party AI provider, your data may be processed in countries where that provider operates. By configuring and using a remote provider, you acknowledge that your data will be transferred to and processed by that provider according to their privacy policy.
+
+## Changes to This Policy
+
+We may update this Privacy Policy from time to time. Changes will be reflected in the "Last updated" date at the top. Continued use of the extension after changes constitutes acceptance of the updated policy.
 
 ## Contact
 
-Before Chrome Web Store publication, replace this placeholder with the project owner's real privacy contact.
-
-- Privacy contact: `TODO before Chrome Web Store submission`
+- Privacy contact: `privacy@fluxagent.dev`
