@@ -490,6 +490,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-06` is now in progress via `BETA_PROGRAM.md` and `.github/ISSUE_TEMPLATE/beta-feedback.md`, which prepare the beta-program operating kit inside the repo. `P-06b` is PASS with seven structured scripts covering onboarding, provider setup, popup, side panel, recording/playback, export, and workflow reuse. `P-06a` and `P-06c` now have recruitment and triage assets ready, but still require real testers, real browser runs, and actual issue intake before they can be marked complete. Verification for this docs-only slice used `git diff --check` on the new files and tracker updates.
 
+> Update: `P-03a` is PASS via `src/core/command-parser/__tests__/prompt-injection-battery.test.ts`, which now blocks 139 prompt-injection-style attempts and asserts the roadmap target of `100+` blocked attempts directly in the battery. Verification passed with `pnpm typecheck`, targeted Vitest on `src/core/command-parser/__tests__/prompt-injection-battery.test.ts` (`1 file / 1 test`), full `pnpm test` (`71 files / 1124 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-03` remains in progress pending `P-03b`, `P-03c`, and `P-03d`.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |

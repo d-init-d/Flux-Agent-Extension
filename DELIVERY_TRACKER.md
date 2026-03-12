@@ -315,7 +315,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `P-05a`, `P-05b`, and `P-06b` are complete; `P-01`, `P-02`, and `P-06` remain in progress pending their final targets.
+Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `P-03a`, `P-05a`, `P-05b`, and `P-06b` are complete; `P-01`, `P-02`, `P-03`, and `P-06` remain in progress pending their final targets.
 
 ### Sprint 5.1
 
@@ -335,8 +335,8 @@ Status summary: `P-01a`, `P-01b`, `P-01c`, `P-02a`, `P-02b`, `P-02c`, `P-02d`, `
 - [~] `P-06a` Recruit testers
 - [x] `P-06b` Beta scenarios
 - [~] `P-06c` Feedback triage
-- [ ] `P-03` Penetration testing
-- [ ] `P-03a` Prompt injection pen-test
+- [~] `P-03` Penetration testing
+- [x] `P-03a` Prompt injection pen-test
 - [ ] `P-03b` XSS pen-test
 - [ ] `P-03c` API key extraction attempts
 - [ ] `P-03d` Message fuzzing
