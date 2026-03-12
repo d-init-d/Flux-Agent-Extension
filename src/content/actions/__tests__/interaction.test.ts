@@ -120,4 +120,69 @@ describe('executeInteractionAction', () => {
     expect(result.error?.message).toContain('Element not found');
     expect(result.duration).toBeGreaterThanOrEqual(0);
   });
+
+  it('returns ELEMENT_NOT_INTERACTIVE when element is not HTMLElement', async () => {
+    vi.spyOn(selectorEngine, 'findElement').mockReturnValue(
+      document.createElementNS('http://www.w3.org/2000/svg', 'circle'),
+    );
+
+    const action: ClickAction = {
+      id: 'a-svg-click',
+      type: 'click',
+      selector: { css: '#svg-circle' },
+    };
+
+    const result = await executeInteractionAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ELEMENT_NOT_INTERACTIVE);
+  });
+
+  it('returns ELEMENT_NOT_INTERACTIVE when button is disabled', async () => {
+    document.body.innerHTML = '<button id="target" disabled>Disabled</button>';
+
+    const action: ClickAction = {
+      id: 'a-disabled',
+      type: 'click',
+      selector: { css: '#target' },
+    };
+
+    const result = await executeInteractionAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ELEMENT_NOT_INTERACTIVE);
+    expect(result.error?.message).toContain('disabled');
+  });
+
+  it('wraps non-ExtensionError from performInteraction into ACTION_FAILED', async () => {
+    document.body.innerHTML = '<button id="target">Click</button>';
+    const button = document.getElementById('target') as HTMLButtonElement;
+    vi.spyOn(button, 'click').mockImplementation(() => {
+      throw new TypeError('click handler crashed');
+    });
+
+    const action: ClickAction = {
+      id: 'a-crash',
+      type: 'click',
+      selector: { css: '#target' },
+    };
+
+    const result = await executeInteractionAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ACTION_FAILED);
+  });
+
+  it('does not treat div as disabled', async () => {
+    document.body.innerHTML = '<div id="target">Click me</div>';
+
+    const action: ClickAction = {
+      id: 'a-div-click',
+      type: 'click',
+      selector: { css: '#target' },
+    };
+
+    const result = await executeInteractionAction(action, selectorEngine);
+    expect(result.success).toBe(true);
+  });
 });

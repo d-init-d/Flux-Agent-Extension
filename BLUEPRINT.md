@@ -55,7 +55,7 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 | **Device emulation** | ✅ | ✅ | ✅ CDP `Emulation.setDeviceMetricsOverride` |
 | **Cookie management** | ✅ | ✅ | ✅ `chrome.cookies` + CDP |
 | **Local storage access** | ✅ | ✅ | ✅ Content Script |
-| **iframe support** | ✅ | ⚠️ | ✅ CDP `Target.attachToTarget` |
+| **iframe support** | ✅ | ⚠️ | ✅ Frame-aware content scripts + targeted bridge routing |
 | **Shadow DOM** | ✅ | ⚠️ | ✅ `element.shadowRoot` piercing |
 
 ### 1.3 Our Unique Advantages
@@ -159,7 +159,7 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 │  │ Geolocation mock         │ CDP       │ -          │        │
 │  │ Device emulation         │ CDP       │ -          │        │
 │  │ PDF generation           │ CDP       │ -          │        │
-│  │ iframe interaction       │ CS(same)  │ CDP        │        │
+│  │ iframe interaction       │ CS(frame) │ CDP        │        │
 │  │ Shadow DOM               │ CS        │ CDP        │        │
 │  └──────────────────────────┴───────────┴────────────┘        │
 │                                                                │
@@ -434,13 +434,15 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 | A-03 | CDP: Geolocation mock | `@sub-tech-lead` | — | setGeolocationOverride |
 | A-04 | CDP: PDF generation | `@sub-tech-lead` | — | Page.printToPDF |
 | A-05 | CDP: File upload | `@sub-tech-lead` | — | DOM.setFileInputFiles |
-| A-06 | CDP: iframe support | `@sub-tech-lead` | — | Target.attachToTarget |
+| A-06 | Frame-aware iframe support | `@sub-tech-lead` | — | `all_frames` + targeted bridge routing |
 | A-07 | Multi-tab automation | `@sub-tech-lead` | — | Cross-tab orchestration |
 | A-08 | Action recording (watch & learn) | `@sub-tech-lead` | `@sub-ui-designer` | Record user actions |
 | A-09 | Action playback (macros) | `@sub-tech-lead` | `@sub-ui-designer` | Replay saved sequences |
 | A-10 | Export actions as script | `@sub-tech-lead` | — | JSON/Playwright export |
 | A-11 | Saved workflows (templates) | `@sub-ui-designer` | `@sub-tech-lead` | Workflow manager UI |
 | A-12 | Advanced prompt templates | `@sub-tech-lead` | `@sub-security-auditor` | Template library |
+
+> Execution note: `A-04` stays in scope, but implementation priority is currently `A-05 -> A-06 -> A-04` because upload and iframe support unlock more core browser-control flows.
 
 #### PHASE 5: Polish & Ship (Week 19-20)
 
@@ -455,9 +457,9 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 | P-07 | Final security audit | `@sub-security-auditor` | — | Sign-off |
 | P-08 | Chrome Web Store submission | `@sub-tech-lead` | `@sub-security-auditor` | Published extension |
 
----
-
 > P-08a asset pack: five store-ready Chrome Web Store screenshots now live in `store-assets/`, with captions and file mapping tracked in `STORE_SCREENSHOTS.md`.
+
+---
 
 ## 5. File Structure
 
@@ -748,3 +750,326 @@ ai-browser-controller/
 | R8 | Poor performance on complex pages | Medium | Medium | Progressive context, throttling | `@sub-tech-lead` |
 | R9 | Cross-origin iframe issues | Medium | Medium | CDP Target.attachToTarget | `@sub-tech-lead` |
 | R10 | User accidentally triggers purchases | Medium | Critical | Confirmation for all payment actions | `@sub-security-auditor` |
+
+---
+
+## 9. Mandatory Development Workflow
+
+> **This section is NORMATIVE.** Every agent session MUST follow this workflow. No exceptions.
+> **Enforcement:** This workflow applies to EVERY phase, EVERY task, EVERY time the user issues a command to the agent.
+
+### 9.1 Phase-Level Planning (MANDATORY FIRST STEP)
+
+When the user instructs the agent to work on a phase or a group of tasks:
+
+1. **READ** this section (§9) and the relevant phase details in ROADMAP.md
+2. **CREATE a detailed TodoList** using the `todowrite` tool — break the phase into atomic, sequential tasks
+3. **ASSIGN each task** in the todolist to exactly ONE sub-agent (see §9.2)
+4. **SHOW the todolist** to the user before starting execution
+5. **NEVER start coding** without a todolist in place
+
+> ⚠️ **This is non-negotiable.** If the agent starts working without creating a todolist first, the session is considered invalid.
+
+### 9.2 Per-Task Execution Protocol
+
+For **every task** in the todolist, execute the following steps **strictly in order**:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  1. PLAN     → Mark task as `in_progress` in todolist (only ONE at    │
+│                 a time). Read relevant files for context.              │
+│                                                                        │
+│  2. DELEGATE → Call the `task` tool with the assigned `subagent_type`  │
+│                 to delegate implementation to the correct sub-agent.   │
+│                 The prompt MUST include:                                │
+│                   - Exact files to modify/create                       │
+│                   - Code patterns to follow (reference files)          │
+│                   - Acceptance criteria from ROADMAP.md                │
+│                   - Constraint: write FULL code, no placeholders      │
+│                                                                        │
+│  3. REVIEW   → Main agent reads the sub-agent's output.               │
+│                 Verifies: correctness, pattern adherence, no regressions│
+│                 If NOT OK → provide feedback, re-delegate to sub-agent │
+│                                                                        │
+│  4. VERIFY   → Run ALL verification gates (§9.4). Every gate must     │
+│                 show exit 0. Paste evidence in the response.           │
+│                                                                        │
+│  5. PASS     → Only if ALL gates pass:                                │
+│                   a) Mark task `completed` in todolist                 │
+│                   b) Update DELIVERY_TRACKER.md                        │
+│                   c) Update ROADMAP.md task status                     │
+│                                                                        │
+│  6. COMMIT   → Git commit (task files only) + git push origin main    │
+│                                                                        │
+│  7. NEXT     → Move to next task. NEVER skip ahead.                   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 9.3 Sub-Agent Assignment Rules
+
+| Sub-Agent | `subagent_type` | Assigned Work |
+|-----------|----------------|---------------|
+| `@sub-tech-lead` | `sub-tech-lead` | Core logic, managers, adapters, runtime routing, CDP integration, schemas, types, system prompts |
+| `@sub-ui-designer` | `sub-ui-designer` | UI components, sidepanel, popup, options page, overlays, CSS/styling |
+| `@sub-qa-tester` | `sub-qa-tester` | Unit tests, integration tests, E2E scenarios, test mocks, coverage |
+| `@sub-security-auditor` | `sub-security-auditor` | Security audit, action classification, permission checks, vulnerability scans |
+
+**Delegation rules:**
+- The main agent MUST use the `task` tool with the correct `subagent_type` to delegate work
+- The main agent MUST NOT implement tasks directly — it only plans, delegates, reviews, and verifies
+- If a task spans multiple sub-agent domains, split it into sub-tasks, one per sub-agent
+- The sub-agent's prompt must be self-contained: include file paths, code patterns, acceptance criteria
+- If a sub-agent's output is rejected, re-delegate with specific feedback (do NOT fix it yourself)
+
+### 9.4 Verification Gates (All Must Pass)
+
+Every task MUST pass **all** gates before being marked PASS:
+
+| Gate | Command | Pass Criteria |
+|------|---------|---------------|
+| TypeScript | `pnpm typecheck` | Exit 0, no errors |
+| Unit Tests (selective) | `pnpm vitest run <changed-files>` | All pass |
+| Full Test Suite | `pnpm test` | All pass (known flaky tests documented) |
+| Build | `pnpm build` | Exit 0, no errors |
+| Security Regression | `pnpm audit --audit-level=high` | No NEW advisories |
+
+**Evidence format** — paste in the response:
+```
+✅ Gate Results for <TASK-ID>:
+- TypeScript:  pnpm typecheck       → Exit 0
+- Selective:   pnpm vitest run ...  → X/X passed
+- Full Suite:  pnpm test            → X/X passed
+- Build:       pnpm build           → Exit 0
+- Security:    pnpm audit           → No new advisories
+```
+
+### 9.5 Completion Recording
+
+When a task passes ALL gates:
+
+1. **TodoList** — Mark task as `completed` via `todowrite` **immediately** (never batch)
+2. **DELIVERY_TRACKER.md** — Add/update row with task ID, commit SHA, test count, status `✅ PASS`
+3. **ROADMAP.md** — Update task status in the relevant phase table
+4. **Git** — Commit only the task's files with message `feat: implement <TASK-ID> <description>`
+5. **Push** — `git push origin main` immediately after commit
+
+### 9.6 TodoList Management Rules
+
+| Rule | Detail |
+|------|--------|
+| **Create BEFORE work** | Todolist must exist before any code is written |
+| **One `in_progress` at a time** | Never have multiple tasks in_progress simultaneously |
+| **Mark complete IMMEDIATELY** | As soon as a task passes, mark it — never batch completions |
+| **Include sub-agent assignment** | Each todo must note which `@sub-*` agent is responsible |
+| **Update on scope change** | If scope changes mid-phase, update the todolist before proceeding |
+| **Todolist = source of truth** | If it's not in the todolist, it doesn't get done |
+
+### 9.7 Hard Rules
+
+| Rule | Enforcement |
+|------|-------------|
+| Never skip a task | Tasks execute in roadmap/todolist order |
+| Never mark PASS without evidence | All 5 gates must show exit 0 |
+| Never batch commits | One commit per task |
+| Never leave code broken | If 3 failures → revert → escalate |
+| Never commit unrelated changes | Only task-scoped files in each commit |
+| Sub-agent MUST implement | Main agent delegates via `task` tool, reviews, does NOT implement |
+| Never start without todolist | Phase-level todolist is mandatory before any execution |
+| Never bypass the delegation step | Every implementation task goes through a sub-agent, no exceptions |
+
+---
+
+## 10. A-03 Geolocation Mock — Implementation Guide
+
+> **Status:** A-03.1 through A-03.9 PASS. A-03.10 remains pending because commit/push requires an explicit user request.
+> **Pattern Reference:** Follow `A-02 Device Emulation` implementation exactly.
+> **CDP method:** `Emulation.setGeolocationOverride` / `Emulation.clearGeolocationOverride`
+> **Sensitivity:** `medium` (same as `emulateDevice`)
+
+### 10.1 What's Already Done (A-03.1)
+
+File `src/shared/types/actions.ts` has been modified:
+- `'mockGeolocation'` added to `ActionType` union (line ~48)
+- `MockGeolocationAction` interface created (lines 308-313):
+  ```ts
+  export interface MockGeolocationAction extends BaseAction {
+    type: 'mockGeolocation';
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  }
+  ```
+- `MockGeolocationAction` added to `Action` union type (line ~349)
+
+### 10.2 Remaining Sub-Tasks (Execute in Order)
+
+#### A-03.2: Sensitivity Classification (`@sub-tech-lead`)
+
+**Status:** PASS
+
+**File:** `src/shared/security/action-classifier.ts`
+**Location:** `BASE_SENSITIVITY` object, after `emulateDevice: 'medium'` (line ~76)
+**Change:** Add `mockGeolocation: 'medium',`
+
+#### A-03.3: Zod Schema (`@sub-tech-lead`)
+
+**Status:** PASS
+
+**File:** `src/core/command-parser/schemas/action-schemas.ts`
+**Changes (3 locations):**
+1. Add `'mockGeolocation'` to `ACTION_TYPES` array (after `'mockResponse'`, total becomes **35**)
+2. Add schema to `actionSchemas` object (after `mockResponse` entry):
+   ```ts
+   mockGeolocation: z.object({
+     type: z.literal('mockGeolocation'),
+     description: z.string().optional(),
+     latitude: z.number().min(-90).max(90),
+     longitude: z.number().min(-180).max(180),
+     accuracy: z.number().positive().optional(),
+   }),
+   ```
+3. Add `actionSchemas.mockGeolocation` to `orderedActionSchemas` array (after `actionSchemas.mockResponse`)
+
+#### A-03.4: System Prompt (`@sub-tech-lead`)
+
+**Status:** PASS
+
+**File:** `src/core/ai-client/prompts/system.ts`
+**Changes (3 locations):**
+1. Add to `ACTION_REFERENCE` in the Advanced section (after `mockResponse`):
+   ```
+   - mockGeolocation: Set fake GPS coordinates (latitude, longitude, optional accuracy)
+   ```
+2. Add to compact prompt action list (line ~217 area)
+3. Add `'mockGeolocation'` to `SUPPORTED_ACTION_TYPES` array (after `'mockResponse'`, total becomes **35**)
+
+#### A-03.5: CDP Wrappers (`@sub-tech-lead`)
+
+**Status:** PASS
+
+**File:** `src/core/browser-controller/debugger-adapter.ts`
+**Location:** After `setTouchEmulationEnabled` method (line ~281 area)
+**Changes:**
+1. Add `GeolocationOverrideParams` type:
+   ```ts
+   export type GeolocationOverrideParams = {
+     latitude: number;
+     longitude: number;
+     accuracy?: number;
+   };
+   ```
+2. Add `setGeolocationOverride(tabId: number, params: GeolocationOverrideParams): Promise<void>` method
+   - Calls `Emulation.setGeolocationOverride` CDP command
+3. Add `clearGeolocationOverride(tabId: number): Promise<void>` method
+   - Calls `Emulation.clearGeolocationOverride` CDP command
+
+#### A-03.6: GeolocationMockManager (`@sub-tech-lead`)
+
+**Status:** PASS
+
+**New File:** `src/background/geolocation-mock-manager.ts`
+**Pattern:** Copy structure from `src/background/device-emulation-manager.ts`
+
+Key design:
+- Interface `IGeolocationMockManager` with methods: `activateSession`, `applyAction`, `clearSession`, `dispose`
+- State tracking: `mockByTab` (Map<number, AppliedGeolocationMock>), `tabIdsBySession`, `activeSessionByTab`
+- `applyAction(sessionId, tabId, action: MockGeolocationAction)`:
+  - Calls `debuggerAdapter.setGeolocationOverride(tabId, { latitude, longitude, accuracy })`
+  - Stores applied state
+- `clearSession(sessionId)`:
+  - For each tab: calls `debuggerAdapter.clearGeolocationOverride(tabId)`
+  - Drops state
+- `clearTab(tabId)`:
+  - Calls `debuggerAdapter.clearGeolocationOverride(tabId)`
+  - Drops tab state
+- Listen for `debuggerAdapter.onDetach` and `chrome.tabs.onRemoved` → drop state
+- `dispose()` cleans up listeners
+
+#### A-03.7: Runtime Routing (`@sub-tech-lead`)
+
+**Status:** PASS
+
+**File:** `src/background/ui-session-runtime.ts`
+**Changes (mirror `DeviceEmulationManager` integration exactly):**
+1. **Import** `GeolocationMockManager` and `IGeolocationMockManager` from `./geolocation-mock-manager`
+2. **Add** `geolocationMockManager?: IGeolocationMockManager` to `UISessionRuntimeOptions`
+3. **Add** `private readonly geolocationMockManager: IGeolocationMockManager` property
+4. **Init** in constructor (after device emulation manager init):
+   ```ts
+   this.geolocationMockManager = options.geolocationMockManager ??
+     new GeolocationMockManager({
+       logger: this.logger.child('GeolocationMockManager'),
+       debuggerAdapter: this.debuggerAdapter,
+     });
+   ```
+5. **Route** in `executeAutomationAction` switch:
+   ```ts
+   case 'mockGeolocation':
+     return await this.executeGeolocationMockAction(action, sessionId, tabId);
+   ```
+6. **Add** `executeGeolocationMockAction` private method (mirror `executeDeviceEmulationAction`)
+7. **Cleanup** — add `await this.geolocationMockManager.clearSession(...)` in ALL locations where `deviceEmulationManager.clearSession` is called:
+   - `handleSessionAbort`
+   - `executeNewTabAction`
+   - `executeSwitchTabAction`
+   - `executeCloseTabAction`
+   - `handleSessionSendMessage`
+8. **Add** `'mockGeolocation'` to the automation action type guard in `handleSessionSendMessage` (line ~1317 area, next to `'emulateDevice'`)
+
+#### A-03.8: Tests (`@sub-qa-tester`)
+
+**Status:** PASS
+
+**New File:** `src/background/__tests__/geolocation-mock-manager.test.ts`
+- Follow `src/background/__tests__/device-emulation-manager.test.ts` pattern
+- Test: apply, clear session, clear tab, debugger detach cleanup, tab remove cleanup
+
+**Update existing test files:**
+- `src/core/command-parser/__tests__/action-schemas.test.ts` — change count 34→35, add `mockGeolocation` valid payload test
+- `src/core/ai-client/__tests__/prompts.test.ts` — change count 34→35
+- `src/core/browser-controller/__tests__/debugger-adapter.test.ts` — add `setGeolocationOverride` and `clearGeolocationOverride` tests
+- `src/background/__tests__/ui-session-runtime.test.ts` — add geolocation manager stub, routing test for `mockGeolocation`
+
+#### A-03.9: Verification Gates
+
+**Status:** PASS
+
+Observed results:
+- `pnpm typecheck` -> pass
+- selective Vitest runs for geolocation manager, action schemas, prompts, debugger adapter, and UI session runtime -> pass
+- `pnpm test` -> 65 files passed, 1004 tests passed
+- `pnpm build` -> pass
+- `pnpm audit --audit-level=high` -> no new advisories; only the known pre-existing `rollup` issues via `@crxjs/vite-plugin`
+
+Run in order:
+1. `pnpm typecheck` → exit 0
+2. `pnpm vitest run src/background/__tests__/geolocation-mock-manager.test.ts` → all pass
+3. `pnpm vitest run src/core/command-parser/__tests__/action-schemas.test.ts` → all pass
+4. `pnpm vitest run src/core/browser-controller/__tests__/debugger-adapter.test.ts` → all pass
+5. `pnpm vitest run src/background/__tests__/ui-session-runtime.test.ts` → all pass
+6. `pnpm test` → all pass
+7. `pnpm build` → exit 0
+8. `pnpm audit --audit-level=high` → no new advisories
+
+#### A-03.10: Record & Ship
+
+**Status:** Pending explicit user request for git commit/push
+
+1. Update `DELIVERY_TRACKER.md` — mark A-03 and all sub-tasks as `[x]`
+2. `git add` only A-03 related files
+3. `git commit -m "feat: implement A-03 geolocation mock"`
+4. `git push origin main`
+
+### 10.3 Known Context
+
+| Item | Value |
+|------|-------|
+| Action count before A-03 | 34 |
+| Action count after A-03 | 35 |
+| Test file count (as of A-02) | 64 |
+| Test count (as of A-02) | 997 |
+| Pre-existing audit advisories | 2 high (rollup via @crxjs/vite-plugin) — not a blocker |
+| Known flaky test | `src/options/__tests__/App.test.tsx > saves provider configuration...` — occasionally times out, passes on re-run |
+| Known stderr noise | React `act()` warnings from sidepanel tests — cosmetic only |
+| Working tree dirty files | `BLUEPRINT.md`, `ROADMAP.md` (workflow section additions), `actions.ts` (A-03.1 changes) — all uncommitted |
+| Latest pushed commit | `7d31cbd` — `feat: implement A-02 device emulation` |

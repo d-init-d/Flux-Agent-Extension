@@ -243,4 +243,89 @@ describe('Modal', () => {
     render(<Modal {...defaultProps} className="my-modal" />);
     expect(screen.getByRole('dialog').className).toContain('my-modal');
   });
+
+  it('wraps focus from last to first element on Tab', async () => {
+    render(
+      <Modal {...defaultProps} footer={<button data-testid="footer-btn">OK</button>}>
+        <button data-testid="body-btn">Body</button>
+      </Modal>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toHaveFocus();
+    }, { timeout: 200 });
+
+    const footerBtn = screen.getByTestId('footer-btn');
+    footerBtn.focus();
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab', shiftKey: false });
+
+    expect(screen.getByLabelText('Close dialog')).toHaveFocus();
+  });
+
+  it('wraps focus from first to last element on Shift+Tab', async () => {
+    render(
+      <Modal {...defaultProps} footer={<button data-testid="footer-btn">OK</button>}>
+        <button data-testid="body-btn">Body</button>
+      </Modal>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toHaveFocus();
+    }, { timeout: 200 });
+
+    const closeBtn = screen.getByLabelText('Close dialog');
+    closeBtn.focus();
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Tab', shiftKey: true });
+
+    expect(screen.getByTestId('footer-btn')).toHaveFocus();
+  });
+
+  it('does not trap when Tab key is not pressed', async () => {
+    render(
+      <Modal {...defaultProps} footer={<button data-testid="footer-btn">OK</button>}>
+        <button data-testid="body-btn">Body</button>
+      </Modal>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toHaveFocus();
+    }, { timeout: 200 });
+
+    const closeBtn = screen.getByLabelText('Close dialog');
+    closeBtn.focus();
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
+
+    expect(closeBtn).toHaveFocus();
+  });
+
+  it('restores focus to previously active element when closed', async () => {
+    const triggerBtn = document.createElement('button');
+    triggerBtn.textContent = 'Trigger';
+    document.body.appendChild(triggerBtn);
+    triggerBtn.focus();
+
+    const { rerender } = render(<Modal {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toHaveFocus();
+    }, { timeout: 200 });
+
+    rerender(<Modal {...defaultProps} open={false} />);
+
+    expect(triggerBtn).toHaveFocus();
+    document.body.removeChild(triggerBtn);
+  });
+
+  it('does not render description id when no description', () => {
+    render(<Modal {...defaultProps} description={undefined} />);
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('does not render title when not provided', () => {
+    render(<Modal {...defaultProps} title={undefined} />);
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+  });
 });

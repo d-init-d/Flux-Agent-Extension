@@ -244,4 +244,296 @@ describe('workflow storage helpers', () => {
 
     await expect(getSavedWorkflows()).resolves.toEqual(collection.items);
   });
+
+  // ==========================================================================
+  // Normalization edge cases for branch coverage
+  // ==========================================================================
+
+  describe('normalizeSavedWorkflowCollection — additional edge cases', () => {
+    it('should return defaults for undefined input', () => {
+      expect(normalizeSavedWorkflowCollection(undefined)).toEqual({
+        version: SAVED_WORKFLOWS_VERSION,
+        items: [],
+      });
+    });
+
+    it('should return defaults for string input', () => {
+      expect(normalizeSavedWorkflowCollection('not-an-object')).toEqual({
+        version: SAVED_WORKFLOWS_VERSION,
+        items: [],
+      });
+    });
+
+    it('should handle non-array items field', () => {
+      expect(normalizeSavedWorkflowCollection({ items: 'not-array', version: 1 })).toEqual({
+        version: 1,
+        items: [],
+      });
+    });
+
+    it('should handle non-number version field', () => {
+      expect(normalizeSavedWorkflowCollection({ items: [], version: 'abc' })).toEqual({
+        version: SAVED_WORKFLOWS_VERSION,
+        items: [],
+      });
+    });
+
+    it('should skip null items in the array', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [null, undefined, 'string', 42],
+      });
+      expect(result.items).toEqual([]);
+    });
+
+    it('should generate id when workflow has no id', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            name: 'No ID workflow',
+            actions: [createRecordedAction()],
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      });
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].id).toBeTruthy();
+      expect(result.items[0].name).toBe('No ID workflow');
+    });
+
+    it('should generate default name when workflow has no name', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      });
+      expect(result.items[0].name).toBe('Untitled workflow');
+    });
+
+    it('should append index to default name for subsequent unnamed workflows', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          { id: 'w1', actions: [], createdAt: 100, updatedAt: 200 },
+          { id: 'w2', actions: [], createdAt: 100, updatedAt: 200 },
+        ],
+      });
+      expect(result.items[0].name).toBe('Untitled workflow');
+      expect(result.items[1].name).toBe('Untitled workflow 2');
+    });
+
+    it('should handle action with missing action field', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [
+              { timestamp: 100 },
+              { action: null, timestamp: 100 },
+              { action: { id: 'a1', type: 'click' }, timestamp: 100 },
+            ],
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      });
+      expect(result.items[0].actions).toHaveLength(1);
+    });
+
+    it('should handle action with non-finite timestamp', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [
+              { action: { id: 'a1', type: 'click' }, timestamp: NaN },
+              { action: { id: 'a2', type: 'click' }, timestamp: Infinity },
+            ],
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      });
+      expect(result.items[0].actions).toHaveLength(0);
+    });
+
+    it('should normalize source with only sessionId', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+            source: { sessionId: ' s1 ' },
+          },
+        ],
+      });
+      expect(result.items[0].source).toEqual({
+        sessionId: 's1',
+        sessionName: undefined,
+        recordedAt: undefined,
+      });
+    });
+
+    it('should normalize source with only recordedAt', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+            source: { recordedAt: 500.7 },
+          },
+        ],
+      });
+      expect(result.items[0].source).toEqual({
+        sessionId: undefined,
+        sessionName: undefined,
+        recordedAt: 500,
+      });
+    });
+
+    it('should return undefined source when all source fields are empty', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+            source: { sessionId: '   ', sessionName: '', recordedAt: NaN },
+          },
+        ],
+      });
+      expect(result.items[0].source).toBeUndefined();
+    });
+
+    it('should return undefined source for non-object source', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+            source: 'not-object',
+          },
+        ],
+      });
+      expect(result.items[0].source).toBeUndefined();
+    });
+
+    it('should use fallback timestamp for non-number createdAt', () => {
+      const before = Date.now();
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 'not-a-number',
+            updatedAt: 'also-not',
+          },
+        ],
+      });
+      const after = Date.now();
+      expect(result.items[0].createdAt).toBeGreaterThanOrEqual(before);
+      expect(result.items[0].createdAt).toBeLessThanOrEqual(after);
+      expect(result.items[0].updatedAt).toBe(result.items[0].createdAt);
+    });
+
+    it('should handle tags with non-string elements', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+            tags: [1, null, undefined, true, 'valid', ' trimmed '],
+          },
+        ],
+      });
+      expect(result.items[0].tags).toEqual(['valid', 'trimmed']);
+    });
+
+    it('should handle non-array tags', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [],
+            createdAt: 100,
+            updatedAt: 200,
+            tags: 'not-array',
+          },
+        ],
+      });
+      expect(result.items[0].tags).toEqual([]);
+    });
+
+    it('should handle action with empty string id or type', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: [
+              { action: { id: '', type: 'click' }, timestamp: 100 },
+              { action: { id: 'a1', type: '' }, timestamp: 100 },
+              { action: { id: '  ', type: 'click' }, timestamp: 100 },
+              { action: { id: 'a2', type: '  ' }, timestamp: 100 },
+            ],
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      });
+      expect(result.items[0].actions).toHaveLength(0);
+    });
+
+    it('should handle non-array actions field', () => {
+      const result = normalizeSavedWorkflowCollection({
+        version: 1,
+        items: [
+          {
+            id: 'w1',
+            name: 'Test',
+            actions: 'not-array',
+            createdAt: 100,
+            updatedAt: 200,
+          },
+        ],
+      });
+      expect(result.items[0].actions).toEqual([]);
+    });
+  });
 });

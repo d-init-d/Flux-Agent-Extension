@@ -1126,6 +1126,326 @@ describe('Full pipeline E2E (U-16)', () => {
     );
   }, 10_000);
 
+  it('U-16e stops the remaining pipeline after an unrecoverable action failure', async () => {
+    const user = userEvent.setup();
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => {
+      if (action.id === 'failing-click') {
+        return {
+          actionId: action.id,
+          success: false,
+          duration: 9,
+          error: {
+            code: 'ELEMENT_NOT_FOUND',
+            message: 'Login button is permanently unavailable',
+            recoverable: false,
+          },
+        };
+      }
+
+      return {
+        actionId: action.id,
+        success: true,
+        duration: 6,
+      };
+    });
+    const bridge = createBridge(actionHandler);
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager(
+        JSON.stringify({
+          summary: 'Try the login button and then submit the form.',
+          actions: [
+            {
+              id: 'failing-click',
+              type: 'click',
+              selector: { role: 'button', textExact: 'Login' },
+              description: 'Click the Login button',
+            },
+            {
+              id: 'skipped-submit',
+              type: 'click',
+              selector: { role: 'button', textExact: 'Submit' },
+              description: 'Click the Submit button',
+            },
+          ],
+        }),
+      ),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    await sendPrompt(user, 'Try the login flow');
+
+    await waitFor(() => {
+      expect(actionHandler).toHaveBeenCalledTimes(1);
+    });
+
+    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual(['failing-click']);
+    expect(await screen.findAllByText('Login button is permanently unavailable')).toHaveLength(2);
+
+    const stateResponse = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(stateResponse.success).toBe(true);
+    expect(stateResponse.data?.session?.status).toBe('error');
+    expect(stateResponse.data?.session?.lastError?.message).toBe('Login button is permanently unavailable');
+    expect(stateResponse.data?.session?.actionHistory.map((entry) => entry.action.id)).toEqual(['failing-click']);
+  });
+
+  it('A-08c ignores malformed or invalid recording events until a valid top-frame action arrives', async () => {
+    const user = userEvent.setup();
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Start recording' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('recording-live-indicator')).toHaveTextContent('Live');
+    });
+
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', null);
+    await emitRecordedEvent(
+      bridge,
+      'RECORDED_INPUT',
+      {
+        action: {
+          id: 'ignored-wrong-tab',
+          type: 'fill',
+          selector: { testId: 'email-field' },
+        },
+      },
+      createTopFrame(),
+    );
+    act(() => {
+      bridge.emitEvent(
+        'RECORDED_INPUT',
+        2,
+        createTopFrame(),
+        {
+          action: {
+            id: 'ignored-other-tab',
+            type: 'fill',
+            selector: { testId: 'email-field' },
+            value: 'ignored@example.com',
+          },
+        },
+      );
+    });
+    await settleAsyncSideEffects(2);
+    await emitRecordedEvent(
+      bridge,
+      'PAGE_LOADED',
+      {
+        url: 'https://example.com/iframe',
+        title: 'Iframe page',
+        isTop: false,
+      },
+      {
+        ...createTopFrame('https://example.com/iframe'),
+        frameId: 7,
+        documentId: 'iframe-doc',
+        parentFrameId: 0,
+        isTop: false,
+      },
+    );
+
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'recorded-valid-click',
+        type: 'click',
+        selector: { testId: 'submit-button' },
+      },
+    });
+
+    await settleAsyncSideEffects(2);
+    expect(screen.getByTestId('recording-live-indicator')).toHaveTextContent('Live');
+
+    const stateResponse = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(stateResponse.success).toBe(true);
+    expect(stateResponse.data?.session?.recording.actions.map((entry) => entry.action.id)).toEqual([
+      'recorded-valid-click',
+    ]);
+  });
+
+  it('A-09c fails playback safely when the target tab is no longer available', async () => {
+    const bridge = createBridge(async (action) => ({
+      actionId: action.id,
+      success: true,
+      duration: 5,
+    }));
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await settleAsyncSideEffects(1);
+
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'missing-tab-click',
+        type: 'click',
+        selector: { testId: 'submit-button' },
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await settleAsyncSideEffects(1);
+
+    (chrome.tabs as MockTabsApi)._setTabs?.([]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    await settleAsyncSideEffects(2);
+
+    expect(await screen.findByText('No target tab is available for playback')).toBeInTheDocument();
+    expect(screen.getByText('Ready to replay 1 action from the start.')).toBeInTheDocument();
+    expect(screen.getByText('0 / 1 actions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeEnabled();
+
+    const stateResponse = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(stateResponse.success).toBe(true);
+    expect(stateResponse.data?.session?.targetTabId).toBeNull();
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'idle',
+        nextActionIndex: 0,
+        lastError: null,
+      }),
+    );
+  });
+
+  it('A-09d pauses playback after an unrecoverable failure and does not run later recorded actions', async () => {
+    const actionHandler = vi.fn(async (action: Action): Promise<ActionResult> => {
+      if (action.id === 'playback-fail-1') {
+        return {
+          actionId: action.id,
+          success: false,
+          duration: 12,
+          error: {
+            code: 'ELEMENT_NOT_FOUND',
+            message: 'Submit button disappeared before playback could continue',
+            recoverable: false,
+          },
+        };
+      }
+
+      return {
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      };
+    });
+    const bridge = createBridge(actionHandler);
+
+    activeRuntime = new UISessionRuntime({
+      bridge,
+      logger: new Logger('FluxSW:e2e', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}'),
+    });
+
+    await renderApp();
+
+    const sessionId = (screen.getByRole('combobox', { name: 'Active session' }) as HTMLSelectElement).value;
+    expect(sessionId).toBeTruthy();
+
+    const recordedAt = {
+      first: Date.parse('2026-03-09T03:00:00.000Z'),
+      second: Date.parse('2026-03-09T03:00:01.000Z'),
+      playbackStart: Date.parse('2026-03-09T03:00:02.000Z'),
+    };
+    const dateNowSpy = vi.spyOn(Date, 'now');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start recording' }));
+    await settleAsyncSideEffects(1);
+
+    dateNowSpy.mockReturnValue(recordedAt.first);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'playback-fail-1',
+        type: 'click',
+        selector: { testId: 'submit-button' },
+      },
+    });
+
+    dateNowSpy.mockReturnValue(recordedAt.second);
+    await emitRecordedEvent(bridge, 'RECORDED_CLICK', {
+      action: {
+        id: 'playback-skipped-2',
+        type: 'click',
+        selector: { testId: 'login-button' },
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await settleAsyncSideEffects(1);
+
+    dateNowSpy.mockRestore();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(recordedAt.playbackStart));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    await settleAsyncSideEffects(1, { useFakeTimers: true });
+
+    await advancePlaybackTime(0);
+
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+    expect(actionHandler.mock.calls.map(([action]) => action.id)).toEqual(['playback-fail-1']);
+    expect(screen.getByText('Paused')).toBeInTheDocument();
+    expect(screen.getByText('Paused on step 1 of 2 at 1x.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Playback issue: Submit button disappeared before playback could continue'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('0 / 2 actions')).toBeInTheDocument();
+
+    await advancePlaybackTime(5_000);
+    expect(actionHandler).toHaveBeenCalledTimes(1);
+
+    const stateResponse = await activeRuntime.handleMessage(
+      createExtensionMessage('SESSION_GET_STATE', { sessionId }),
+    );
+    expect(stateResponse.success).toBe(true);
+    expect(stateResponse.data?.session?.playback).toEqual(
+      expect.objectContaining({
+        status: 'paused',
+        nextActionIndex: 0,
+        lastError: expect.objectContaining({
+          actionId: 'playback-fail-1',
+          actionType: 'click',
+          message: 'Submit button disappeared before playback could continue',
+        }),
+      }),
+    );
+  }, 10_000);
+
   it('A-10a records navigate-click-fill steps and exports ordered JSON from the sidepanel', async () => {
     const user = userEvent.setup();
     const bridge = createBridge(async (action) => ({

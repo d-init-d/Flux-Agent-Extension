@@ -148,6 +148,71 @@ describe('executeWaitAction', () => {
     expect(result.success).toBe(true);
   });
 
+  it('returns error result when wait action fails', async () => {
+    vi.spyOn(autoWaitEngine, 'waitForElement').mockRejectedValue(new Error('timeout'));
+
+    const action: WaitForElementAction = {
+      id: 'wait-err',
+      type: 'waitForElement',
+      selector: { css: '#missing' },
+      timeout: 100,
+    };
+
+    const result = await executeWaitAction(action, autoWaitEngine);
+    expect(result.success).toBe(false);
+    expect(result.error).toBeDefined();
+    expect(result.duration).toBeGreaterThanOrEqual(0);
+  });
+
+  it('uses default state "visible" when state is not provided', async () => {
+    const waitSpy = vi.spyOn(autoWaitEngine, 'waitForElement').mockResolvedValue(undefined);
+
+    const action: WaitForElementAction = {
+      id: 'wait-default-state',
+      type: 'waitForElement',
+      selector: { css: '#btn' },
+      timeout: 500,
+    };
+
+    const result = await executeWaitAction(action, autoWaitEngine);
+    expect(result.success).toBe(true);
+    expect(waitSpy).toHaveBeenCalledWith({ css: '#btn' }, 'visible', 500);
+  });
+
+  it('waitForNavigation supports urlPattern matching', async () => {
+    const action: WaitForNavigationAction = {
+      id: 'wait-nav-url',
+      type: 'waitForNavigation',
+      urlPattern: 'matched',
+      timeout: 700,
+    };
+
+    setTimeout(() => {
+      window.location.hash = 'matched';
+    }, 40);
+
+    const result = await executeWaitAction(action, autoWaitEngine);
+    expect(result.success).toBe(true);
+  });
+
+  it('preserves ExtensionError code in error result', async () => {
+    const { ExtensionError, ErrorCode } = await import('@shared/errors');
+    vi.spyOn(autoWaitEngine, 'waitForNetwork').mockRejectedValue(
+      new ExtensionError(ErrorCode.ACTION_TIMEOUT, 'Timed out', true),
+    );
+
+    const action: WaitForNetworkAction = {
+      id: 'wait-ext-err',
+      type: 'waitForNetwork',
+      state: 'idle',
+      timeout: 100,
+    };
+
+    const result = await executeWaitAction(action, autoWaitEngine);
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ACTION_TIMEOUT);
+  });
+
   it('waitForNetwork idle waits until in-flight requests are drained', async () => {
     vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
 

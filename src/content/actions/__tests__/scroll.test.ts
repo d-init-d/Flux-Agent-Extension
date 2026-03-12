@@ -78,4 +78,124 @@ describe('executeScrollAction', () => {
     expect(result.success).toBe(false);
     expect(result.error?.code).toBe(ErrorCode.ELEMENT_NOT_FOUND);
   });
+
+  it('scrolls window up by custom amount', async () => {
+    const scrollBySpy = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+
+    const action: ScrollAction = {
+      id: 'scroll-up',
+      type: 'scroll',
+      direction: 'up',
+      amount: 200,
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(true);
+    expect(scrollBySpy).toHaveBeenCalledWith({ left: 0, top: -200, behavior: 'auto' });
+    scrollBySpy.mockRestore();
+  });
+
+  it('scrolls window left', async () => {
+    const scrollBySpy = vi.spyOn(window, 'scrollBy').mockImplementation(() => undefined);
+
+    const action: ScrollAction = {
+      id: 'scroll-left',
+      type: 'scroll',
+      direction: 'left',
+      amount: 100,
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(true);
+    expect(scrollBySpy).toHaveBeenCalledWith({ left: -100, top: 0, behavior: 'auto' });
+    scrollBySpy.mockRestore();
+  });
+
+  it('returns ELEMENT_NOT_FOUND when scroll selector has no match', async () => {
+    const action: ScrollAction = {
+      id: 'scroll-missing',
+      type: 'scroll',
+      direction: 'down',
+      selector: { css: '#nonexistent' },
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ELEMENT_NOT_FOUND);
+  });
+
+  it('returns ELEMENT_NOT_INTERACTIVE when scroll target is not HTMLElement', async () => {
+    document.body.innerHTML = '<svg id="svgel"><circle id="circ" /></svg>';
+    vi.spyOn(selectorEngine, 'findElement').mockReturnValue(
+      document.createElementNS('http://www.w3.org/2000/svg', 'circle'),
+    );
+
+    const action: ScrollAction = {
+      id: 'scroll-svg',
+      type: 'scroll',
+      direction: 'down',
+      selector: { css: '#circ' },
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ELEMENT_NOT_INTERACTIVE);
+  });
+
+  it('returns ELEMENT_NOT_INTERACTIVE when scrollIntoView target is not HTMLElement', async () => {
+    vi.spyOn(selectorEngine, 'findElement').mockReturnValue(
+      document.createElementNS('http://www.w3.org/2000/svg', 'circle'),
+    );
+
+    const action: ScrollIntoViewAction = {
+      id: 'into-view-svg',
+      type: 'scrollIntoView',
+      selector: { css: '#circ' },
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ELEMENT_NOT_INTERACTIVE);
+  });
+
+  it('scrollIntoView uses center block by default', async () => {
+    document.body.innerHTML = '<button id="target">Target</button>';
+    const button = document.getElementById('target') as HTMLButtonElement;
+    const scrollIntoViewSpy = vi.fn();
+    (button as HTMLElement & { scrollIntoView: typeof scrollIntoViewSpy }).scrollIntoView = scrollIntoViewSpy;
+
+    const action: ScrollIntoViewAction = {
+      id: 'into-view-default',
+      type: 'scrollIntoView',
+      selector: { css: '#target' },
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(true);
+    expect(scrollIntoViewSpy).toHaveBeenCalledWith({ block: 'center', inline: 'nearest', behavior: 'auto' });
+  });
+
+  it('returns error result for non-ExtensionError thrown during scroll', async () => {
+    vi.spyOn(selectorEngine, 'findElement').mockImplementation(() => {
+      throw new TypeError('unexpected');
+    });
+
+    const action: ScrollAction = {
+      id: 'scroll-generic-err',
+      type: 'scroll',
+      direction: 'down',
+      selector: { css: '#target' },
+    };
+
+    const result = await executeScrollAction(action, selectorEngine);
+
+    expect(result.success).toBe(false);
+    expect(result.error?.code).toBe(ErrorCode.ACTION_FAILED);
+  });
 });
