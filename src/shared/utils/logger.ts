@@ -124,16 +124,20 @@ function consoleTransport(entry: LogEntry): void {
 
   switch (entry.level) {
     case 'debug':
-      extras.length > 0 ? console.debug(formatted, ...extras) : console.debug(formatted);
+      if (extras.length > 0) console.debug(formatted, ...extras);
+      else console.debug(formatted);
       break;
     case 'info':
-      extras.length > 0 ? console.info(formatted, ...extras) : console.info(formatted);
+      if (extras.length > 0) console.info(formatted, ...extras);
+      else console.info(formatted);
       break;
     case 'warn':
-      extras.length > 0 ? console.warn(formatted, ...extras) : console.warn(formatted);
+      if (extras.length > 0) console.warn(formatted, ...extras);
+      else console.warn(formatted);
       break;
     case 'error':
-      extras.length > 0 ? console.error(formatted, ...extras) : console.error(formatted);
+      if (extras.length > 0) console.error(formatted, ...extras);
+      else console.error(formatted);
       break;
   }
 }

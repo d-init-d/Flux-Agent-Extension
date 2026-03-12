@@ -38,7 +38,7 @@ const WHITESPACE_RUNS = /\s{2,}/g;
  * Regex matching common code punctuation that increases token count.
  * Brackets, operators, semicolons, etc. tend to be individual tokens.
  */
-const CODE_SPECIAL_CHARS = /[{}()\[\];:=<>!&|+\-*/^%~@#$\\`"']/g;
+const CODE_SPECIAL_CHARS = /[{}()[\];:=<>!&|+\-*/^%~@#$\\`"']/g;
 
 // ---------------------------------------------------------------------------
 // Token Estimation

@@ -493,6 +493,7 @@ describe('ContentScriptBridge', () => {
       'should map command "%s" to response "%s"',
       async (commandType, expectedResponseType) => {
         if (commandType !== 'PING') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           bridge.onCommand(commandType as any, async () => ({ ok: true }));
         }
 
@@ -517,6 +518,7 @@ describe('ContentScriptBridge', () => {
     );
 
     it('should use the same type for unmapped commands', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       bridge.onCommand('HIGHLIGHT_ELEMENT' as any, async () => ({ done: true }));
 
       const sendResponse = simulateIncomingCommand(

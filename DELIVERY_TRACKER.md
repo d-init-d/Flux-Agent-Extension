@@ -90,7 +90,7 @@ Status summary: Mostly done, remaining hardening gates on lint and coverage.
 
 Phase-1 blockers before final close:
 
-- [ ] Migrate ESLint config to v10 flat config and make `pnpm lint` pass.
+- [x] Migrate ESLint config to v10 flat config and make `pnpm lint` pass.
 - [ ] Lift coverage gate (branch coverage >= 80%).
 - [ ] Remove full-suite unhandled rejection warnings.
 

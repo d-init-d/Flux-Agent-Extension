@@ -377,7 +377,7 @@ describe('CommandParser', () => {
     try {
       parser.parse(
         JSON.stringify({
-          actions: [{ type: 'evaluate', script: 'fetch(\"https://evil.test\")' }],
+          actions: [{ type: 'evaluate', script: 'fetch("https://evil.test")' }],
         }),
       );
       throw new Error('Expected parse to throw');

@@ -70,9 +70,9 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
 
   /** Bound reference to the onMessage listener so we can remove it later. */
   private readonly messageListener: (
-    message: any,
+    message: unknown,
     sender: chrome.runtime.MessageSender,
-    sendResponse: (response?: any) => void,
+    sendResponse: (response?: unknown) => void,
   ) => boolean | undefined;
 
   constructor() {
@@ -125,7 +125,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
       // the promise resolves with that response.
       chrome.tabs
         .sendMessage(tabId, message, this.toSendMessageOptions(target))
-        .then((response: any) => {
+        .then((response: unknown) => {
           const pending = this.pendingRequests.get(message.id);
           if (!pending) {
             // Already resolved (via onMessage listener) or timed out
@@ -330,9 +330,9 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
    * Returns `undefined` (synchronous) since we don't use sendResponse here.
    */
   private handleIncomingMessage(
-    message: any,
+    message: unknown,
     sender: chrome.runtime.MessageSender,
-    _sendResponse: (response?: any) => void,
+    _sendResponse: (response?: unknown) => void,
   ): boolean | undefined {
     // Only process messages from content scripts (which have a tab)
     const tabId = sender.tab?.id;
@@ -438,7 +438,7 @@ export class ServiceWorkerBridge implements IServiceWorkerBridge {
 
       chrome.tabs
         .sendMessage(tabId, message, this.toSendMessageOptions(target))
-        .then((response: any) => {
+        .then((response: unknown) => {
           const pending = this.pendingRequests.get(message.id);
           if (!pending) {
             return;

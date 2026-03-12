@@ -337,6 +337,7 @@ export class ContextBuilder {
 
   private sanitize(value: string): string {
     return value
+      // eslint-disable-next-line no-control-regex
       .replace(/[\u0000-\u001F\u007F]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();

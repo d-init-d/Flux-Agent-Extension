@@ -1100,6 +1100,7 @@ export class ContentScriptManager {
     try {
       overlay.remove();
     } catch {
+      /* overlay already removed */
     }
 
     const idx = this.activeHighlights.findIndex((entry) => entry.overlay === overlay);

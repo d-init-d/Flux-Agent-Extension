@@ -61,13 +61,13 @@ export type MockEvent<T extends (...args: unknown[]) => void> = ReturnType<
 // ============================================================================
 
 /** In-memory store for chrome.storage.local */
-let storageLocalStore: Record<string, unknown> = {};
+const storageLocalStore: Record<string, unknown> = {};
 
 /** In-memory store for chrome.storage.sync */
-let storageSyncStore: Record<string, unknown> = {};
+const storageSyncStore: Record<string, unknown> = {};
 
 /** In-memory store for chrome.storage.session */
-let storageSessionStore: Record<string, unknown> = {};
+const storageSessionStore: Record<string, unknown> = {};
 
 /** Mock tabs registry */
 let mockTabs: chrome.tabs.Tab[] = [
@@ -95,11 +95,11 @@ let nextTabId = 2;
 let cookieStore: chrome.cookies.Cookie[] = [];
 
 /** Mock notification store */
-let notificationStore: Map<string, chrome.notifications.NotificationOptions> =
+const notificationStore: Map<string, chrome.notifications.NotificationOptions> =
   new Map();
 
 /** Debugger attached targets */
-let debuggerTargets: Set<string> = new Set();
+const debuggerTargets: Set<string> = new Set();
 
 // ============================================================================
 // chrome.storage

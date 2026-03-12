@@ -58,6 +58,7 @@ function streamChunks(chunks: AIStreamChunk[]): AsyncGenerator<AIStreamChunk, vo
 }
 
 function throwStream(error: Error): AsyncGenerator<AIStreamChunk, void, unknown> {
+  // eslint-disable-next-line require-yield
   return (async function* () {
     throw error;
   })();

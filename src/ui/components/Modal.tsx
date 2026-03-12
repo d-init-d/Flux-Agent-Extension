@@ -195,9 +195,8 @@ const Modal: React.FC<ModalProps> = ({
         `.trim()}
         style={{ zIndex: 'var(--z-modal)' }}
       >
-        {/* Header */}
-        {(title || true) && (
-          <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-2">
+        {/* Header – always rendered so the close button is accessible */}
+        <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-2">
             <div className="flex-1 min-w-0">
               {title && (
                 <h2 className="text-lg font-semibold tracking-tight text-content-primary leading-snug">
@@ -229,7 +228,6 @@ const Modal: React.FC<ModalProps> = ({
               <CloseIcon />
             </button>
           </div>
-        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>

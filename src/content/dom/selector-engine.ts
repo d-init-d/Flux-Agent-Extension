@@ -53,7 +53,7 @@ export class SelectorEngine {
       }
 
       const query = value.trim();
-      let matches: Element[] = [];
+      let matches: Element[];
 
       switch (key) {
         case 'css':

@@ -14,14 +14,14 @@ interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   padding?: CardPadding;
 }
 
-interface CardHeaderProps extends React.HTMLAttributes<HTMLDivElement> {}
+type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
 interface CardTitleProps extends React.HTMLAttributes<HTMLHeadingElement> {
   /** Heading level for semantics */
   as?: 'h2' | 'h3' | 'h4';
 }
-interface CardDescriptionProps extends React.HTMLAttributes<HTMLParagraphElement> {}
-interface CardContentProps extends React.HTMLAttributes<HTMLDivElement> {}
-interface CardFooterProps extends React.HTMLAttributes<HTMLDivElement> {}
+type CardDescriptionProps = React.HTMLAttributes<HTMLParagraphElement>;
+type CardContentProps = React.HTMLAttributes<HTMLDivElement>;
+type CardFooterProps = React.HTMLAttributes<HTMLDivElement>;
 
 // ---------------------------------------------------------------------------
 // Style Maps

@@ -378,10 +378,11 @@ function describeSelector(selector) {
 
 async function locateElementHandle(frame, selector) {
   const handle = await frame.evaluateHandle((selectorConfig) => {
+    const WS_PATTERN = new RegExp('\\s+', 'g');
     const collectByText = (elements, expectedText, exact) => {
       const normalized = expectedText.trim();
       return elements.filter((element) => {
-        const text = (element.textContent || '').replace(/\s+/g, ' ').trim();
+        const text = (element.textContent || '').replace(WS_PATTERN, ' ').trim();
         return exact ? text === normalized : text.includes(normalized);
       });
     };
