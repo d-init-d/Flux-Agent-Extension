@@ -250,7 +250,7 @@ Status summary: Network interception, device emulation, file upload, iframe rout
 
 ### Sprint 4.1
 
-Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are complete. A-03 geolocation implementation is done but pending commit (A-03.10).
+Execution note: implementation order was `A-05 -> A-06 -> A-04 -> A-03`. All four are complete.
 
 - [x] `A-01` Network interception
 - [x] `A-01a` Fetch.enable interception
@@ -260,7 +260,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-02a` Device metrics override
 - [x] `A-02b` User-agent override
 - [x] `A-02c` Touch emulation
-- [ ] `A-03` Geolocation mock
+- [x] `A-03` Geolocation mock
 - [x] `A-03.1` Type definition (`MockGeolocationAction` in `actions.ts`)
 - [x] `A-03.2` Sensitivity classification (`mockGeolocation: 'medium'` in `action-classifier.ts`)
 - [x] `A-03.3` Zod schema (`action-schemas.ts` — ACTION_TYPES→35, schema, orderedActionSchemas)
@@ -270,7 +270,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04`. All three are c
 - [x] `A-03.7` Runtime routing (`ui-session-runtime.ts` — import, construct, route, cleanup in 5 locations)
 - [x] `A-03.8` Unit tests (manager tests, schema count 34→35, CDP wrapper tests, runtime routing tests)
 - [x] `A-03.9` Verification gates (typecheck, test, build, audit)
-- [ ] `A-03.10` Record completion, commit, push
+- [x] `A-03.10` Record completion, commit, push
 - [x] `A-04` PDF generation (`savePdf` action — CDP `Page.printToPDF`, `chrome.downloads.download`, 7 unit tests)
 - [x] `A-05` File upload (staged sidepanel uploads -> content-script injection)
 - [x] `A-06` iframe support (frame-aware bridge routing)
