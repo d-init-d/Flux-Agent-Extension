@@ -494,6 +494,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 > Update: `P-03b` is PASS via `src/sidepanel/components/__tests__/MessageBubble.xss-matrix.test.tsx`, which adds a deterministic 20-context XSS matrix over the actual `marked -> DOMPurify -> anchor hardening` render path used by assistant markdown. Verification passed with `pnpm typecheck`, targeted Vitest on the new matrix plus existing markdown/sanitizer suites (`3 files / 136 tests`), full `pnpm test` (`72 files / 1144 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-03` remains in progress pending `P-03c` and `P-03d`.
 
+> Update: `P-03c` is PASS via `src/options/__tests__/provider-key-extraction.test.tsx`, which adds extraction-resistance coverage over save, validate, blocked-save, unexpected-failure, stale-session, and multi-provider transition paths to prove raw provider keys are not recoverable from storage snapshots or surfaced in the options UI. Verification passed with `pnpm typecheck`, targeted Vitest on `src/options/__tests__/App.test.tsx` plus `src/options/__tests__/provider-key-extraction.test.tsx` (`2 files / 39 tests`), full `pnpm test` (`73 files / 1150 tests`), `pnpm build`, and `pnpm audit --audit-level=high`, with only the same known `rollup` advisories via `@crxjs/vite-plugin`. `P-03` remains in progress pending `P-03d`.
+
 #### `@sub-qa-tester` Tasks
 
 | ID | Task | Est. Hours | Depends On | Acceptance Criteria |
