@@ -7,6 +7,16 @@ export type AIProviderType =
   | 'gemini' // Google Gemini
   | 'ollama' // Local Ollama
   | 'openrouter' // OpenRouter (multi-provider)
+  | 'groq' // Groq (fast inference)
+  | 'deepseek' // DeepSeek
+  | 'xai' // xAI (Grok)
+  | 'together' // Together AI
+  | 'fireworks' // Fireworks AI
+  | 'deepinfra' // Deep Infra
+  | 'cerebras' // Cerebras (fast inference)
+  | 'mistral' // Mistral AI
+  | 'perplexity' // Perplexity AI
+  | 'copilot' // GitHub Copilot (OAuth)
   | 'custom'; // Custom API endpoint
 
 /**

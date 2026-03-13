@@ -75,6 +75,39 @@ export function getDefaultRateLimits(provider: AIProviderType): RateLimiterConfi
       // OpenRouter varies by model; conservative default
       return { maxRequestsPerMinute: 60, maxTokensPerMinute: 100_000 };
 
+    case 'groq':
+      // Groq free: 30 RPM, paid: 100 RPM
+      return { maxRequestsPerMinute: 30, maxTokensPerMinute: 60_000 };
+
+    case 'deepseek':
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 1_000_000 };
+
+    case 'xai':
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 100_000 };
+
+    case 'together':
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 100_000 };
+
+    case 'fireworks':
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 100_000 };
+
+    case 'deepinfra':
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 100_000 };
+
+    case 'cerebras':
+      // Cerebras free tier: 30 RPM
+      return { maxRequestsPerMinute: 30, maxTokensPerMinute: 60_000 };
+
+    case 'mistral':
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 100_000 };
+
+    case 'perplexity':
+      return { maxRequestsPerMinute: 20, maxTokensPerMinute: 50_000 };
+
+    case 'copilot':
+      // GitHub Copilot rate limits are dynamic; conservative default
+      return { maxRequestsPerMinute: 30, maxTokensPerMinute: 60_000 };
+
     case 'custom':
       // Unknown provider — very conservative
       return { maxRequestsPerMinute: 30, maxTokensPerMinute: 30_000 };

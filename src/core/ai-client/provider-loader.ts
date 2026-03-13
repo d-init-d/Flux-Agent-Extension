@@ -25,6 +25,22 @@ export async function createProvider(type: LazyLoadableProviderType): Promise<IA
       const { OpenRouterProvider } = await import('./providers/openrouter');
       return new OpenRouterProvider();
     }
+    case 'copilot': {
+      const { CopilotProvider } = await import('./providers/copilot');
+      return new CopilotProvider();
+    }
+    case 'groq':
+    case 'deepseek':
+    case 'xai':
+    case 'together':
+    case 'fireworks':
+    case 'deepinfra':
+    case 'cerebras':
+    case 'mistral':
+    case 'perplexity': {
+      const { createOpenAICompatProvider } = await import('./providers/openai-compat');
+      return createOpenAICompatProvider(type);
+    }
   }
 
   throw new Error(`Unsupported provider: ${type}`);

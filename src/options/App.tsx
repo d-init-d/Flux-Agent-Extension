@@ -1,14 +1,18 @@
-import { MouseEvent, useEffect, useRef, useState } from 'react';
+import { MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
+  ExternalLink,
+  Github,
   KeyRound,
   LaptopMinimal,
+  Loader2,
   RotateCw,
   ServerCog,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
 import { createProvider } from '@core/ai-client/provider-loader';
+import { runDeviceFlow } from '@core/auth/github-device-flow';
 import {
   createDefaultOnboardingState,
   normalizeOnboardingState,
@@ -50,6 +54,7 @@ interface ProviderDefinition {
   endpointLabel: string;
   endpointPlaceholder: string;
   accent: string;
+  authMethod?: 'api-key' | 'oauth-github';
 }
 
 interface ApiKeyMetadata {
@@ -131,6 +136,117 @@ const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     endpointLabel: 'Ollama server URL',
     endpointPlaceholder: 'http://localhost:11434',
     accent: 'from-slate-500/20 via-slate-300/10 to-transparent',
+  },
+  {
+    type: 'groq',
+    label: 'Groq',
+    tagline: 'Ultra-fast inference with LPU hardware. Free tier available.',
+    defaultModel: 'llama-3.3-70b-versatile',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-orange-600/20 via-yellow-400/10 to-transparent',
+  },
+  {
+    type: 'deepseek',
+    label: 'DeepSeek',
+    tagline: 'High-quality reasoning models at competitive pricing.',
+    defaultModel: 'deepseek-chat',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-blue-600/20 via-blue-300/10 to-transparent',
+  },
+  {
+    type: 'xai',
+    label: 'xAI (Grok)',
+    tagline: 'Grok models from xAI with real-time knowledge.',
+    defaultModel: 'grok-2',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-neutral-700/20 via-neutral-400/10 to-transparent',
+  },
+  {
+    type: 'together',
+    label: 'Together AI',
+    tagline: 'Open-source model hosting with competitive inference.',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-indigo-500/20 via-purple-400/10 to-transparent',
+  },
+  {
+    type: 'fireworks',
+    label: 'Fireworks AI',
+    tagline: 'Fast serverless inference for popular open models.',
+    defaultModel: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-red-500/20 via-orange-400/10 to-transparent',
+  },
+  {
+    type: 'deepinfra',
+    label: 'Deep Infra',
+    tagline: 'Low-latency, pay-per-token open model inference.',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-teal-500/20 via-emerald-400/10 to-transparent',
+  },
+  {
+    type: 'cerebras',
+    label: 'Cerebras',
+    tagline: 'Record-breaking fast inference. Free developer tier.',
+    defaultModel: 'llama3.3-70b',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-lime-500/20 via-green-400/10 to-transparent',
+  },
+  {
+    type: 'mistral',
+    label: 'Mistral',
+    tagline: 'European AI lab with strong multilingual models.',
+    defaultModel: 'mistral-large-latest',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-amber-500/20 via-orange-300/10 to-transparent',
+  },
+  {
+    type: 'perplexity',
+    label: 'Perplexity',
+    tagline: 'Search-augmented AI with real-time web grounding.',
+    defaultModel: 'sonar-pro',
+    requiresApiKey: true,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-cyan-500/20 via-sky-400/10 to-transparent',
+  },
+  {
+    type: 'copilot',
+    label: 'GitHub Copilot',
+    tagline: 'Use your existing GitHub Copilot subscription via OAuth.',
+    defaultModel: 'gpt-4o',
+    requiresApiKey: false,
+    supportsEndpoint: false,
+    endpointLabel: 'Endpoint',
+    endpointPlaceholder: '',
+    accent: 'from-gray-800/20 via-gray-500/10 to-transparent',
+    authMethod: 'oauth-github',
   },
   {
     type: 'custom',
@@ -451,6 +567,13 @@ export function App() {
   const [validationState, setValidationState] = useState<ValidationState>('idle');
   const [validationMessage, setValidationMessage] = useState('');
   const [customScriptsConfirmed, setCustomScriptsConfirmed] = useState(false);
+  const [oauthState, setOauthState] = useState<
+    'idle' | 'requesting' | 'waiting' | 'success' | 'error'
+  >('idle');
+  const [oauthUserCode, setOauthUserCode] = useState('');
+  const [oauthVerifyUrl, setOauthVerifyUrl] = useState('');
+  const [oauthError, setOauthError] = useState('');
+  const oauthAbortRef = useRef<AbortController | null>(null);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const onboardingStateRef = useRef<OnboardingState>(createDefaultOnboardingState());
   const suppressOnboardingAutoOpenRef = useRef(false);
@@ -460,6 +583,50 @@ export function App() {
       apiKeyInputRef.current.value = '';
     }
   }
+
+  const handleGitHubOAuth = useCallback(async () => {
+    oauthAbortRef.current?.abort();
+    const controller = new AbortController();
+    oauthAbortRef.current = controller;
+
+    setOauthState('requesting');
+    setOauthError('');
+    setOauthUserCode('');
+
+    try {
+      const token = await runDeviceFlow({
+        onUserCode: (userCode, verificationUri) => {
+          setOauthUserCode(userCode);
+          setOauthVerifyUrl(verificationUri);
+          setOauthState('waiting');
+        },
+        signal: controller.signal,
+      });
+
+      const masked = `ghp_${'•'.repeat(12)}${token.slice(-4)}`;
+      setApiKeyMetadata((prev) => ({
+        ...prev,
+        copilot: { maskedValue: masked, updatedAt: Date.now() },
+      }));
+
+      await chrome.storage.local.set({
+        providerKeyMetadata: {
+          ...(await chrome.storage.local.get('providerKeyMetadata')).providerKeyMetadata,
+          copilot: { maskedValue: masked, updatedAt: Date.now() },
+        },
+        encryptedKeys: {
+          ...(await chrome.storage.local.get('encryptedKeys')).encryptedKeys,
+          copilot: token,
+        },
+      });
+
+      setOauthState('success');
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      setOauthState('error');
+      setOauthError(error instanceof Error ? error.message : 'OAuth flow failed');
+    }
+  }, []);
 
   useEffect(() => {
     onboardingStateRef.current = onboardingState;
@@ -1107,6 +1274,89 @@ export function App() {
                 <p className="mt-1 text-xs text-content-tertiary">
                   Re-enter the raw key whenever you want to test until encrypted key persistence is
                   wired.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : selectedDefinition.authMethod === 'oauth-github' ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4">
+              <p className="text-sm font-medium text-content-primary">GitHub Copilot Authentication</p>
+              <p className="mt-1 text-xs leading-5 text-content-secondary">
+                Sign in with your GitHub account that has an active Copilot subscription. No API key needed.
+              </p>
+
+              {oauthState === 'idle' || oauthState === 'error' ? (
+                <div className="mt-3 space-y-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => { void handleGitHubOAuth(); }}
+                    iconLeft={<Github className="h-4 w-4" />}
+                    disabled={!isReady}
+                  >
+                    Connect with GitHub
+                  </Button>
+                  {oauthError ? (
+                    <p className="text-xs text-error-600">{oauthError}</p>
+                  ) : null}
+                </div>
+              ) : oauthState === 'requesting' ? (
+                <div className="mt-3 flex items-center gap-2 text-sm text-content-secondary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Requesting device code…
+                </div>
+              ) : oauthState === 'waiting' ? (
+                <div className="mt-3 space-y-3">
+                  <div className="rounded-xl border border-primary-500/30 bg-primary-50 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-primary-700">
+                      Enter this code on GitHub
+                    </p>
+                    <p className="mt-1 font-mono text-2xl font-bold tracking-[0.2em] text-primary-800">
+                      {oauthUserCode}
+                    </p>
+                  </div>
+                  <a
+                    href={oauthVerifyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700"
+                  >
+                    Open {oauthVerifyUrl}
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                  <div className="flex items-center gap-2 text-xs text-content-tertiary">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Waiting for authorization…
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      oauthAbortRef.current?.abort();
+                      setOauthState('idle');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : oauthState === 'success' ? (
+                <div className="mt-3 flex items-center gap-2 text-sm font-medium text-success-700">
+                  <CheckCircle2 className="h-4 w-4" />
+                  GitHub Copilot connected successfully
+                </div>
+              ) : null}
+            </div>
+
+            {savedMetadata ? (
+              <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
+                  <Github className="h-4 w-4" />
+                  Copilot token stored
+                </div>
+                <p className="mt-2 text-sm text-content-secondary">
+                  {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
                 </p>
               </div>
             ) : null}

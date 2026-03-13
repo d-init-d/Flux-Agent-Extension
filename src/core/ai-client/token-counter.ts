@@ -198,6 +198,16 @@ const PROVIDER_DEFAULTS: Record<AIProviderType, number> = {
   gemini: 1_000_000,
   ollama: 8_192,
   openrouter: 128_000,
+  groq: 128_000,
+  deepseek: 128_000,
+  xai: 131_072,
+  together: 128_000,
+  fireworks: 128_000,
+  deepinfra: 128_000,
+  cerebras: 128_000,
+  mistral: 128_000,
+  perplexity: 128_000,
+  copilot: 128_000,
   custom: 4_096,
 };
 
