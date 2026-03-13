@@ -1,25 +1,16 @@
-import type { OnboardingState } from '@shared/types';
+import { PROVIDER_REGISTRY } from '@shared/config';
+import type { AIProviderType, OnboardingState } from '@shared/types';
 
 export const ONBOARDING_STORAGE_KEY = 'onboarding' as const;
 export const ONBOARDING_VERSION = 1;
 export const ONBOARDING_STEP_COUNT = 4;
 
-const ONBOARDING_PROVIDER_TYPES = [
-  'claude',
-  'openai',
-  'gemini',
-  'ollama',
-  'openrouter',
-  'custom',
-] as const;
+const ONBOARDING_PROVIDER_TYPES = PROVIDER_REGISTRY.map((provider) => provider.type) as readonly AIProviderType[];
 
 function isOnboardingProviderType(
   value: unknown,
-): value is (typeof ONBOARDING_PROVIDER_TYPES)[number] {
-  return (
-    typeof value === 'string' &&
-    ONBOARDING_PROVIDER_TYPES.includes(value as (typeof ONBOARDING_PROVIDER_TYPES)[number])
-  );
+): value is AIProviderType {
+  return typeof value === 'string' && ONBOARDING_PROVIDER_TYPES.includes(value as AIProviderType);
 }
 
 export function createDefaultOnboardingState(): OnboardingState {

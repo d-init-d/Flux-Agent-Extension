@@ -6,6 +6,7 @@ import { App } from '../App';
 import { renderWithProviders, readStorage, seedStorage } from '../../test/helpers';
 import { ThemeProvider } from '../../ui/theme';
 import * as providerLoader from '../../core/ai-client/provider-loader';
+import { installOptionsRuntimeMock } from './runtime-mock';
 import type { IAIProvider } from '../../core/ai-client/interfaces';
 
 function renderOptionsApp() {
@@ -75,6 +76,7 @@ function mockPendingProviderValidation() {
 
 describe('Options App', () => {
   beforeEach(async () => {
+    installOptionsRuntimeMock();
     await seedStorage({
       onboarding: {
         version: 1,
@@ -124,7 +126,7 @@ describe('Options App', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Provider')).toHaveValue('claude');
     expect(screen.getByDisplayValue('claude-3-opus-20240229')).toBeInTheDocument();
-    expect(screen.getByText(/saved key metadata/i)).toBeInTheDocument();
+    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
     expect(screen.getByText(/updated/i)).toBeInTheDocument();
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();
   });
@@ -340,6 +342,7 @@ describe('Options App', () => {
         defaultProvider: 'openai',
         includeScreenshotsInContext: true,
         screenshotOnError: false,
+        debugMode: true,
         allowCustomScripts: true,
         showFloatingBar: false,
         highlightElements: true,
@@ -357,6 +360,10 @@ describe('Options App', () => {
     expect(
       screen.getByRole('switch', { name: /capture screenshots on failures/i }),
     ).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getByRole('switch', { name: /enable advanced mode/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
     expect(screen.getByRole('switch', { name: /allow custom scripts/i })).toHaveAttribute(
       'aria-checked',
       'true',
@@ -375,6 +382,7 @@ describe('Options App', () => {
     await screen.findByRole('heading', { name: /permission toggles/i });
 
     await user.click(screen.getByRole('switch', { name: /share screenshots with ai/i }));
+    await user.click(screen.getByRole('switch', { name: /enable advanced mode/i }));
     await user.click(screen.getByRole('switch', { name: /allow custom scripts/i }));
     await user.click(screen.getByRole('checkbox', { name: /i understand the risk/i }));
     await user.click(screen.getByRole('switch', { name: /show floating bar/i }));
@@ -384,6 +392,7 @@ describe('Options App', () => {
       await expect(readStorage('settings')).resolves.toEqual(
         expect.objectContaining({
           includeScreenshotsInContext: true,
+          debugMode: true,
           allowCustomScripts: true,
           showFloatingBar: false,
           highlightElements: true,
@@ -557,6 +566,7 @@ describe('Options App', () => {
     renderOptionsApp();
 
     await screen.findByRole('heading', { name: /permission toggles/i });
+    await user.click(screen.getByRole('switch', { name: /enable advanced mode/i }));
     await user.click(screen.getByRole('switch', { name: /allow custom scripts/i }));
     await user.click(screen.getByRole('button', { name: /save permissions/i }));
 

@@ -13,6 +13,7 @@
 import { ServiceWorkerBridge } from '@core/bridge';
 import { registerKeyboardShortcutHandlers } from './keyboard-shortcuts';
 import { UISessionRuntime } from './ui-session-runtime';
+import { EXTENSION_MESSAGE_CHANNELS, EXTENSION_MESSAGE_TYPES } from '@shared/config';
 import { Logger } from '@shared/utils';
 import type {
   TabState,
@@ -57,52 +58,11 @@ const EXTENSION_MESSAGE_MAX_AGE_MS = 60_000;
 const EXTENSION_MESSAGE_MAX_FUTURE_DRIFT_MS = 5_000;
 const EXTENSION_MESSAGE_REPLAY_CACHE_LIMIT = 2_000;
 
-const ALLOWED_EXTENSION_CHANNELS: readonly MessageChannel[] = ['popup', 'sidePanel', 'offscreen'];
+const ALLOWED_EXTENSION_CHANNELS: readonly MessageChannel[] = EXTENSION_MESSAGE_CHANNELS.filter(
+  (channel): channel is MessageChannel => channel !== 'contentScript',
+);
 
-const ALLOWED_EXTENSION_MESSAGE_TYPES: readonly ExtensionMessageType[] = [
-  'SESSION_CREATE',
-  'SESSION_START',
-  'SESSION_PAUSE',
-  'SESSION_RESUME',
-  'SESSION_ABORT',
-  'SESSION_SEND_MESSAGE',
-  'SESSION_GET_STATE',
-  'SESSION_LIST',
-  'SESSION_RECORDING_START',
-  'SESSION_RECORDING_PAUSE',
-  'SESSION_RECORDING_RESUME',
-  'SESSION_RECORDING_STOP',
-  'SESSION_RECORDING_EXPORT',
-  'SESSION_PLAYBACK_START',
-  'SESSION_PLAYBACK_PAUSE',
-  'SESSION_PLAYBACK_RESUME',
-  'SESSION_PLAYBACK_STOP',
-  'SESSION_PLAYBACK_SET_SPEED',
-  'WORKFLOW_LIST',
-  'WORKFLOW_CREATE',
-  'WORKFLOW_UPDATE',
-  'WORKFLOW_DELETE',
-  'WORKFLOW_RUN',
-  'ACTION_EXECUTE',
-  'ACTION_EXECUTE_BATCH',
-  'ACTION_ABORT',
-  'ACTION_UNDO',
-  'TAB_ATTACH',
-  'TAB_DETACH',
-  'TAB_GET_STATE',
-  'TAB_CAPTURE',
-  'SETTINGS_GET',
-  'SETTINGS_UPDATE',
-  'PROVIDER_SET',
-  'API_KEY_SET',
-  'API_KEY_VALIDATE',
-  'CONTEXT_GET',
-  'CONTEXT_UPDATE',
-  'EVENT_SESSION_UPDATE',
-  'EVENT_ACTION_PROGRESS',
-  'EVENT_AI_STREAM',
-  'EVENT_ERROR',
-];
+const ALLOWED_EXTENSION_MESSAGE_TYPES: readonly ExtensionMessageType[] = EXTENSION_MESSAGE_TYPES;
 
 interface PatchedXMLHttpRequestPrototype extends XMLHttpRequest {
   __fluxPageTrackerPatched__?: boolean;

@@ -9,7 +9,6 @@
 import {
   validateUrl,
   isSafeUrl,
-  type UrlValidationResult,
   type UrlValidatorOptions,
 } from '../url-validator';
 

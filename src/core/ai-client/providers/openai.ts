@@ -261,7 +261,10 @@ export class OpenAIProvider extends BaseProvider {
 
     // Check for queued tool call chunks from multi-tool responses
     if (this.pendingToolCallChunks && this.pendingToolCallChunks.length > 0) {
-      return this.pendingToolCallChunks.shift()!;
+      const nextToolCallChunk = this.pendingToolCallChunks.shift();
+      if (nextToolCallChunk) {
+        return nextToolCallChunk;
+      }
     }
 
     return null;

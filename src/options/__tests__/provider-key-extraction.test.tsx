@@ -5,6 +5,7 @@ import { App } from '../App';
 import { ThemeProvider } from '../../ui/theme';
 import { getMockStore, readStorage, renderWithProviders, seedStorage } from '../../test/helpers';
 import * as providerLoader from '../../core/ai-client/provider-loader';
+import { installOptionsRuntimeMock } from './runtime-mock';
 
 function renderOptionsApp() {
   return renderWithProviders(
@@ -25,6 +26,7 @@ function expectNoRecoverableSecrets(container: HTMLElement, ...secrets: string[]
 
 describe('Provider key extraction resistance', () => {
   beforeEach(async () => {
+    installOptionsRuntimeMock();
     await seedStorage({
       onboarding: {
         version: 1,
@@ -45,7 +47,7 @@ describe('Provider key extraction resistance', () => {
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: rawKey } });
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
-    expect(await screen.findByText(/only masked metadata was retained/i)).toBeInTheDocument();
+    expect(await screen.findByText(/credential was stored in the vault/i)).toBeInTheDocument();
     await expect(readStorage('providerKeyMetadata')).resolves.toEqual({
       openrouter: expect.objectContaining({
         maskedValue: '••••••••••••',
@@ -53,7 +55,7 @@ describe('Provider key extraction resistance', () => {
     });
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();
     expect(screen.getByLabelText('API key')).toHaveValue('');
-    expect(screen.getByText(/saved key metadata/i)).toBeInTheDocument();
+    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
     expect(screen.getByText(/••••••••••••/i)).toBeInTheDocument();
     expectNoRecoverableSecrets(container, rawKey);
   });
@@ -162,7 +164,7 @@ describe('Provider key extraction resistance', () => {
     });
 
     expect(screen.getByLabelText('API key')).toHaveValue('');
-    expect(screen.getByText(/saved key metadata/i)).toBeInTheDocument();
+    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
     expect(screen.getByText(/••••••••••••/i)).toBeInTheDocument();
     expectNoRecoverableSecrets(container, staleOpenAiKey, staleClaudeKey);
   });
@@ -177,7 +179,7 @@ describe('Provider key extraction resistance', () => {
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: openAiKey } });
     await user.click(screen.getByRole('button', { name: /save provider/i }));
-    expect(await screen.findByText(/only masked metadata was retained/i)).toBeInTheDocument();
+    expect(await screen.findByText(/credential was stored in the vault/i)).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Provider'), 'claude');
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: claudeKey } });
@@ -189,7 +191,7 @@ describe('Provider key extraction resistance', () => {
     });
 
     await user.selectOptions(screen.getByLabelText('Provider'), 'openai');
-    expect(screen.getByText(/saved key metadata/i)).toBeInTheDocument();
+    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
     expect(screen.getByText(/••••••••••••/i)).toBeInTheDocument();
     expect(screen.getByLabelText('API key')).toHaveValue('');
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();

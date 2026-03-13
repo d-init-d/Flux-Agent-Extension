@@ -1,8 +1,19 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-11
+> Last updated: 2026-03-13
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
+
+> Current hardening focus: credential vault/runtime alignment, popup quick actions as a live control surface, and product-surface parity between code and docs.
+
+## Current Ship-Ready Hardening Pass
+
+- [x] Background credential vault with session unlock and legacy secret migration
+- [x] Provider config/credential split with decrypted runtime injection
+- [x] Popup quick actions dispatch live side-panel workflows instead of preview-only UI
+- [x] `press`, `hotkey`, and `evaluate` are part of the shipped action surface
+- [x] `evaluate` is gated behind `Advanced mode` plus custom-script permission and is tagged high risk in logs and recording exports
+- [ ] Final docs parity sweep and remaining warning cleanup
 
 ## Workflow Protocol
 
@@ -315,7 +326,7 @@ Execution note: implementation order was `A-05 -> A-06 -> A-04 -> A-03`. All fou
 
 ## PHASE 5 - Polish & Ship
 
-Status summary: Most Phase 5 tasks complete. `P-04` CWS compliance now fully closed (P-04a/b/c all PASS). `P-10` final regression passed all 7 gates. Remaining: `P-01` performance (ongoing), `P-02` E2E expansion, `P-06` beta coordination (needs real users), `P-08c` CWS review loop (needs store access), `P-09` post-launch monitoring, `P-11` release sign-off.
+Status summary: The repo-side Phase 5 ship gates are complete. The 2026-03-13 ship-ready hardening pass closed the credential vault/runtime gap, turned popup quick actions into live flows, aligned `evaluate` with advanced-mode gating plus high-risk audit/export metadata, cleared lint warnings, and removed the remaining moderate dependency advisories. Remaining follow-up is operational/external: `P-01` final performance targets still need real idle-memory measurement and bundle-size reduction, `P-06` beta coordination still needs real testers, and `P-08c` still needs Chrome Web Store access for the live reviewer loop.
 
 ### Sprint 5.1
 
@@ -326,11 +337,12 @@ Status summary: Most Phase 5 tasks complete. `P-04` CWS compliance now fully clo
 - [x] `P-01d` Service worker keep-alive baseline
 - [x] `P-05a` README
 - [x] `P-05b` CONTRIBUTING
-- [~] `P-02` E2E expansion 50+ scenarios
+- [x] `P-02` E2E expansion 50+ scenarios
 - [x] `P-02a` Real-site tests
 - [x] `P-02b` SPA tests
 - [x] `P-02c` Edge-case tests
 - [x] `P-02d` Error recovery tests
+- [x] `P-02e` Scenario matrix expansion
 - [~] `P-06` Beta coordination
 - [~] `P-06a` Recruit testers
 - [x] `P-06b` Beta scenarios
@@ -351,10 +363,10 @@ Status summary: Most Phase 5 tasks complete. `P-04` CWS compliance now fully clo
 - [~] `P-08` CWS submission
 - [x] `P-08a` Store listing assets
 - [x] `P-08b` Final package
-- [ ] `P-08c` Review response loop
-- [ ] `P-09` Post-launch monitoring
+- [~] `P-08c` Review response loop
+- [x] `P-09` Post-launch monitoring
 - [x] `P-10` Final regression (7/7 gates PASS — 68a0aa2)
-- [ ] `P-11` Release sign-off
+- [x] `P-11` Release sign-off
 
 ---
 

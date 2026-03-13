@@ -9,7 +9,7 @@ import type {
 } from '@shared/types';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { ContextBuilder, DEFAULT_CONTEXT_BUILDER_OPTIONS } from './context-builder';
-import type { ContextBuilderOptions, ISessionManager } from './interfaces';
+import type { ISessionManager } from './interfaces';
 
 type SessionEventHandler = (event: SessionEvent) => void;
 

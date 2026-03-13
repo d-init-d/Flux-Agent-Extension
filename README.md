@@ -24,9 +24,9 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 
 ## Extension Surfaces
 
-- Popup: `src/popup/index.html`
+- Popup: `src/popup/index.html` (launcher that opens the side panel and dispatches live quick actions)
 - Side panel: `src/sidepanel/index.html`
-- Options page: `src/options/index.html`
+- Options page: `src/options/index.html` (provider config, credential vault, permissions, appearance)
 - Background service worker: `src/background/index.ts`
 - Content script: `src/content/index.ts`
 - Manifest: `src/manifest.json`
@@ -41,10 +41,7 @@ The manifest currently declares these permissions:
 - `storage`
 - `sidePanel`
 - `debugger`
-- `cookies`
 - `webNavigation`
-- `offscreen`
-- `notifications`
 - `downloads`
 
 Host permissions are currently `"<all_urls>"` because the extension automates and inspects the active page context across sites.
@@ -135,7 +132,10 @@ Release packaging is handled by `.github/workflows/release.yml` on tags matching
 
 ## Security Notes
 
-- See `SECURITY.md` for the threat model and secure-design requirements.
+- Provider credentials now flow through the background-owned credential vault. Secrets are encrypted at rest, while regular settings storage keeps only masked metadata.
+- Unlocking the vault is a per-browser-session action. The unlock state lives in session storage and memory only; options and popup flows do not persist raw provider secrets.
+- `evaluate` and custom scripts stay off by default. They require `Advanced mode` plus the explicit custom-scripts capability, and exported recordings/action logs mark `evaluate` as high risk.
+- See `SECURITY.md` for the threat model and current hardening posture.
 - See `TESTING.md` for the broader QA strategy.
 - See `ARCHITECTURE.md` for architecture context.
 - See `ROADMAP.md` and `DELIVERY_TRACKER.md` for live delivery status.

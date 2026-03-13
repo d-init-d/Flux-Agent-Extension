@@ -15,7 +15,6 @@
 
 import type {
   AIProviderType,
-  AIModelConfig,
   AIMessage,
   AIStreamChunk,
   AIRequestOptions,

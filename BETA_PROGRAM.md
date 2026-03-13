@@ -19,7 +19,7 @@ Use the current implementation as the source of truth.
 - Share `README.md`, `SECURITY.md`, and this document with each tester
 - Tell testers Flux currently exposes three user surfaces: options, popup, and side panel
 - Tell testers provider setup happens in the options page onboarding flow before live quick actions are unlocked
-- Tell testers key-based providers currently require re-entering the raw API key when validating or running again; raw keys are cleared after save/test until secure persistence ships
+- Tell testers long-lived provider credentials are stored through the encrypted local vault and the vault may need to be initialized or unlocked before validating/running a cloud provider
 - Ask testers to use non-production accounts and non-sensitive pages only
 
 ### Target tester mix
@@ -95,13 +95,14 @@ If interested, reply with:
 
 ### Current product realities
 
-- Manifest permissions include `activeTab`, `tabs`, `scripting`, `storage`, `sidePanel`, `debugger`, `cookies`, `webNavigation`, `offscreen`, `notifications`, and `downloads`
+- Manifest permissions include `activeTab`, `tabs`, `scripting`, `storage`, `sidePanel`, `debugger`, `webNavigation`, and `downloads`
 - Host permissions are currently `"<all_urls>"`
-- The popup quick actions stay in preview mode until onboarding is complete
+- The popup keeps quick actions locked until onboarding is complete; after setup they dispatch live side-panel workflows
 - The options page is the source of truth for provider setup and capability toggles
+- The options page also controls the encrypted credential vault and Advanced mode gating for custom scripts
 - The side panel is the main workspace for chat, recording, playback, workflow save, and export
 - Export formats currently include `JSON`, `Playwright`, and `Puppeteer`
-- Known repo baseline: CI expects `pnpm lint`, `pnpm typecheck`, `pnpm test`, and `pnpm build`; roadmap notes the current known audit exception is the existing `rollup` advisory chain via `@crxjs/vite-plugin`
+- Known repo baseline: CI expects `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, and `pnpm audit --audit-level=high`
 
 ### Minimum tester setup
 
@@ -120,10 +121,10 @@ Run at least Scripts 1-5 for every tester. Scripts 6-7 are strongly recommended 
 | ID | Focus | Surface | Script | Expected result |
 |---|---|---|---|---|
 | 1 | Install + onboarding | Options + popup | Load the extension, open the popup, confirm quick actions are locked, then open guided setup from the popup or options page and finish onboarding. | Onboarding completes, popup no longer shows setup lock state, and no surface crashes. |
-| 2 | Provider setup | Options | Choose one provider, save config, run `Test connection`, and note whether the connection succeeds. For OpenAI-compatible providers, note any base URL override used. | Provider settings save cleanly, validation result is clear, and raw API key input clears after save/test. |
+| 2 | Provider setup | Options | Choose one provider, initialize or unlock the vault if needed, save config, run `Test connection`, and note whether the connection succeeds. For OpenAI-compatible providers, note any base URL override used. | Provider settings save cleanly, validation result is clear, and the credential can be stored or reused through the vault. |
 | 3 | Popup context | Popup | Open a normal content page, reopen the popup, verify page title/domain/URL render correctly, and inspect the four quick action cards. | Popup reflects the active tab and stays readable without missing text or broken states. |
 | 4 | Side panel prompt flow | Side panel | Use the side panel on a safe page and try one simple prompt such as summarize visible content, extract data from a table, or inspect clickable targets. | The side panel accepts input, shows progress/messages, and returns a usable response or a clear failure message. |
-| 5 | Capability boundaries | Options + live page | Review toggles such as screenshots, custom scripts, highlight targets, and notifications. Change one low-risk toggle, save, and confirm the change persists after reopening the extension. | Settings persist correctly and the boundaries remain understandable. |
+| 5 | Capability boundaries | Options + live page | Review toggles such as screenshots, Advanced mode, custom scripts, highlight targets, and sound notifications. Change one low-risk toggle, save, and confirm the change persists after reopening the extension. | Settings persist correctly and the boundaries remain understandable. |
 | 6 | Recording + playback | Side panel | Start recording, perform a short 3-5 step flow on a safe page, pause/resume if available, stop, then play the recording back at `1x` or `2x`. | Recording captures steps, playback starts from the saved session, and any failure is surfaced clearly instead of silently breaking. |
 | 7 | Export + workflow reuse | Side panel | Export the recorded flow in one format (`JSON`, `Playwright`, or `Puppeteer`), then save the flow as a workflow and reopen it from `Saved workflows`. | Export downloads successfully and the saved workflow is available for later reuse. |
 

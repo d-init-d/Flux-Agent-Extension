@@ -132,12 +132,24 @@ export function ActionTimeline({ actions }: ActionTimelineProps) {
             <div className="rounded-2xl border border-[rgb(var(--color-border-default)/0.75)] bg-[rgb(var(--color-bg-secondary))] px-4 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold leading-snug tracking-tight text-[rgb(var(--color-text-primary))]">
-                    {action.title}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold leading-snug tracking-tight text-[rgb(var(--color-text-primary))]">
+                      {action.title}
+                    </p>
+                    {action.riskLevel === 'high' ? (
+                      <Badge variant="error" size="sm">
+                        High risk
+                      </Badge>
+                    ) : null}
+                  </div>
                   <p className="mt-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
                     {action.detail}
                   </p>
+                  {action.riskLevel === 'high' && action.riskReason ? (
+                    <p className="mt-1 text-xs leading-relaxed text-[rgb(var(--color-error-700))]">
+                      {action.riskReason}
+                    </p>
+                  ) : null}
                 </div>
 
                 <Badge variant={getStatusBadgeVariant(action.status)} size="md" dot>

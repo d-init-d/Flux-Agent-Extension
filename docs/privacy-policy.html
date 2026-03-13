@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Privacy Policy — Flux Agent</title>
+  <title>Privacy Policy - Flux Agent</title>
   <style>
     :root {
       --bg: #f5f5f0;
@@ -11,7 +11,6 @@
       --accent: #1b3a1b;
       --muted: #6b6b6b;
       --border: #d4d4c8;
-      --card-bg: #ffffff;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -104,14 +103,14 @@
   </style>
 </head>
 <body>
-  <a href="index.html" class="back-link">← Back to Flux Agent</a>
+  <a href="index.html" class="back-link"><- Back to Flux Agent</a>
 
   <div class="meta">
-    Last updated: 2026-03-12<br>
-    Effective date: 2026-03-12
+    Last updated: 2026-03-13<br>
+    Effective date: 2026-03-13
   </div>
 
-  <h1>Privacy Policy — Flux Agent</h1>
+  <h1>Privacy Policy - Flux Agent</h1>
 
   <p>This policy describes how the Flux Agent Chrome extension handles data.</p>
 
@@ -126,35 +125,37 @@
     <ul>
       <li>page URLs, titles, visible page context, links, forms, DOM summaries, and frame/tab context</li>
       <li>prompts, chat messages, and automation instructions</li>
-      <li>provider settings such as model choice and endpoint</li>
-      <li>saved workflows and recorded actions</li>
-      <li>local settings such as theme, language, and runtime toggles</li>
-      <li>screenshots when a screenshot-related feature is enabled or triggered</li>
-      <li>exported files you explicitly ask the extension to create or download</li>
+      <li>provider configuration such as model choice, endpoint, and masked credential metadata</li>
+      <li>encrypted provider credentials that you explicitly store in the local credential vault</li>
+      <li>saved workflows, recordings, exports, and action history</li>
+      <li>local settings such as theme, language, onboarding state, and runtime toggles</li>
+      <li>screenshots when a screenshot-related feature is enabled or explicitly triggered</li>
     </ul>
   </section>
 
   <section>
     <h2>Where data is processed</h2>
     <h3>Local processing</h3>
-    <p>The extension stores all settings and state locally in Chrome extension storage, including settings, onboarding state, provider metadata, and saved workflows.</p>
+    <p>Flux Agent stores extension state locally in Chrome extension storage. This includes settings, onboarding state, provider configuration, saved workflows, and vault metadata.</p>
+    <p>Stored provider credentials are encrypted at rest in local extension storage. The vault is unlocked with a user passphrase and the unlocked key material remains only in memory for the current browser session.</p>
     <h3>Third-party provider processing</h3>
-    <p>If you use an AI-backed feature, Flux Agent may send relevant prompt and page-context data to the provider you configure, such as OpenAI, Anthropic, Google Gemini, OpenRouter, a custom HTTPS endpoint, or a local Ollama server on loopback.</p>
+    <p>If you use an AI-backed feature, Flux Agent may send prompt and page-context data to the provider you configure, such as OpenAI, Anthropic, Google Gemini, OpenRouter, a custom HTTPS endpoint, or a local Ollama server on loopback.</p>
     <p>Those providers process data under their own terms and privacy policies.</p>
   </section>
 
   <section>
-    <h2>API Key Handling</h2>
+    <h2>Credential handling</h2>
     <ul>
-      <li>Raw API keys entered in the Options page are used only for authentication and cleared from the UI after save or validation</li>
-      <li>Only masked metadata (e.g., that a key was configured and when) is stored locally</li>
-      <li>Keys are never transmitted to any party other than the configured provider</li>
+      <li>Raw provider credentials entered in the options page are cleared from the UI after save or validation</li>
+      <li>Long-lived provider credentials are stored in the encrypted local vault only when you explicitly save them</li>
+      <li>Vault metadata may retain masked information such as provider, masked value, and validation timestamps</li>
+      <li>Credentials are sent only to the configured provider or endpoint when required to fulfill the feature you requested</li>
     </ul>
   </section>
 
   <section>
     <h2>Broad site access</h2>
-    <p>The extension requests <code>"&lt;all_urls&gt;"</code> host access because Flux Agent is designed as a general browser automation tool rather than a single-site extension. Content scripts are configured on <code>"&lt;all_urls&gt;"</code>, run in all frames, and can inspect and act on page context during automation flows.</p>
+    <p>The extension requests <code>"&lt;all_urls&gt;"</code> host access because Flux Agent is a general browser automation tool rather than a single-site helper. Content scripts run on pages you choose to use with the extension, in all frames, so automation flows can inspect context and act on the page.</p>
   </section>
 
   <section>
@@ -167,7 +168,7 @@
       <li>selected page context, such as URL, title, visible text, DOM summaries, links, and forms</li>
       <li>screenshots, if screenshot sharing is enabled or a screenshot feature is used</li>
     </ul>
-    <p>Flux Agent does not claim that all sensitive data is fully removed before provider transmission. You should only use the extension on pages and with data you are authorized to process.</p>
+    <p>Flux Agent does not claim that all sensitive page data is automatically removed before provider transmission. You should only use the extension on pages and with data you are authorized to process.</p>
   </section>
 
   <section>
@@ -181,10 +182,11 @@
 
   <section>
     <h2>Retention</h2>
-    <p>Flux Agent does not operate a publisher-hosted backend for extension telemetry or cloud sync.</p>
+    <p>Flux Agent does not operate a publisher-hosted backend for telemetry or cloud sync.</p>
     <ul>
-      <li>Masked provider-key metadata remains locally until overwritten or removed</li>
-      <li>Saved workflows remain locally until deleted or the extension is removed</li>
+      <li>Local settings, workflows, recordings, and chat/session state remain in extension storage until overwritten, deleted, or the extension is removed</li>
+      <li>Encrypted credential vault records remain locally until replaced or deleted</li>
+      <li>Vault metadata may remain until a credential is rotated or removed</li>
       <li>Exported files remain wherever you save them on your device</li>
       <li>Third-party providers may retain submitted data under their own policies</li>
     </ul>
@@ -194,11 +196,13 @@
     <h2>Your controls</h2>
     <p>You can:</p>
     <ul>
-      <li>Choose which provider or endpoint to use</li>
-      <li>Avoid remote providers by using local Ollama where suitable</li>
-      <li>Keep screenshot sharing off by default</li>
-      <li>Leave high-risk custom-script execution disabled</li>
-      <li>Remove the extension to clear extension-managed local storage from your browser environment</li>
+      <li>choose which provider or endpoint to use</li>
+      <li>avoid remote providers by using local Ollama where suitable</li>
+      <li>keep screenshot sharing off by default</li>
+      <li>leave Advanced mode and custom-script execution disabled</li>
+      <li>lock the credential vault for the current browser session</li>
+      <li>remove stored credentials and workflows from local extension storage</li>
+      <li>remove the extension to clear extension-managed local storage from your browser environment</li>
     </ul>
   </section>
 
@@ -214,7 +218,7 @@
 
   <section>
     <h2>International Data Transfers</h2>
-    <p>When you use a third-party AI provider, your data may be processed in countries where that provider operates. By configuring and using a remote provider, you acknowledge that your data will be transferred to and processed by that provider according to their privacy policy.</p>
+    <p>When you use a third-party AI provider, your data may be processed in countries where that provider operates. By configuring and using a remote provider, you acknowledge that your data will be transferred to and processed by that provider according to that provider's privacy policy.</p>
   </section>
 
   <section>

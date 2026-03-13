@@ -7,21 +7,6 @@
  */
 
 import { detectPII, redactPII } from '../pii-detector';
-import type { PIIType } from '../pii-detector';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Shorthand: detect and return the first finding's type */
-function firstType(text: string): PIIType | undefined {
-  return detectPII(text).findings[0]?.type;
-}
-
-/** Shorthand: detect and return all finding types */
-function allTypes(text: string): PIIType[] {
-  return detectPII(text).findings.map((f) => f.type);
-}
 
 // ===========================================================================
 // detectPII
@@ -437,9 +422,6 @@ describe('detectPII', () => {
   describe('Multiple PII types in single input', () => {
     it('should detect SSN + email together', () => {
       const result = detectPII('SSN: 123-45-6789, email: user@test.com');
-      const types = allTypes(
-        result.findings[0]?.value ? 'SSN: 123-45-6789, email: user@test.com' : '',
-      );
       expect(result.hasPII).toBe(true);
       expect(result.findings.some((f) => f.type === 'SSN')).toBe(true);
       expect(result.findings.some((f) => f.type === 'EMAIL')).toBe(true);

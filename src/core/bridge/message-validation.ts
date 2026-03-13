@@ -5,8 +5,6 @@
  * to ensure message integrity and prevent duplicate processing.
  */
 
-import type { BridgeMessage, MessageType } from '@shared/types';
-
 // ============================================================================
 // Constants
 // ============================================================================

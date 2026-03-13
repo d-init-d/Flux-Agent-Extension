@@ -230,10 +230,8 @@ export class AIClientManager implements IAIClientManager {
 
         // Yield chunks from the provider's chat generator
         const generator = entry.provider.chat(messages, options);
-        let hasYielded = false;
 
         for await (const chunk of generator) {
-          hasYielded = true;
           yield chunk;
 
           // If we receive an error chunk, record it but don't throw
@@ -359,7 +357,7 @@ export class AIClientManager implements IAIClientManager {
    * Reset health state for all providers.
    */
   resetAllHealth(): void {
-    for (const [type, entry] of this.registry) {
+    for (const entry of this.registry.values()) {
       entry.consecutiveFailures = 0;
       entry.markedUnhealthyAt = null;
     }
@@ -427,15 +425,19 @@ export class AIClientManager implements IAIClientManager {
       case 'least-errors':
         // Sort remaining by fewest consecutive failures, then by most recent success
         remaining.sort((a, b) => {
-          const ea = this.registry.get(a)!;
-          const eb = this.registry.get(b)!;
+          const entryA = this.registry.get(a);
+          const entryB = this.registry.get(b);
+
+          if (!entryA || !entryB) {
+            return 0;
+          }
 
           // Fewer failures first
-          const failureDiff = ea.consecutiveFailures - eb.consecutiveFailures;
+          const failureDiff = entryA.consecutiveFailures - entryB.consecutiveFailures;
           if (failureDiff !== 0) return failureDiff;
 
           // More recent success first
-          return eb.lastSuccessAt - ea.lastSuccessAt;
+          return entryB.lastSuccessAt - entryA.lastSuccessAt;
         });
         candidates.push(...remaining);
         break;

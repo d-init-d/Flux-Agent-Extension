@@ -60,12 +60,16 @@ export interface ActionRecord {
   action: Action;
   result: ActionResult;
   timestamp: number;
+  riskLevel?: 'standard' | 'high';
+  riskReason?: string;
   pageStateBeforeSnapshot?: string; // For undo capability
 }
 
 export interface RecordedSessionAction {
   action: Action;
   timestamp: number;
+  riskLevel?: 'standard' | 'high';
+  riskReason?: string;
 }
 
 export type SessionRecordingExportFormat = 'json' | 'playwright' | 'puppeteer';

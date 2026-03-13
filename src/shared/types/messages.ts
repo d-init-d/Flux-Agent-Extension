@@ -1,79 +1,33 @@
 import type { Action, ElementSelector } from './actions';
 import type { ActionResult, PageContext } from './browser';
+import type { AIProviderType } from './ai';
 import type {
   RecordedSessionAction,
   SessionConfig,
   Session,
   SessionRecordingExportFormat,
 } from './session';
+import type {
+  ExtensionSettings,
+  OnboardingState,
+  ProviderConfig,
+  ProviderCredentialRecord,
+  VaultState,
+} from './storage';
 import type { SerializedFileUpload } from './uploads';
 import type { SavedWorkflow, SavedWorkflowSource } from './workflow';
 import type { ContextBuilderOptions } from '../../core/session/interfaces';
+import { EXTENSION_MESSAGE_CHANNELS, EXTENSION_MESSAGE_TYPES } from '@shared/config';
 
 /**
  * Message channels
  */
-export type MessageChannel = 'popup' | 'sidePanel' | 'contentScript' | 'offscreen';
+export type MessageChannel = (typeof EXTENSION_MESSAGE_CHANNELS)[number];
 
 /**
  * All message types in the extension
  */
-export type ExtensionMessageType =
-  // Session management
-  | 'SESSION_CREATE'
-  | 'SESSION_START'
-  | 'SESSION_PAUSE'
-  | 'SESSION_RESUME'
-  | 'SESSION_ABORT'
-  | 'SESSION_SEND_MESSAGE'
-  | 'SESSION_GET_STATE'
-  | 'SESSION_LIST'
-  | 'SESSION_RECORDING_START'
-  | 'SESSION_RECORDING_PAUSE'
-  | 'SESSION_RECORDING_RESUME'
-  | 'SESSION_RECORDING_STOP'
-  | 'SESSION_RECORDING_EXPORT'
-  | 'SESSION_PLAYBACK_START'
-  | 'SESSION_PLAYBACK_PAUSE'
-  | 'SESSION_PLAYBACK_RESUME'
-  | 'SESSION_PLAYBACK_STOP'
-  | 'SESSION_PLAYBACK_SET_SPEED'
-
-  // Saved workflows
-  | 'WORKFLOW_LIST'
-  | 'WORKFLOW_CREATE'
-  | 'WORKFLOW_UPDATE'
-  | 'WORKFLOW_DELETE'
-  | 'WORKFLOW_RUN'
-
-  // Action execution
-  | 'ACTION_EXECUTE'
-  | 'ACTION_EXECUTE_BATCH'
-  | 'ACTION_ABORT'
-  | 'ACTION_UNDO'
-
-  // Tab management
-  | 'TAB_ATTACH'
-  | 'TAB_DETACH'
-  | 'TAB_GET_STATE'
-  | 'TAB_CAPTURE'
-
-  // Settings
-  | 'SETTINGS_GET'
-  | 'SETTINGS_UPDATE'
-  | 'PROVIDER_SET'
-  | 'API_KEY_SET'
-  | 'API_KEY_VALIDATE'
-
-  // Context
-  | 'CONTEXT_GET'
-  | 'CONTEXT_UPDATE'
-
-  // Events (broadcasts)
-  | 'EVENT_SESSION_UPDATE'
-  | 'EVENT_ACTION_PROGRESS'
-  | 'EVENT_AI_STREAM'
-  | 'EVENT_ERROR';
+export type ExtensionMessageType = (typeof EXTENSION_MESSAGE_TYPES)[number];
 
 /**
  * Base message structure
@@ -134,6 +88,8 @@ export interface ActionLogEventEntry {
   totalSteps: number;
   selector?: ElementSelector;
   errorCode?: string;
+  riskLevel?: 'standard' | 'high';
+  riskReason?: string;
 }
 
 export interface ActionProgressEventPayload {
@@ -244,6 +200,67 @@ export interface ActionExecuteResponse {
   result: ActionResult;
 }
 
+export interface SettingsGetResponse {
+  settings: ExtensionSettings;
+  providers: Partial<Record<AIProviderType, Partial<ProviderConfig>>>;
+  activeProvider: AIProviderType;
+  onboarding: OnboardingState;
+  vault: VaultState;
+}
+
+export interface SettingsUpdateRequest {
+  settings: Partial<ExtensionSettings>;
+}
+
+export interface ProviderSetRequest {
+  provider: AIProviderType;
+  config: ProviderConfig;
+  makeDefault?: boolean;
+}
+
+export interface ProviderSetResponse {
+  activeProvider: AIProviderType;
+  providerConfig: ProviderConfig;
+}
+
+export interface VaultPassphraseRequest {
+  passphrase: string;
+}
+
+export interface VaultStatusResponse {
+  vault: VaultState;
+}
+
+export interface ApiKeySetRequest {
+  provider: AIProviderType;
+  apiKey: string;
+  authKind?: ProviderCredentialRecord['authKind'];
+  validate?: boolean;
+  maskedValue?: string;
+}
+
+export interface ApiKeyDeleteRequest {
+  provider: AIProviderType;
+}
+
+export interface ApiKeySetResponse {
+  record: ProviderCredentialRecord;
+  vault: VaultState;
+}
+
+export interface ApiKeyValidateRequest {
+  provider: AIProviderType;
+  apiKey?: string;
+  authKind?: ProviderCredentialRecord['authKind'];
+  config?: ProviderConfig;
+}
+
+export interface ApiKeyValidateResponse {
+  valid: boolean;
+  record?: ProviderCredentialRecord;
+  vault: VaultState;
+}
+
 export interface ContextGetRequest {
   tabId?: number;
   options?: ContextBuilderOptions;
@@ -299,10 +316,15 @@ export interface RequestPayloadMap {
   TAB_GET_STATE: { tabId?: number };
   TAB_CAPTURE: { tabId?: number };
   SETTINGS_GET: void;
-  SETTINGS_UPDATE: { settings: Record<string, unknown> };
-  PROVIDER_SET: { provider: string; config: Record<string, unknown> };
-  API_KEY_SET: { provider: string; apiKey: string };
-  API_KEY_VALIDATE: { provider: string; apiKey: string };
+  SETTINGS_UPDATE: SettingsUpdateRequest;
+  PROVIDER_SET: ProviderSetRequest;
+  API_KEY_SET: ApiKeySetRequest;
+  API_KEY_DELETE: ApiKeyDeleteRequest;
+  API_KEY_VALIDATE: ApiKeyValidateRequest;
+  VAULT_INIT: VaultPassphraseRequest;
+  VAULT_UNLOCK: VaultPassphraseRequest;
+  VAULT_LOCK: void;
+  VAULT_STATUS_GET: void;
   CONTEXT_GET: ContextGetRequest;
   CONTEXT_UPDATE: { tabId: number };
   EVENT_SESSION_UPDATE: SessionUpdateEventPayload;
@@ -346,11 +368,16 @@ export interface ResponsePayloadMap {
   TAB_DETACH: void;
   TAB_GET_STATE: { state: Record<string, unknown> | null };
   TAB_CAPTURE: { screenshot: string };
-  SETTINGS_GET: { settings: Record<string, unknown> };
+  SETTINGS_GET: SettingsGetResponse;
   SETTINGS_UPDATE: void;
-  PROVIDER_SET: void;
-  API_KEY_SET: void;
-  API_KEY_VALIDATE: { valid: boolean };
+  PROVIDER_SET: ProviderSetResponse;
+  API_KEY_SET: ApiKeySetResponse;
+  API_KEY_DELETE: VaultStatusResponse;
+  API_KEY_VALIDATE: ApiKeyValidateResponse;
+  VAULT_INIT: VaultStatusResponse;
+  VAULT_UNLOCK: VaultStatusResponse;
+  VAULT_LOCK: VaultStatusResponse;
+  VAULT_STATUS_GET: VaultStatusResponse;
   CONTEXT_GET: ContextGetResponse;
   CONTEXT_UPDATE: void;
   EVENT_SESSION_UPDATE: void;

@@ -2,7 +2,6 @@ import type {
   AIMessage,
   AIModelConfig,
   AIProviderType,
-  AIRequestOptions,
   AIStreamChunk,
 } from '@shared/types';
 import { ErrorCode, ExtensionError } from '@shared/errors';

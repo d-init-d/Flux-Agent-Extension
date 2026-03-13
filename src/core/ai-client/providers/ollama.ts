@@ -17,7 +17,6 @@ import type {
   AIRequestOptions,
   AIMessageContent,
 } from '@shared/types';
-import type { SSEEvent } from '../types';
 import { BaseProvider } from '../base';
 import { ExtensionError } from '@shared/errors';
 import { ErrorCode } from '@shared/errors';

@@ -8,7 +8,6 @@
 
 import { ServiceWorkerBridge } from '../service-worker-bridge';
 import { ErrorCode } from '@shared/errors';
-import { ExtensionError } from '@shared/errors';
 
 // ============================================================================
 // Helpers

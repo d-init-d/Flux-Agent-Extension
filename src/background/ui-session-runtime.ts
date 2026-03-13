@@ -10,8 +10,10 @@ import type { ParserConfig } from '@core/command-parser';
 import { ActionOrchestrator } from '@core/orchestrator';
 import { DebuggerAdapter, type PrintToPDFParams } from '@core/browser-controller/debugger-adapter';
 import { TabManager } from '@core/browser-controller/tab-manager';
+import { DEFAULT_PROVIDER_MODELS, PROVIDER_LOOKUP, createDefaultProviderConfigs } from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
+import { createDefaultOnboardingState, normalizeOnboardingState } from '@shared/storage/onboarding';
 import type {
   Action,
   ActionLogEventEntry,
@@ -30,6 +32,7 @@ import type {
   ExtensionResponse,
   ExtensionSettings,
   FileUploadMetadata,
+  OnboardingState,
   FrameContextSummary,
   GetPageContextPayload,
   NavigateAction,
@@ -54,6 +57,8 @@ import type {
   SetRecordingStatePayload,
   TabState,
   FillAction,
+  ProviderCredentialRecord,
+  VaultState,
 } from '@shared/types';
 import { generateId, Logger } from '@shared/utils';
 import type { ProviderConfig } from '@shared/types';
@@ -65,28 +70,11 @@ import { DeviceEmulationManager, type IDeviceEmulationManager } from './device-e
 import { GeolocationMockManager, type IGeolocationMockManager } from './geolocation-mock-manager';
 import { FileUploadManager, type IFileUploadManager } from './file-upload-manager';
 import { buildSessionRecordingExportArtifact } from './session-recording-export';
-
-const DEFAULT_PROVIDER_MODELS: Record<SessionConfig['provider'], string> = {
-  claude: 'claude-3-5-sonnet-20241022',
-  openai: 'gpt-4o-mini',
-  gemini: 'gemini-2.0-flash',
-  ollama: 'llama3.2',
-  openrouter: 'openai/gpt-4o-mini',
-  groq: 'llama-3.3-70b-versatile',
-  deepseek: 'deepseek-chat',
-  xai: 'grok-2',
-  together: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-  fireworks: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
-  deepinfra: 'meta-llama/Llama-3.3-70B-Instruct',
-  cerebras: 'llama3.3-70b',
-  mistral: 'mistral-large-latest',
-  perplexity: 'sonar-pro',
-  copilot: 'gpt-4o',
-  custom: 'custom-model',
-};
+import { CredentialVault } from './credential-vault';
 
 const STREAM_CHUNK_INTERVAL_MS = 20;
 const PLAYBACK_SPEEDS: readonly SessionPlaybackSpeed[] = [0.5, 1, 2];
+const EVALUATE_RESULT_MAX_CHARS = 16_000;
 
 const DEFAULT_RUNTIME_SETTINGS: ExtensionSettings = {
   language: 'auto',
@@ -109,104 +97,23 @@ const DEFAULT_RUNTIME_SETTINGS: ExtensionSettings = {
   logNetworkRequests: false,
 };
 
-const DEFAULT_PROVIDER_CONFIG: Record<SessionConfig['provider'], ProviderConfig> = {
-  claude: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.claude,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  openai: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.openai,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  gemini: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.gemini,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  ollama: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.ollama,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  openrouter: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.openrouter,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  groq: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.groq,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  deepseek: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.deepseek,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  xai: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.xai,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  together: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.together,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  fireworks: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.fireworks,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  deepinfra: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.deepinfra,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  cerebras: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.cerebras,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  mistral: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.mistral,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  perplexity: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.perplexity,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  copilot: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.copilot,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-  custom: {
-    enabled: true,
-    model: DEFAULT_PROVIDER_MODELS.custom,
-    maxTokens: 4096,
-    temperature: 0.2,
-  },
-};
+const DEFAULT_PROVIDER_CONFIG: Record<SessionConfig['provider'], ProviderConfig> =
+  createDefaultProviderConfigs();
+
+function isEvaluateEnabled(settings: ExtensionSettings): boolean {
+  return settings.debugMode && settings.allowCustomScripts;
+}
+
+function getActionRiskMetadata(action: Action): { riskLevel: 'standard' | 'high'; riskReason?: string } {
+  if (action.type === 'evaluate') {
+    return {
+      riskLevel: 'high',
+      riskReason: 'Runs arbitrary page script through the debugger runtime.',
+    };
+  }
+
+  return { riskLevel: 'standard' };
+}
 
 type RuntimeHandlerResponse<T extends keyof ResponsePayloadMap> = Promise<
   ExtensionResponse<ResponsePayloadMap[T]>
@@ -229,6 +136,9 @@ interface UISessionRuntimeOptions {
 interface RuntimeState {
   settings: ExtensionSettings;
   providers: Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>;
+  activeProvider: SessionConfig['provider'];
+  onboarding: OnboardingState;
+  vault: VaultState;
 }
 
 interface RegisteredFrame extends BridgeFrameContext {
@@ -252,6 +162,8 @@ export class UISessionRuntime {
   private readonly aiClientManager: AbortableAIClientManager;
   private readonly parserFactory?: (config: Partial<ParserConfig>) => CommandParser;
   private readonly tabManager: TabManager;
+  private readonly debuggerAdapter: DebuggerAdapter;
+  private readonly credentialVault = new CredentialVault();
   private readonly orchestrator: ActionOrchestrator;
   private readonly networkInterceptionManager: INetworkInterceptionManager;
   private readonly deviceEmulationManager: IDeviceEmulationManager;
@@ -280,6 +192,7 @@ export class UISessionRuntime {
     this.aiClientManager = options.aiClientManager ?? this.createDefaultAIClientManager();
     this.parserFactory = options.parserFactory;
     this.tabManager = options.tabManager ?? new TabManager();
+    this.debuggerAdapter = new DebuggerAdapter(this.tabManager);
     this.networkInterceptionManager =
       options.networkInterceptionManager ??
       new NetworkInterceptionManager({
@@ -486,6 +399,34 @@ export class UISessionRuntime {
       case 'SESSION_SEND_MESSAGE':
         return this.handleSessionSendMessage(
           message.payload as RequestPayloadMap['SESSION_SEND_MESSAGE'],
+        );
+      case 'SETTINGS_GET':
+        return this.handleSettingsGet();
+      case 'SETTINGS_UPDATE':
+        return this.handleSettingsUpdate(message.payload as RequestPayloadMap['SETTINGS_UPDATE']);
+      case 'PROVIDER_SET':
+        return this.handleProviderSet(message.payload as RequestPayloadMap['PROVIDER_SET']);
+      case 'API_KEY_SET':
+        return this.handleApiKeySet(message.payload as RequestPayloadMap['API_KEY_SET']);
+      case 'API_KEY_DELETE':
+        return this.handleApiKeyDelete(message.payload as RequestPayloadMap['API_KEY_DELETE']);
+      case 'API_KEY_VALIDATE':
+        return this.handleApiKeyValidate(message.payload as RequestPayloadMap['API_KEY_VALIDATE']);
+      case 'VAULT_INIT':
+        return this.handleVaultInit(message.payload as RequestPayloadMap['VAULT_INIT']);
+      case 'VAULT_UNLOCK':
+        return this.handleVaultUnlock(message.payload as RequestPayloadMap['VAULT_UNLOCK']);
+      case 'VAULT_LOCK':
+        return this.handleVaultLock();
+      case 'VAULT_STATUS_GET':
+        return this.handleVaultStatusGet();
+      case 'CONTEXT_GET':
+        return this.handleContextGet(message.payload as RequestPayloadMap['CONTEXT_GET']);
+      case 'ACTION_EXECUTE':
+        return this.handleActionExecute(message.payload as RequestPayloadMap['ACTION_EXECUTE']);
+      case 'ACTION_EXECUTE_BATCH':
+        return this.handleActionExecuteBatch(
+          message.payload as RequestPayloadMap['ACTION_EXECUTE_BATCH'],
         );
       case 'ACTION_ABORT':
         return this.handleActionAbort(message.payload as RequestPayloadMap['ACTION_ABORT']);
@@ -978,6 +919,231 @@ export class UISessionRuntime {
     return { success: true };
   }
 
+
+  private async handleSettingsGet(): RuntimeHandlerResponse<'SETTINGS_GET'> {
+    const runtimeState = await this.loadRuntimeState();
+
+    return {
+      success: true,
+      data: {
+        settings: runtimeState.settings,
+        providers: runtimeState.providers,
+        activeProvider: runtimeState.activeProvider,
+        onboarding: runtimeState.onboarding,
+        vault: runtimeState.vault,
+      },
+    };
+  }
+
+  private async handleSettingsUpdate(
+    payload: RequestPayloadMap['SETTINGS_UPDATE'],
+  ): RuntimeHandlerResponse<'SETTINGS_UPDATE'> {
+    const runtimeState = await this.loadRuntimeState();
+    const nextSettings: ExtensionSettings = {
+      ...runtimeState.settings,
+      ...payload.settings,
+    };
+
+    await chrome.storage.local.set({ settings: nextSettings });
+    return { success: true };
+  }
+
+  private async handleProviderSet(
+    payload: RequestPayloadMap['PROVIDER_SET'],
+  ): RuntimeHandlerResponse<'PROVIDER_SET'> {
+    const runtimeState = await this.loadRuntimeState();
+    const currentConfig = this.resolveProviderConfig(payload.provider, runtimeState);
+    const configChanged = !this.providerConfigsEqual(currentConfig, payload.config);
+    const nextProviders = {
+      ...runtimeState.providers,
+      [payload.provider]: payload.config,
+    };
+    const providerDefinition = PROVIDER_LOOKUP[payload.provider];
+    const nextSettings = payload.makeDefault
+      ? { ...runtimeState.settings, defaultProvider: payload.provider }
+      : runtimeState.settings;
+    const shouldResetOnboarding =
+      configChanged || runtimeState.onboarding.configuredProvider !== payload.provider;
+    const nextOnboarding: OnboardingState = shouldResetOnboarding
+      ? {
+          ...runtimeState.onboarding,
+          completed: false,
+          completedAt: undefined,
+          lastStep: Math.min(runtimeState.onboarding.lastStep, 1),
+          configuredProvider: payload.provider,
+          validatedProvider:
+            configChanged && runtimeState.onboarding.validatedProvider === payload.provider
+              ? undefined
+              : runtimeState.onboarding.validatedProvider,
+          providerReady: providerDefinition.requiresCredential
+            ? !configChanged && runtimeState.onboarding.validatedProvider === payload.provider
+            : true,
+        }
+      : runtimeState.onboarding;
+
+    if (configChanged) {
+      await this.credentialVault.markCredentialStale(payload.provider);
+    }
+    await chrome.storage.local.set({
+      providers: nextProviders,
+      activeProvider: payload.provider,
+      settings: nextSettings,
+      onboarding: nextOnboarding,
+    });
+
+    return {
+      success: true,
+      data: {
+        activeProvider: payload.provider,
+        providerConfig: payload.config,
+      },
+    };
+  }
+
+  private async handleVaultInit(
+    payload: RequestPayloadMap['VAULT_INIT'],
+  ): RuntimeHandlerResponse<'VAULT_INIT'> {
+    const vault = await this.credentialVault.init(payload.passphrase);
+    return { success: true, data: { vault } };
+  }
+
+  private async handleVaultUnlock(
+    payload: RequestPayloadMap['VAULT_UNLOCK'],
+  ): RuntimeHandlerResponse<'VAULT_UNLOCK'> {
+    const vault = await this.credentialVault.unlock(payload.passphrase);
+    return { success: true, data: { vault } };
+  }
+
+  private async handleVaultLock(): RuntimeHandlerResponse<'VAULT_LOCK'> {
+    const vault = await this.credentialVault.lock();
+    return { success: true, data: { vault } };
+  }
+
+  private async handleVaultStatusGet(): RuntimeHandlerResponse<'VAULT_STATUS_GET'> {
+    const vault = await this.credentialVault.getState();
+    return { success: true, data: { vault } };
+  }
+
+  private async handleApiKeySet(
+    payload: RequestPayloadMap['API_KEY_SET'],
+  ): RuntimeHandlerResponse<'API_KEY_SET'> {
+    const authKind = payload.authKind ?? (payload.provider === 'copilot' ? 'oauth-token' : 'api-key');
+    let record = await this.credentialVault.setCredential(
+      payload.provider,
+      payload.apiKey,
+      authKind,
+      payload.maskedValue,
+    );
+
+    if (payload.validate) {
+      const runtimeState = await this.loadRuntimeState();
+      const providerConfig = this.resolveProviderConfig(payload.provider, runtimeState);
+      const valid = await this.credentialVault.validateCredential(
+        payload.provider,
+        providerConfig,
+        payload.apiKey,
+      );
+
+      if (!valid) {
+        throw new ExtensionError(
+          ErrorCode.AI_INVALID_KEY,
+          `${payload.provider} credential could not be validated`,
+          true,
+        );
+      }
+
+      record = (await this.credentialVault.markValidated(payload.provider)) ?? record;
+    }
+
+    return {
+      success: true,
+      data: {
+        record,
+        vault: await this.credentialVault.getState(),
+      },
+    };
+  }
+
+  private async handleApiKeyDelete(
+    payload: RequestPayloadMap['API_KEY_DELETE'],
+  ): RuntimeHandlerResponse<'API_KEY_DELETE'> {
+    const vault = await this.credentialVault.deleteCredential(payload.provider);
+    return { success: true, data: { vault } };
+  }
+
+  private async handleApiKeyValidate(
+    payload: RequestPayloadMap['API_KEY_VALIDATE'],
+  ): RuntimeHandlerResponse<'API_KEY_VALIDATE'> {
+    const runtimeState = await this.loadRuntimeState();
+    const providerConfig = payload.config
+      ? {
+          ...this.resolveProviderConfig(payload.provider, runtimeState),
+          ...payload.config,
+        }
+      : this.resolveProviderConfig(payload.provider, runtimeState);
+    const valid = await this.credentialVault.validateCredential(
+      payload.provider,
+      providerConfig,
+      payload.apiKey,
+    );
+    let record: ProviderCredentialRecord | undefined = runtimeState.vault.credentials[payload.provider];
+
+    if (valid && !payload.apiKey) {
+      record = (await this.credentialVault.markValidated(payload.provider)) ?? record;
+    }
+
+    return {
+      success: true,
+      data: {
+        valid,
+        record,
+        vault: await this.credentialVault.getState(),
+      },
+    };
+  }
+
+  private async handleContextGet(
+    payload: RequestPayloadMap['CONTEXT_GET'],
+  ): RuntimeHandlerResponse<'CONTEXT_GET'> {
+    const tabId = payload.tabId ?? (await this.getActiveTabId());
+    const target = this.resolveFrameTarget(tabId);
+    await this.bridge.ensureContentScript(tabId, target);
+    const response = await this.bridge.send<GetPageContextPayload, PageContextPayload>(
+      tabId,
+      'GET_PAGE_CONTEXT',
+      { includeChildFrames: true },
+      target,
+    );
+    const context = this.attachChildFrameSummaries(tabId, response.context);
+    this.cacheFrameContext(tabId, context);
+
+    return {
+      success: true,
+      data: { context },
+    };
+  }
+
+  private async handleActionExecute(
+    payload: RequestPayloadMap['ACTION_EXECUTE'],
+  ): RuntimeHandlerResponse<'ACTION_EXECUTE'> {
+    const result = await this.executeAutomationAction(payload.action, payload.sessionId);
+    return { success: true, data: { result } };
+  }
+
+  private async handleActionExecuteBatch(
+    payload: RequestPayloadMap['ACTION_EXECUTE_BATCH'],
+  ): RuntimeHandlerResponse<'ACTION_EXECUTE_BATCH'> {
+    const results: ActionResult[] = [];
+
+    for (const action of payload.actions) {
+      results.push(await this.executeAutomationAction(action, payload.sessionId));
+    }
+
+    return {
+      success: true,
+      data: { results },
+    };
+  }
   private async handleSessionSendMessage(
     payload: RequestPayloadMap['SESSION_SEND_MESSAGE'],
   ): RuntimeHandlerResponse<'SESSION_SEND_MESSAGE'> {
@@ -1619,20 +1785,34 @@ export class UISessionRuntime {
   }
 
   private async loadRuntimeState(): Promise<RuntimeState> {
-    const stored = await chrome.storage.local.get({
-      settings: DEFAULT_RUNTIME_SETTINGS,
-      providers: {},
-    });
+    const [stored, vault] = await Promise.all([
+      chrome.storage.local.get({
+        settings: DEFAULT_RUNTIME_SETTINGS,
+        providers: {},
+        activeProvider: DEFAULT_RUNTIME_SETTINGS.defaultProvider,
+        onboarding: createDefaultOnboardingState(),
+      }),
+      this.credentialVault.getState(),
+    ]);
+
+    const settings = {
+      ...DEFAULT_RUNTIME_SETTINGS,
+      ...(stored.settings as Partial<ExtensionSettings> | undefined),
+    };
+    const activeProvider =
+      typeof stored.activeProvider === 'string'
+        ? (stored.activeProvider as SessionConfig['provider'])
+        : settings.defaultProvider;
 
     return {
-      settings: {
-        ...DEFAULT_RUNTIME_SETTINGS,
-        ...(stored.settings as Partial<ExtensionSettings> | undefined),
-      },
+      settings,
       providers:
         (stored.providers as
           | Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>
           | undefined) ?? {},
+      activeProvider,
+      onboarding: normalizeOnboardingState(stored.onboarding),
+      vault,
     };
   }
 
@@ -1640,14 +1820,14 @@ export class UISessionRuntime {
     if (this.parserFactory) {
       return this.parserFactory({
         strictMode: true,
-        allowEvaluate: settings.allowCustomScripts,
+        allowEvaluate: isEvaluateEnabled(settings),
         allowedDomains: settings.allowedDomains,
       });
     }
 
     return new CommandParser({
       strictMode: true,
-      allowEvaluate: settings.allowCustomScripts,
+      allowEvaluate: isEvaluateEnabled(settings),
       allowedDomains: settings.allowedDomains,
     });
   }
@@ -1904,6 +2084,8 @@ export class UISessionRuntime {
       await this.highlightTarget(session.targetTabId, selector);
     }
 
+    const riskMetadata = getActionRiskMetadata(action);
+
     return {
       id: `action-${generateId(10)}`,
       actionId: action.id,
@@ -1915,6 +2097,7 @@ export class UISessionRuntime {
       currentStep,
       totalSteps,
       selector,
+      ...riskMetadata,
     };
   }
 
@@ -1992,9 +2175,8 @@ export class UISessionRuntime {
 
     const frames = Array.from(this.getFrameBucket(tabId, false)?.values() ?? []);
     if (frameTarget.mode === 'url' && frameTarget.urlPattern) {
-      const match = frames.find((frame) =>
-        this.matchesUrlPattern(frame.url, frameTarget.urlPattern!),
-      );
+      const urlPattern = frameTarget.urlPattern;
+      const match = frames.find((frame) => this.matchesUrlPattern(frame.url, urlPattern));
       return match ? { frameId: match.frameId, documentId: match.documentId } : { frameId: 0 };
     }
 
@@ -2432,6 +2614,12 @@ export class UISessionRuntime {
           return await this.executeNetworkInterceptionAction(action, sessionId, tabId);
         case 'uploadFile':
           return await this.executeUploadFileAction(action, sessionId, tabId);
+        case 'press':
+          return await this.executePressAction(action, sessionId, tabId);
+        case 'hotkey':
+          return await this.executeHotkeyAction(action, tabId);
+        case 'evaluate':
+          return await this.executeEvaluateAction(action, sessionId, tabId);
         case 'savePdf':
           return await this.executeSavePdfAction(action, tabId);
         default:
@@ -2449,26 +2637,19 @@ export class UISessionRuntime {
     sessionId: string | undefined,
     tabId: number | null,
   ): Promise<ActionResult> {
-    if (!sessionId || !tabId) {
-      throw new ExtensionError(
-        ErrorCode.TAB_NOT_FOUND,
-        'No target tab is available for DOM execution',
-        true,
-      );
-    }
-
+    const resolvedTabId = tabId ?? (await this.getActiveTabId());
     const target = this.resolveFrameTarget(
-      tabId,
+      resolvedTabId,
       'selector' in action ? action.selector : undefined,
     );
-    await this.bridge.ensureContentScript(tabId, target);
+    await this.bridge.ensureContentScript(resolvedTabId, target);
     const payload = await this.bridge.send<ExecuteActionPayload, ActionResultPayload>(
-      tabId,
+      resolvedTabId,
       'EXECUTE_ACTION',
       {
         action,
         context: {
-          variables: this.sessionManager.getSession(sessionId)?.variables ?? {},
+          variables: sessionId ? this.sessionManager.getSession(sessionId)?.variables ?? {} : {},
         },
       },
       target,
@@ -2661,6 +2842,289 @@ export class UISessionRuntime {
     }
   }
 
+  private async executePressAction(
+    action: Extract<Action, { type: 'press' }>,
+    sessionId: string | undefined,
+    tabId: number | null,
+  ): Promise<ActionResult> {
+    const resolvedTabId = tabId ?? (await this.getActiveTabId());
+    const startedAt = Date.now();
+
+    if (action.selector) {
+      const focusResult = await this.executeDomAction(
+        {
+          id: `${action.id}-focus`,
+          type: 'focus',
+          selector: action.selector,
+        },
+        sessionId,
+        resolvedTabId,
+      );
+
+      if (!focusResult.success) {
+        throw new ExtensionError(
+          ErrorCode.ELEMENT_NOT_INTERACTIVE,
+          focusResult.error?.message ?? 'Unable to focus the target before key input',
+          true,
+        );
+      }
+    }
+
+    try {
+      await this.dispatchKeyPressSequence(resolvedTabId, [action.key]);
+      return {
+        actionId: action.id,
+        success: true,
+        duration: Date.now() - startedAt,
+        data: { key: action.key },
+      };
+    } finally {
+      await this.debuggerAdapter.detach(resolvedTabId).catch(() => {});
+    }
+  }
+
+  private async executeHotkeyAction(
+    action: Extract<Action, { type: 'hotkey' }>,
+    tabId: number | null,
+  ): Promise<ActionResult> {
+    const resolvedTabId = tabId ?? (await this.getActiveTabId());
+    const startedAt = Date.now();
+
+    try {
+      await this.dispatchKeyPressSequence(resolvedTabId, action.keys);
+      return {
+        actionId: action.id,
+        success: true,
+        duration: Date.now() - startedAt,
+        data: { keys: action.keys },
+      };
+    } finally {
+      await this.debuggerAdapter.detach(resolvedTabId).catch(() => {});
+    }
+  }
+
+  private async executeEvaluateAction(
+    action: Extract<Action, { type: 'evaluate' }>,
+    sessionId: string | undefined,
+    tabId: number | null,
+  ): Promise<ActionResult> {
+    const runtimeState = await this.loadRuntimeState();
+    if (!isEvaluateEnabled(runtimeState.settings)) {
+      throw new ExtensionError(
+        ErrorCode.SCRIPT_BLOCKED,
+        'Advanced mode and custom scripts must both be enabled before running evaluate.',
+        true,
+      );
+    }
+
+    const resolvedTabId = tabId ?? (await this.getActiveTabId());
+    const startedAt = Date.now();
+    const expression = this.buildEvaluateExpression(action.script, action.args ?? []);
+    const evaluation = await this.debuggerAdapter.evaluate(resolvedTabId, expression, {
+      awaitPromise: true,
+      returnByValue: true,
+      userGesture: true,
+      silent: true,
+    });
+
+    if (evaluation.exceptionDetails) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_FAILED,
+        'Evaluate action failed to complete.',
+        true,
+        evaluation.exceptionDetails,
+      );
+    }
+
+    const data = this.normalizeEvaluateResult(this.extractEvaluateValue(evaluation.result));
+    this.logger.warn('High-risk evaluate action executed', {
+      sessionId: sessionId ?? null,
+      actionId: action.id,
+    });
+
+    return {
+      actionId: action.id,
+      success: true,
+      duration: Date.now() - startedAt,
+      data,
+    };
+  }
+
+  private async dispatchKeyPressSequence(tabId: number, keys: string[]): Promise<void> {
+    if (keys.length === 0) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Keyboard action requires at least one key', true);
+    }
+
+    const normalizedKeys = keys.map((key) => this.normalizeKeyboardKey(key));
+    const modifiers = normalizedKeys.filter((key) => key.modifierBit !== undefined);
+    const primary = normalizedKeys[normalizedKeys.length - 1];
+    let modifierMask = 0;
+
+    for (const modifier of modifiers.slice(0, Math.max(0, normalizedKeys.length - 1))) {
+      modifierMask |= modifier.modifierBit ?? 0;
+      await this.debuggerAdapter.dispatchKeyEvent(tabId, {
+        type: 'rawKeyDown',
+        key: modifier.key,
+        code: modifier.code,
+        windowsVirtualKeyCode: modifier.windowsVirtualKeyCode,
+        nativeVirtualKeyCode: modifier.windowsVirtualKeyCode,
+        modifiers: modifierMask,
+      });
+    }
+
+    await this.debuggerAdapter.dispatchKeyEvent(tabId, {
+      type: primary.text ? 'keyDown' : 'rawKeyDown',
+      key: primary.key,
+      code: primary.code,
+      text: primary.text,
+      unmodifiedText: primary.text,
+      windowsVirtualKeyCode: primary.windowsVirtualKeyCode,
+      nativeVirtualKeyCode: primary.windowsVirtualKeyCode,
+      modifiers: modifierMask,
+    });
+
+    if (primary.text) {
+      await this.debuggerAdapter.dispatchKeyEvent(tabId, {
+        type: 'char',
+        key: primary.key,
+        code: primary.code,
+        text: primary.text,
+        unmodifiedText: primary.text,
+        windowsVirtualKeyCode: primary.windowsVirtualKeyCode,
+        nativeVirtualKeyCode: primary.windowsVirtualKeyCode,
+        modifiers: modifierMask,
+      });
+    }
+
+    await this.debuggerAdapter.dispatchKeyEvent(tabId, {
+      type: 'keyUp',
+      key: primary.key,
+      code: primary.code,
+      windowsVirtualKeyCode: primary.windowsVirtualKeyCode,
+      nativeVirtualKeyCode: primary.windowsVirtualKeyCode,
+      modifiers: modifierMask,
+    });
+
+    for (const modifier of modifiers.slice(0, Math.max(0, normalizedKeys.length - 1)).reverse()) {
+      await this.debuggerAdapter.dispatchKeyEvent(tabId, {
+        type: 'keyUp',
+        key: modifier.key,
+        code: modifier.code,
+        windowsVirtualKeyCode: modifier.windowsVirtualKeyCode,
+        nativeVirtualKeyCode: modifier.windowsVirtualKeyCode,
+        modifiers: modifierMask,
+      });
+      modifierMask &= ~(modifier.modifierBit ?? 0);
+    }
+  }
+
+  private normalizeKeyboardKey(key: string): {
+    key: string;
+    code: string;
+    text?: string;
+    windowsVirtualKeyCode: number;
+    modifierBit?: number;
+  } {
+    const normalized = key.trim();
+    const lower = normalized.toLowerCase();
+
+    switch (lower) {
+      case 'control':
+      case 'ctrl':
+        return { key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17, modifierBit: 2 };
+      case 'shift':
+        return { key: 'Shift', code: 'ShiftLeft', windowsVirtualKeyCode: 16, modifierBit: 8 };
+      case 'alt':
+      case 'option':
+        return { key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18, modifierBit: 1 };
+      case 'meta':
+      case 'cmd':
+      case 'command':
+        return { key: 'Meta', code: 'MetaLeft', windowsVirtualKeyCode: 91, modifierBit: 4 };
+      case 'enter':
+        return { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 };
+      case 'tab':
+        return { key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 };
+      case 'escape':
+      case 'esc':
+        return { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 };
+      case 'space':
+        return { key: ' ', code: 'Space', text: ' ', windowsVirtualKeyCode: 32 };
+      case 'backspace':
+        return { key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 };
+      case 'delete':
+        return { key: 'Delete', code: 'Delete', windowsVirtualKeyCode: 46 };
+      default:
+        if (normalized.length === 1) {
+          const text = normalized;
+          return {
+            key: text,
+            code: `Key${text.toUpperCase()}`,
+            text,
+            windowsVirtualKeyCode: text.toUpperCase().charCodeAt(0),
+          };
+        }
+
+        return {
+          key: normalized,
+          code: normalized,
+          windowsVirtualKeyCode: normalized.charCodeAt(0),
+        };
+    }
+  }
+
+  private buildEvaluateExpression(script: string, args: unknown[]): string {
+    return `(() => {
+      const __fluxArgs = ${JSON.stringify(args)};
+      const __fluxUserScript = async (...args) => {
+${script}
+      };
+      return __fluxUserScript(...__fluxArgs);
+    })()`;
+  }
+
+  private extractEvaluateValue(result: Record<string, unknown>): unknown {
+    if ('value' in result) {
+      return result.value;
+    }
+
+    if ('unserializableValue' in result) {
+      return result.unserializableValue;
+    }
+
+    if ('description' in result) {
+      return result.description;
+    }
+
+    return null;
+  }
+
+  private normalizeEvaluateResult(value: unknown): unknown {
+    const safeValue = JSON.parse(
+      JSON.stringify(value ?? null, (_key, currentValue: unknown) => {
+        if (typeof currentValue === 'bigint') {
+          return currentValue.toString();
+        }
+
+        if (currentValue instanceof Error) {
+          return { message: currentValue.message };
+        }
+
+        return currentValue;
+      }),
+    ) as unknown;
+    const serialized = JSON.stringify(safeValue);
+
+    if (serialized && serialized.length > EVALUATE_RESULT_MAX_CHARS) {
+      return {
+        truncated: true,
+        preview: serialized.slice(0, EVALUATE_RESULT_MAX_CHARS),
+        size: serialized.length,
+      };
+    }
+
+    return safeValue;
+  }
   private async executeNavigateAction(
     action: Extract<Action, { type: 'navigate' }>,
     tabId: number | null,
@@ -3193,6 +3657,51 @@ export class UISessionRuntime {
     };
   }
 
+  private providerConfigsEqual(left: ProviderConfig, right: ProviderConfig): boolean {
+    const normalizeHeaders = (headers: ProviderConfig['customHeaders']): string =>
+      JSON.stringify(
+        Object.entries(headers ?? {}).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+      );
+
+    return (
+      left.enabled === right.enabled &&
+      left.model === right.model &&
+      left.maxTokens === right.maxTokens &&
+      left.temperature === right.temperature &&
+      (left.customEndpoint ?? '') === (right.customEndpoint ?? '') &&
+      normalizeHeaders(left.customHeaders) === normalizeHeaders(right.customHeaders)
+    );
+  }
+
+  private async resolveProviderCredential(
+    provider: SessionConfig['provider'],
+    runtimeState: RuntimeState,
+  ): Promise<string | undefined> {
+    const providerDefinition = PROVIDER_LOOKUP[provider];
+    if (!providerDefinition.requiresCredential) {
+      return undefined;
+    }
+
+    if (runtimeState.vault.lockState !== 'unlocked') {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        `Vault is ${runtimeState.vault.lockState}. Unlock it before using ${providerDefinition.label}.`,
+        true,
+      );
+    }
+
+    const credential = await this.credentialVault.getCredential(provider);
+    if (!credential) {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        `No credential is stored for ${providerDefinition.label}.`,
+        true,
+      );
+    }
+
+    return credential;
+  }
+
   private applyDefaultRetries(action: Action, settings: ExtensionSettings): Action {
     if (action.retries !== undefined || !settings.autoRetryOnFailure) {
       return action;
@@ -3209,6 +3718,7 @@ export class UISessionRuntime {
       action,
       result,
       timestamp: Date.now(),
+      ...getActionRiskMetadata(action),
     });
 
     if (!result.success) {

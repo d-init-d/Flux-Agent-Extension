@@ -331,7 +331,7 @@ function createMockTabs() {
     sendMessage: vi.fn(
       (
         tabId: number,
-        message: unknown,
+        _message: unknown,
         _options?: chrome.tabs.MessageSendOptions,
       ): Promise<unknown> => {
         const tab = mockTabs.find((t) => t.id === tabId);
@@ -374,7 +374,7 @@ function createMockScripting() {
   return {
     executeScript: vi.fn(
       (
-        injection: chrome.scripting.ScriptInjection,
+        _injection: chrome.scripting.ScriptInjection,
       ): Promise<chrome.scripting.InjectionResult[]> => {
         return Promise.resolve([
           {
@@ -386,11 +386,11 @@ function createMockScripting() {
       },
     ),
 
-    insertCSS: vi.fn((injection: chrome.scripting.CSSInjection): Promise<void> => {
+    insertCSS: vi.fn((_injection: chrome.scripting.CSSInjection): Promise<void> => {
       return Promise.resolve();
     }),
 
-    removeCSS: vi.fn((injection: chrome.scripting.CSSInjection): Promise<void> => {
+    removeCSS: vi.fn((_injection: chrome.scripting.CSSInjection): Promise<void> => {
       return Promise.resolve();
     }),
   };
@@ -404,7 +404,7 @@ function createMockRuntime() {
   const onMessage =
     createMockEvent<
       (
-        message: unknown,
+        _message: unknown,
         sender: chrome.runtime.MessageSender,
         sendResponse: (response?: unknown) => void,
       ) => void
@@ -417,7 +417,7 @@ function createMockRuntime() {
   return {
     id: 'mock-extension-id-abc123',
 
-    sendMessage: vi.fn((message: unknown, _options?: unknown): Promise<unknown> => {
+    sendMessage: vi.fn((_message: unknown, _options?: unknown): Promise<unknown> => {
       return Promise.resolve(undefined);
     }),
 
@@ -482,21 +482,21 @@ function createMockCommands() {
 
 function createMockSidePanel() {
   return {
-    setOptions: vi.fn((options: chrome.sidePanel.SetPanelBehaviorOptions): Promise<void> => {
+    setOptions: vi.fn((_options: chrome.sidePanel.SetPanelBehaviorOptions): Promise<void> => {
       return Promise.resolve();
     }),
 
-    open: vi.fn((options?: { windowId?: number; tabId?: number }): Promise<void> => {
+    open: vi.fn((_options?: { windowId?: number; tabId?: number }): Promise<void> => {
       return Promise.resolve();
     }),
 
     getOptions: vi.fn(
-      (options?: chrome.sidePanel.GetPanelOptions): Promise<chrome.sidePanel.PanelOptions> => {
+      (_options?: chrome.sidePanel.GetPanelOptions): Promise<chrome.sidePanel.PanelOptions> => {
         return Promise.resolve({ enabled: true });
       },
     ),
 
-    setPanelBehavior: vi.fn((behavior: chrome.sidePanel.SetPanelBehaviorOptions): Promise<void> => {
+    setPanelBehavior: vi.fn((_behavior: chrome.sidePanel.SetPanelBehaviorOptions): Promise<void> => {
       return Promise.resolve();
     }),
   };
@@ -512,7 +512,7 @@ function createMockDebugger() {
   const onDetach = createMockEvent<(source: chrome.debugger.Debuggee, reason: string) => void>();
 
   return {
-    attach: vi.fn((target: chrome.debugger.Debuggee, requiredVersion: string): Promise<void> => {
+    attach: vi.fn((target: chrome.debugger.Debuggee, _requiredVersion: string): Promise<void> => {
       const key = JSON.stringify(target);
       if (debuggerTargets.has(key)) {
         return Promise.reject(new Error('Another debugger is already attached'));
@@ -531,8 +531,8 @@ function createMockDebugger() {
     sendCommand: vi.fn(
       (
         target: chrome.debugger.Debuggee,
-        method: string,
-        commandParams?: object,
+        _method: string,
+        _commandParams?: object,
       ): Promise<object> => {
         const key = JSON.stringify(target);
         if (!debuggerTargets.has(key)) {
@@ -710,17 +710,17 @@ function createMockNotifications() {
 
 function createMockAction() {
   return {
-    setIcon: vi.fn((details: chrome.action.SetIconDetails): Promise<void> => {
+    setIcon: vi.fn((_details: chrome.action.SetIconDetails): Promise<void> => {
       return Promise.resolve();
     }),
-    setTitle: vi.fn((details: chrome.action.SetTitleDetails): Promise<void> => {
+    setTitle: vi.fn((_details: chrome.action.SetTitleDetails): Promise<void> => {
       return Promise.resolve();
     }),
-    setBadgeText: vi.fn((details: chrome.action.SetBadgeTextDetails): Promise<void> => {
+    setBadgeText: vi.fn((_details: chrome.action.SetBadgeTextDetails): Promise<void> => {
       return Promise.resolve();
     }),
     setBadgeBackgroundColor: vi.fn(
-      (details: chrome.action.SetBadgeBackgroundColorDetails): Promise<void> => {
+      (_details: chrome.action.SetBadgeBackgroundColorDetails): Promise<void> => {
         return Promise.resolve();
       },
     ),
@@ -781,18 +781,18 @@ function createMockDownloads() {
   const onChanged = createMockEvent<(downloadDelta: chrome.downloads.DownloadDelta) => void>();
 
   return {
-    download: vi.fn((options: chrome.downloads.DownloadOptions): Promise<number> => {
+    download: vi.fn((_options: chrome.downloads.DownloadOptions): Promise<number> => {
       const id = nextDownloadId++;
       return Promise.resolve(id);
     }),
 
     search: vi.fn(
-      (query: chrome.downloads.DownloadQuery): Promise<chrome.downloads.DownloadItem[]> => {
+      (_query: chrome.downloads.DownloadQuery): Promise<chrome.downloads.DownloadItem[]> => {
         return Promise.resolve([]);
       },
     ),
 
-    cancel: vi.fn((downloadId: number): Promise<void> => {
+    cancel: vi.fn((_downloadId: number): Promise<void> => {
       return Promise.resolve();
     }),
 

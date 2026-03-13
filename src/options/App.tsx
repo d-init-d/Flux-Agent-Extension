@@ -4,26 +4,33 @@ import {
   ExternalLink,
   Github,
   KeyRound,
-  LaptopMinimal,
   Loader2,
   RotateCw,
   ServerCog,
   ShieldCheck,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
-import { createProvider } from '@core/ai-client/provider-loader';
+import {
+  createDefaultProviderConfigs as createRegistryDefaultProviderConfigs,
+  PROVIDER_LOOKUP,
+  PROVIDER_REGISTRY,
+} from '@shared/config';
+import type { ProviderDefinition } from '@shared/config';
 import { runDeviceFlow } from '@core/auth/github-device-flow';
+import { sendExtensionRequest } from '@shared/extension-client';
 import {
   createDefaultOnboardingState,
   normalizeOnboardingState,
   ONBOARDING_STORAGE_KEY,
 } from '@shared/storage/onboarding';
 import type {
-  AIModelConfig,
   AIProviderType,
   ExtensionSettings,
   OnboardingState,
   ProviderConfig,
+  SettingsGetResponse,
+  VaultState,
 } from '@shared/types';
 import {
   Badge,
@@ -43,19 +50,6 @@ import { OnboardingFlow } from './onboarding';
 
 type SaveState = 'idle' | 'success' | 'error';
 type ValidationState = 'idle' | 'success' | 'error';
-
-interface ProviderDefinition {
-  type: AIProviderType;
-  label: string;
-  tagline: string;
-  defaultModel: string;
-  requiresApiKey: boolean;
-  supportsEndpoint: boolean;
-  endpointLabel: string;
-  endpointPlaceholder: string;
-  accent: string;
-  authMethod?: 'api-key' | 'oauth-github';
-}
 
 interface ApiKeyMetadata {
   maskedValue: string;
@@ -81,193 +75,7 @@ interface PermissionDefinition {
 type ProviderConfigMap = Record<AIProviderType, ProviderConfig>;
 type ProviderMetadataMap = Partial<Record<AIProviderType, ApiKeyMetadata>>;
 
-const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
-  {
-    type: 'claude',
-    label: 'Claude',
-    tagline: 'Anthropic models for reasoning-heavy tasks.',
-    defaultModel: 'claude-3-5-sonnet-20241022',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-orange-500/20 via-amber-400/10 to-transparent',
-  },
-  {
-    type: 'openai',
-    label: 'OpenAI',
-    tagline: 'GPT models with optional compatible endpoint override.',
-    defaultModel: 'gpt-4o-mini',
-    requiresApiKey: true,
-    supportsEndpoint: true,
-    endpointLabel: 'Base URL override',
-    endpointPlaceholder: 'https://api.openai.com',
-    accent: 'from-emerald-500/20 via-cyan-400/10 to-transparent',
-  },
-  {
-    type: 'gemini',
-    label: 'Gemini',
-    tagline: 'Google Gemini models for long-context workflows.',
-    defaultModel: 'gemini-2.5-flash',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-sky-500/20 via-indigo-400/10 to-transparent',
-  },
-  {
-    type: 'openrouter',
-    label: 'OpenRouter',
-    tagline: 'Unified gateway across Anthropic, OpenAI, Google, and more.',
-    defaultModel: 'anthropic/claude-3.5-sonnet',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-fuchsia-500/20 via-pink-400/10 to-transparent',
-  },
-  {
-    type: 'ollama',
-    label: 'Ollama',
-    tagline: 'Local model runtime with loopback-only endpoint support.',
-    defaultModel: 'llama3.2',
-    requiresApiKey: false,
-    supportsEndpoint: true,
-    endpointLabel: 'Ollama server URL',
-    endpointPlaceholder: 'http://localhost:11434',
-    accent: 'from-slate-500/20 via-slate-300/10 to-transparent',
-  },
-  {
-    type: 'groq',
-    label: 'Groq',
-    tagline: 'Ultra-fast inference with LPU hardware. Free tier available.',
-    defaultModel: 'llama-3.3-70b-versatile',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-orange-600/20 via-yellow-400/10 to-transparent',
-  },
-  {
-    type: 'deepseek',
-    label: 'DeepSeek',
-    tagline: 'High-quality reasoning models at competitive pricing.',
-    defaultModel: 'deepseek-chat',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-blue-600/20 via-blue-300/10 to-transparent',
-  },
-  {
-    type: 'xai',
-    label: 'xAI (Grok)',
-    tagline: 'Grok models from xAI with real-time knowledge.',
-    defaultModel: 'grok-2',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-neutral-700/20 via-neutral-400/10 to-transparent',
-  },
-  {
-    type: 'together',
-    label: 'Together AI',
-    tagline: 'Open-source model hosting with competitive inference.',
-    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-indigo-500/20 via-purple-400/10 to-transparent',
-  },
-  {
-    type: 'fireworks',
-    label: 'Fireworks AI',
-    tagline: 'Fast serverless inference for popular open models.',
-    defaultModel: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-red-500/20 via-orange-400/10 to-transparent',
-  },
-  {
-    type: 'deepinfra',
-    label: 'Deep Infra',
-    tagline: 'Low-latency, pay-per-token open model inference.',
-    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-teal-500/20 via-emerald-400/10 to-transparent',
-  },
-  {
-    type: 'cerebras',
-    label: 'Cerebras',
-    tagline: 'Record-breaking fast inference. Free developer tier.',
-    defaultModel: 'llama3.3-70b',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-lime-500/20 via-green-400/10 to-transparent',
-  },
-  {
-    type: 'mistral',
-    label: 'Mistral',
-    tagline: 'European AI lab with strong multilingual models.',
-    defaultModel: 'mistral-large-latest',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-amber-500/20 via-orange-300/10 to-transparent',
-  },
-  {
-    type: 'perplexity',
-    label: 'Perplexity',
-    tagline: 'Search-augmented AI with real-time web grounding.',
-    defaultModel: 'sonar-pro',
-    requiresApiKey: true,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-cyan-500/20 via-sky-400/10 to-transparent',
-  },
-  {
-    type: 'copilot',
-    label: 'GitHub Copilot',
-    tagline: 'Use your existing GitHub Copilot subscription via OAuth.',
-    defaultModel: 'gpt-4o',
-    requiresApiKey: false,
-    supportsEndpoint: false,
-    endpointLabel: 'Endpoint',
-    endpointPlaceholder: '',
-    accent: 'from-gray-800/20 via-gray-500/10 to-transparent',
-    authMethod: 'oauth-github',
-  },
-  {
-    type: 'custom',
-    label: 'Custom',
-    tagline: 'Manual endpoint setup for bespoke HTTPS APIs.',
-    defaultModel: 'custom-model',
-    requiresApiKey: false,
-    supportsEndpoint: true,
-    endpointLabel: 'Provider endpoint',
-    endpointPlaceholder: 'https://your-provider.example.com/v1',
-    accent: 'from-violet-500/20 via-indigo-400/10 to-transparent',
-  },
-];
-
-const PROVIDER_LOOKUP = PROVIDER_DEFINITIONS.reduce(
-  (accumulator, provider) => {
-    accumulator[provider.type] = provider;
-    return accumulator;
-  },
-  {} as Record<AIProviderType, ProviderDefinition>,
-);
+const PROVIDER_DEFINITIONS: ProviderDefinition[] = [...PROVIDER_REGISTRY];
 
 const STORAGE_KEYS = {
   activeProvider: 'activeProvider',
@@ -328,21 +136,7 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
 ];
 
 function createDefaultProviderConfigs(): ProviderConfigMap {
-  return PROVIDER_DEFINITIONS.reduce((accumulator, provider) => {
-    accumulator[provider.type] = {
-      enabled: provider.type !== 'custom',
-      model: provider.defaultModel,
-      maxTokens: 4096,
-      temperature: 0.3,
-      customEndpoint:
-        provider.type === 'ollama'
-          ? 'http://localhost:11434'
-          : provider.type === 'openai'
-            ? 'https://api.openai.com'
-            : undefined,
-    };
-    return accumulator;
-  }, {} as ProviderConfigMap);
+  return createRegistryDefaultProviderConfigs();
 }
 
 function createDefaultSettings(): ExtensionSettings {
@@ -412,32 +206,6 @@ function normalizeProviderConfigs(value: unknown): ProviderConfigMap {
   return defaults;
 }
 
-function normalizeMetadata(value: unknown): ProviderMetadataMap {
-  if (!value || typeof value !== 'object') {
-    return {};
-  }
-
-  const metadata: ProviderMetadataMap = {};
-
-  for (const [key, rawMetadata] of Object.entries(value)) {
-    if (!isProviderType(key) || !rawMetadata || typeof rawMetadata !== 'object') {
-      continue;
-    }
-
-    const candidate = rawMetadata as Partial<ApiKeyMetadata>;
-    if (typeof candidate.maskedValue !== 'string' || typeof candidate.updatedAt !== 'number') {
-      continue;
-    }
-
-    metadata[key] = {
-      maskedValue: candidate.maskedValue,
-      updatedAt: candidate.updatedAt,
-    };
-  }
-
-  return metadata;
-}
-
 function normalizeSettings(value: unknown): ExtensionSettings {
   const defaults = createDefaultSettings();
 
@@ -446,6 +214,8 @@ function normalizeSettings(value: unknown): ExtensionSettings {
   }
 
   const candidate = value as Partial<ExtensionSettings>;
+
+  const debugMode = candidate.debugMode === true;
 
   return {
     ...defaults,
@@ -461,6 +231,8 @@ function normalizeSettings(value: unknown): ExtensionSettings {
     defaultProvider: isProviderType(candidate.defaultProvider)
       ? candidate.defaultProvider
       : defaults.defaultProvider,
+    allowCustomScripts: debugMode && candidate.allowCustomScripts === true,
+    debugMode,
     allowedDomains: Array.isArray(candidate.allowedDomains)
       ? candidate.allowedDomains.filter((value): value is string => typeof value === 'string')
       : defaults.allowedDomains,
@@ -470,6 +242,32 @@ function normalizeSettings(value: unknown): ExtensionSettings {
   };
 }
 
+function createDefaultVaultState(): VaultState {
+  return {
+    version: 1,
+    initialized: false,
+    lockState: 'uninitialized',
+    hasLegacySecrets: false,
+    credentials: {},
+  };
+}
+
+function mapVaultToMetadata(vault: VaultState): ProviderMetadataMap {
+  const metadata: ProviderMetadataMap = {};
+
+  for (const [provider, record] of Object.entries(vault.credentials)) {
+    if (!isProviderType(provider) || !record) {
+      continue;
+    }
+
+    metadata[provider] = {
+      maskedValue: record.maskedValue,
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  return metadata;
+}
 function formatUpdatedAt(timestamp: number): string {
   return new Intl.DateTimeFormat('en', {
     month: 'short',
@@ -506,34 +304,33 @@ function isAllowedEndpoint(providerType: AIProviderType, endpoint: string): bool
   }
 }
 
-function buildValidationConfig(
-  providerType: AIProviderType,
-  providerConfig: ProviderConfig,
-  apiKey: string,
-): AIModelConfig {
-  return {
-    provider: providerType,
-    model: providerConfig.model,
-    apiKey: apiKey || undefined,
-    baseUrl: providerConfig.customEndpoint?.trim() || undefined,
-    maxTokens: providerConfig.maxTokens,
-    temperature: providerConfig.temperature,
-  };
+const SECRET_ERROR_PATTERNS = [/(?:^|\b)sk-[A-Za-z0-9_-]{8,}/, /(?:^|\b)ghu_[A-Za-z0-9_]{8,}/, /(?:^|\b)gho_[A-Za-z0-9_]{8,}/, /(?:^|\b)github_pat_[A-Za-z0-9_]{12,}/, /(?:^|\b)AIza[0-9A-Za-z\-_]{12,}/];
+
+function containsSensitiveToken(value: string): boolean {
+  return SECRET_ERROR_PATTERNS.some((pattern) => pattern.test(value));
 }
 
-async function validateProviderConnection(
-  providerType: AIProviderType,
-  providerConfig: ProviderConfig,
-  apiKey: string,
-): Promise<boolean> {
-  if (providerType === 'custom') {
-    return isAllowedEndpoint(providerType, providerConfig.customEndpoint?.trim() ?? '');
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) {
+    return fallback;
   }
 
-  const config = buildValidationConfig(providerType, providerConfig, apiKey);
-  const provider = await createProvider(providerType);
-  await provider.initialize(config);
-  return provider.validateApiKey(apiKey);
+  const message = error.message.trim();
+  if (!message || containsSensitiveToken(message)) {
+    return fallback;
+  }
+
+  return message;
+}
+
+function isAdvancedModeEnabled(settings: Pick<ExtensionSettings, 'debugMode'>): boolean {
+  return settings.debugMode;
+}
+
+function isCustomScriptingEnabled(
+  settings: Pick<ExtensionSettings, 'debugMode' | 'allowCustomScripts'>,
+): boolean {
+  return settings.debugMode && settings.allowCustomScripts;
 }
 
 export function App() {
@@ -543,6 +340,7 @@ export function App() {
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const [isSavingAppearance, setIsSavingAppearance] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isVaultBusy, setIsVaultBusy] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<AIProviderType>(DEFAULT_PROVIDER);
   const [providerConfigs, setProviderConfigs] = useState<ProviderConfigMap>(() =>
     createDefaultProviderConfigs(),
@@ -554,12 +352,13 @@ export function App() {
   const [onboardingStep, setOnboardingStep] = useState(0);
   const [isCompletingOnboarding, setIsCompletingOnboarding] = useState(false);
   const [settings, setSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
-  const [savedSettings, setSavedSettings] = useState<ExtensionSettings>(() =>
-    createDefaultSettings(),
-  );
+  const [vaultState, setVaultState] = useState<VaultState>(() => createDefaultVaultState());
   const [apiKeyMetadata, setApiKeyMetadata] = useState<ProviderMetadataMap>({});
+  const [vaultPassphrase, setVaultPassphrase] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveMessage, setSaveMessage] = useState('');
+  const [vaultNoticeState, setVaultNoticeState] = useState<SaveState>('idle');
+  const [vaultNotice, setVaultNotice] = useState('');
   const [permissionSaveState, setPermissionSaveState] = useState<SaveState>('idle');
   const [permissionMessage, setPermissionMessage] = useState('');
   const [appearanceSaveState, setAppearanceSaveState] = useState<SaveState>('idle');
@@ -578,55 +377,48 @@ export function App() {
   const onboardingStateRef = useRef<OnboardingState>(createDefaultOnboardingState());
   const suppressOnboardingAutoOpenRef = useRef(false);
 
-  function clearApiKeyInputValue(): void {
+  const clearApiKeyInputValue = useCallback((): void => {
     if (apiKeyInputRef.current) {
       apiKeyInputRef.current.value = '';
     }
-  }
-
-  const handleGitHubOAuth = useCallback(async () => {
-    oauthAbortRef.current?.abort();
-    const controller = new AbortController();
-    oauthAbortRef.current = controller;
-
-    setOauthState('requesting');
-    setOauthError('');
-    setOauthUserCode('');
-
-    try {
-      const token = await runDeviceFlow({
-        onUserCode: (userCode, verificationUri) => {
-          setOauthUserCode(userCode);
-          setOauthVerifyUrl(verificationUri);
-          setOauthState('waiting');
-        },
-        signal: controller.signal,
-      });
-
-      const masked = `ghp_${'•'.repeat(12)}${token.slice(-4)}`;
-      setApiKeyMetadata((prev) => ({
-        ...prev,
-        copilot: { maskedValue: masked, updatedAt: Date.now() },
-      }));
-
-      await chrome.storage.local.set({
-        providerKeyMetadata: {
-          ...(await chrome.storage.local.get('providerKeyMetadata')).providerKeyMetadata,
-          copilot: { maskedValue: masked, updatedAt: Date.now() },
-        },
-        encryptedKeys: {
-          ...(await chrome.storage.local.get('encryptedKeys')).encryptedKeys,
-          copilot: token,
-        },
-      });
-
-      setOauthState('success');
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      setOauthState('error');
-      setOauthError(error instanceof Error ? error.message : 'OAuth flow failed');
-    }
   }, []);
+
+  const syncVaultState = useCallback((nextVault: VaultState): void => {
+    setVaultState(nextVault);
+    setApiKeyMetadata(mapVaultToMetadata(nextVault));
+  }, []);
+
+  const applyRuntimeSnapshot = useCallback(
+    (snapshot: SettingsGetResponse, preserveDismissedOnboarding: boolean): void => {
+      const normalizedSettings = normalizeSettings(snapshot.settings);
+      const normalizedOnboarding = normalizeOnboardingState(snapshot.onboarding);
+      const nextVault = snapshot.vault ?? createDefaultVaultState();
+
+      setSelectedProvider(snapshot.activeProvider);
+      setProviderConfigs(normalizeProviderConfigs(snapshot.providers));
+      onboardingStateRef.current = normalizedOnboarding;
+      setOnboardingState(normalizedOnboarding);
+      setOnboardingStep(normalizedOnboarding.lastStep);
+      setShowOnboarding((currentShow) =>
+        normalizedOnboarding.completed ? false : preserveDismissedOnboarding ? currentShow : true,
+      );
+      setSettings(normalizedSettings);
+      setCustomScriptsConfirmed(isCustomScriptingEnabled(normalizedSettings));
+      setMode(normalizedSettings.theme, { persist: false });
+      syncVaultState(nextVault);
+      setIsReady(true);
+    },
+    [setMode, syncVaultState],
+  );
+
+  const reloadState = useCallback(
+    async (preserveDismissedOnboarding = true): Promise<SettingsGetResponse> => {
+      const snapshot = await sendExtensionRequest('SETTINGS_GET', undefined, 'options');
+      applyRuntimeSnapshot(snapshot, preserveDismissedOnboarding);
+      return snapshot;
+    },
+    [applyRuntimeSnapshot],
+  );
 
   useEffect(() => {
     onboardingStateRef.current = onboardingState;
@@ -651,57 +443,24 @@ export function App() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearApiKeyInputValue();
     };
-  }, []);
+  }, [clearApiKeyInputValue]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadState(): Promise<void> {
-      const localState = await chrome.storage.local.get([
-        STORAGE_KEYS.activeProvider,
-        STORAGE_KEYS.providerConfigs,
-        STORAGE_KEYS.settings,
-        STORAGE_KEYS.apiKeyMetadata,
-        STORAGE_KEYS.onboarding,
-      ]);
-      await chrome.storage.session.remove(STORAGE_KEYS.legacySessionApiKeys);
-
+      const snapshot = await sendExtensionRequest('SETTINGS_GET', undefined, 'options');
       if (cancelled) {
         return;
       }
 
-      const settings =
-        localState[STORAGE_KEYS.settings] && typeof localState[STORAGE_KEYS.settings] === 'object'
-          ? (localState[STORAGE_KEYS.settings] as Partial<ExtensionSettings>)
-          : undefined;
-
-      const activeProvider = isProviderType(localState[STORAGE_KEYS.activeProvider])
-        ? localState[STORAGE_KEYS.activeProvider]
-        : isProviderType(settings?.defaultProvider)
-          ? settings.defaultProvider
-          : DEFAULT_PROVIDER;
-
-      const normalizedSettings = normalizeSettings(localState[STORAGE_KEYS.settings]);
-      const normalizedOnboarding = normalizeOnboardingState(localState[STORAGE_KEYS.onboarding]);
-
-      setSelectedProvider(activeProvider);
-      setProviderConfigs(normalizeProviderConfigs(localState[STORAGE_KEYS.providerConfigs]));
-      setOnboardingState(normalizedOnboarding);
-      onboardingStateRef.current = normalizedOnboarding;
-      setOnboardingStep(normalizedOnboarding.lastStep);
-      setShowOnboarding(!normalizedOnboarding.completed);
-      setSettings(normalizedSettings);
-      setSavedSettings(normalizedSettings);
-      setCustomScriptsConfirmed(normalizedSettings.allowCustomScripts);
-      setMode(normalizedSettings.theme, { persist: false });
-      setApiKeyMetadata(normalizeMetadata(localState[STORAGE_KEYS.apiKeyMetadata]));
-      setIsReady(true);
+      applyRuntimeSnapshot(snapshot, false);
     }
 
-    void loadState().catch(() => {
+    void loadState().catch((error) => {
       if (!cancelled) {
         setSaveState('error');
-        setSaveMessage('Could not load stored provider settings.');
+        setSaveMessage(getErrorMessage(error, 'Could not load stored provider settings.'));
         setIsReady(true);
       }
     });
@@ -709,7 +468,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyRuntimeSnapshot]);
 
   useEffect(() => {
     function handleStorageChange(
@@ -738,11 +497,6 @@ export function App() {
       chrome.storage.onChanged.removeListener(handleStorageChange);
     };
   }, []);
-
-  const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
-  const selectedConfig = providerConfigs[selectedProvider];
-  const savedMetadata = apiKeyMetadata[selectedProvider];
-  const shouldShowOnboarding = isReady && showOnboarding;
 
   async function persistOnboardingState(nextState: OnboardingState): Promise<void> {
     onboardingStateRef.current = nextState;
@@ -773,7 +527,10 @@ export function App() {
   }
 
   function isProviderReadyForOnboarding(): boolean {
-    if (selectedDefinition.requiresApiKey) {
+    const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
+    const selectedConfig = providerConfigs[selectedProvider];
+
+    if (selectedDefinition.authMethod === 'api-key' || selectedDefinition.authMethod === 'oauth-github') {
       return (
         onboardingState.configuredProvider === selectedProvider &&
         onboardingState.validatedProvider === selectedProvider
@@ -877,7 +634,9 @@ export function App() {
       },
     }));
     setSaveState('idle');
+    setSaveMessage('');
     setValidationState('idle');
+    setValidationMessage('');
   }
 
   function handleProviderChange(event: React.ChangeEvent<HTMLSelectElement>): void {
@@ -888,18 +647,171 @@ export function App() {
 
     setSelectedProvider(nextProvider);
     setSaveState('idle');
+    setSaveMessage('');
     setPermissionSaveState('idle');
+    setPermissionMessage('');
     setValidationState('idle');
+    setValidationMessage('');
+    setVaultNoticeState('idle');
+    setVaultNotice('');
+    setOauthState('idle');
+    setOauthError('');
+    setOauthUserCode('');
+    setOauthVerifyUrl('');
+    clearApiKeyInputValue();
+  }
 
-    if (apiKeyInputRef.current) {
+  async function runVaultAction(action: 'init' | 'unlock' | 'lock'): Promise<void> {
+    if (action !== 'lock' && !vaultPassphrase.trim()) {
+      setVaultNoticeState('error');
+      setVaultNotice('Enter a vault passphrase before continuing.');
+      return;
+    }
+
+    setIsVaultBusy(true);
+    setVaultNoticeState('idle');
+    setVaultNotice('');
+
+    try {
+      const response =
+        action === 'init'
+          ? await sendExtensionRequest('VAULT_INIT', { passphrase: vaultPassphrase }, 'options')
+          : action === 'unlock'
+            ? await sendExtensionRequest(
+                'VAULT_UNLOCK',
+                { passphrase: vaultPassphrase },
+                'options',
+              )
+            : await sendExtensionRequest('VAULT_LOCK', undefined, 'options');
+
+      syncVaultState(response.vault);
+      await reloadState(true);
+      setVaultPassphrase('');
+      setVaultNoticeState('success');
+      setVaultNotice(
+        action === 'init'
+          ? 'Vault initialized and unlocked for this browser session.'
+          : action === 'unlock'
+            ? 'Vault unlocked for this browser session.'
+            : 'Vault locked. Credentials are no longer available until you unlock again.',
+      );
+    } catch (error) {
+      setVaultNoticeState('error');
+      setVaultNotice(
+        getErrorMessage(
+          error,
+          action === 'init'
+            ? 'Failed to initialize the vault.'
+            : action === 'unlock'
+              ? 'Failed to unlock the vault.'
+              : 'Failed to lock the vault.',
+        ),
+      );
+    } finally {
+      setIsVaultBusy(false);
+    }
+  }
+
+  async function handleDeleteCredential(): Promise<void> {
+    if (vaultState.lockState !== 'unlocked') {
+      setVaultNoticeState('error');
+      setVaultNotice('Unlock the vault before removing a credential.');
+      return;
+    }
+
+    setIsVaultBusy(true);
+    setVaultNoticeState('idle');
+    setVaultNotice('');
+
+    try {
+      const response = await sendExtensionRequest(
+        'API_KEY_DELETE',
+        { provider: selectedProvider },
+        'options',
+      );
+      syncVaultState(response.vault);
+      await reloadState(true);
+      setVaultNoticeState('success');
+      setVaultNotice(`${PROVIDER_LOOKUP[selectedProvider].label} credential removed from the vault.`);
+    } catch (error) {
+      setVaultNoticeState('error');
+      setVaultNotice(getErrorMessage(error, 'Failed to remove the stored credential.'));
+    } finally {
+      setIsVaultBusy(false);
       clearApiKeyInputValue();
     }
   }
 
+  async function handleGitHubOAuth(): Promise<void> {
+    if (vaultState.lockState !== 'unlocked') {
+      setOauthState('error');
+      setOauthError('Unlock the vault before connecting GitHub Copilot.');
+      return;
+    }
+
+    oauthAbortRef.current?.abort();
+    const controller = new AbortController();
+    oauthAbortRef.current = controller;
+
+    setOauthState('requesting');
+    setOauthError('');
+    setOauthUserCode('');
+    setOauthVerifyUrl('');
+
+    try {
+      const token = await runDeviceFlow({
+        onUserCode: (userCode, verificationUri) => {
+          setOauthUserCode(userCode);
+          setOauthVerifyUrl(verificationUri);
+          setOauthState('waiting');
+        },
+        signal: controller.signal,
+      });
+
+      const response = await sendExtensionRequest(
+        'API_KEY_SET',
+        {
+          provider: 'copilot',
+          apiKey: token,
+          authKind: 'oauth-token',
+          validate: true,
+        },
+        'options',
+      );
+      syncVaultState(response.vault);
+
+      if (selectedProvider === 'copilot') {
+        const currentOnboarding = onboardingStateRef.current;
+        await persistOnboardingState({
+          ...currentOnboarding,
+          providerReady: true,
+          validatedProvider: 'copilot',
+        });
+      }
+
+      await reloadState(true);
+      setOauthState('success');
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      setOauthState('error');
+      setOauthError(getErrorMessage(error, 'OAuth flow failed'));
+    } finally {
+      oauthAbortRef.current = null;
+    }
+  }
+
   async function handleSave(): Promise<void> {
+    const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
+    const selectedConfig = providerConfigs[selectedProvider];
+    const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
+
     setIsSaving(true);
     setSaveState('idle');
+    setSaveMessage('');
     setValidationState('idle');
+    setValidationMessage('');
 
     try {
       if (selectedDefinition.supportsEndpoint) {
@@ -915,58 +827,51 @@ export function App() {
         }
       }
 
-      const nextSettings: ExtensionSettings = {
-        ...savedSettings,
-        defaultProvider: selectedProvider,
-      };
-
-      const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
-      const nextMetadata: ProviderMetadataMap = { ...apiKeyMetadata };
-      const currentOnboarding = onboardingStateRef.current;
-
-      if (rawApiKey) {
-        nextMetadata[selectedProvider] = {
-          maskedValue: GENERIC_MASK,
-          updatedAt: Date.now(),
-        };
+      if (selectedDefinition.authMethod === 'api-key' && rawApiKey && vaultState.lockState !== 'unlocked') {
+        setSaveState('error');
+        setSaveMessage('Unlock the vault before saving a new provider credential.');
+        return;
       }
 
-      const nextOnboardingState: OnboardingState = {
-        ...currentOnboarding,
-        configuredProvider: selectedProvider,
-        providerReady: selectedDefinition.requiresApiKey ? false : true,
-        validatedProvider:
-          selectedDefinition.requiresApiKey ||
-          currentOnboarding.validatedProvider !== selectedProvider
-            ? undefined
-            : currentOnboarding.validatedProvider,
-      };
-      onboardingStateRef.current = nextOnboardingState;
+      await sendExtensionRequest(
+        'PROVIDER_SET',
+        {
+          provider: selectedProvider,
+          config: selectedConfig,
+          makeDefault: true,
+        },
+        'options',
+      );
 
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.activeProvider]: selectedProvider,
-        [STORAGE_KEYS.providerConfigs]: providerConfigs,
-        [STORAGE_KEYS.settings]: nextSettings,
-        [STORAGE_KEYS.apiKeyMetadata]: nextMetadata,
-        [STORAGE_KEYS.onboarding]: nextOnboardingState,
-      });
-      await chrome.storage.session.remove(STORAGE_KEYS.legacySessionApiKeys);
+      if (selectedDefinition.authMethod === 'api-key' && rawApiKey) {
+        const credentialResponse = await sendExtensionRequest(
+          'API_KEY_SET',
+          {
+            provider: selectedProvider,
+            apiKey: rawApiKey,
+            authKind: 'api-key',
+            maskedValue: GENERIC_MASK,
+          },
+          'options',
+        );
+        syncVaultState(credentialResponse.vault);
+      }
 
-      setApiKeyMetadata(nextMetadata);
-      setSavedSettings(nextSettings);
-      setSettings((current) => ({
-        ...current,
-        defaultProvider: selectedProvider,
-      }));
+      const snapshot = await reloadState(true);
+      const savedRecord = snapshot.vault.credentials[selectedProvider];
       setSaveState('success');
       setSaveMessage(
-        rawApiKey
-          ? 'Provider settings saved. The key field was cleared and only masked metadata was retained.'
-          : 'Provider settings saved. Re-enter a key later when encrypted persistence is wired.',
+        selectedDefinition.authMethod === 'api-key' && rawApiKey
+          ? 'Provider settings saved and the credential was stored in the vault.'
+          : selectedDefinition.authMethod === 'api-key' && !savedRecord
+            ? 'Provider settings saved. Add a vault credential before using this provider.'
+            : selectedDefinition.authMethod === 'oauth-github' && !savedRecord
+              ? 'Provider settings saved. Connect GitHub Copilot in the vault before using this provider.'
+              : 'Provider settings saved.',
       );
-    } catch {
+    } catch (error) {
       setSaveState('error');
-      setSaveMessage('Failed to save provider settings.');
+      setSaveMessage(getErrorMessage(error, 'Failed to save provider settings.'));
     } finally {
       clearApiKeyInputValue();
       setIsSaving(false);
@@ -986,7 +891,30 @@ export function App() {
     };
   }
 
+  function handleAdvancedModeToggle(checked: boolean): void {
+    setSettings((current) => ({
+      ...current,
+      debugMode: checked,
+      allowCustomScripts: checked ? current.allowCustomScripts : false,
+    }));
+
+    if (!checked) {
+      setCustomScriptsConfirmed(false);
+      setPermissionMessage('Advanced mode is off. High-risk scripting controls stay disabled.');
+    } else {
+      setPermissionMessage('Advanced mode enabled. You can now review high-risk scripting controls.');
+    }
+
+    setPermissionSaveState('idle');
+  }
+
   function handlePermissionToggle(key: PermissionSettingKey, checked: boolean): void {
+    if (key === 'allowCustomScripts' && checked && !settings.debugMode) {
+      setPermissionSaveState('error');
+      setPermissionMessage('Enable Advanced mode before allowing custom scripts.');
+      return;
+    }
+
     setSettings((current) => ({
       ...current,
       [key]: checked,
@@ -997,6 +925,7 @@ export function App() {
     }
 
     setPermissionSaveState('idle');
+    setPermissionMessage('');
   }
 
   function handlePermissionCardClick(
@@ -1016,7 +945,9 @@ export function App() {
       ...current,
       theme,
     }));
+    setMode(theme, { persist: false });
     setAppearanceSaveState('idle');
+    setAppearanceMessage('');
   }
 
   function handleLanguageChange(event: React.ChangeEvent<HTMLSelectElement>): void {
@@ -1030,13 +961,21 @@ export function App() {
       language: nextLanguage,
     }));
     setAppearanceSaveState('idle');
+    setAppearanceMessage('');
   }
 
   async function handleSavePermissions(): Promise<void> {
     setIsSavingPermissions(true);
     setPermissionSaveState('idle');
+    setPermissionMessage('');
 
     try {
+      if (settings.allowCustomScripts && !settings.debugMode) {
+        setPermissionSaveState('error');
+        setPermissionMessage('Enable Advanced mode before saving custom scripting permissions.');
+        return;
+      }
+
       if (settings.allowCustomScripts && !customScriptsConfirmed) {
         setPermissionSaveState('error');
         setPermissionMessage(
@@ -1045,34 +984,31 @@ export function App() {
         return;
       }
 
-      const permissionSettings = pickPermissionSettings(settings);
-      const nextSettings: ExtensionSettings = {
-        ...savedSettings,
-        ...permissionSettings,
+      const permissionSettings = {
+        ...pickPermissionSettings(settings),
+        allowCustomScripts: isCustomScriptingEnabled(settings),
+        debugMode: isAdvancedModeEnabled(settings),
       };
+      await sendExtensionRequest(
+        'SETTINGS_UPDATE',
+        { settings: permissionSettings },
+        'options',
+      );
 
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.settings]: nextSettings,
-      });
-
-      setMode(nextSettings.theme);
+      setMode(settings.theme);
       try {
-        localStorage.setItem('flux-agent-theme', nextSettings.theme);
+        localStorage.setItem('flux-agent-theme', settings.theme);
       } catch {
         // Ignore storage errors in restricted contexts.
       }
-      setSavedSettings(nextSettings);
-      setSettings((current) => ({
-        ...current,
-        ...permissionSettings,
-      }));
+      await reloadState(true);
       setPermissionSaveState('success');
       setPermissionMessage(
         'Permission toggles saved. Flux will use these capability boundaries on the next run.',
       );
-    } catch {
+    } catch (error) {
       setPermissionSaveState('error');
-      setPermissionMessage('Failed to save permission toggles.');
+      setPermissionMessage(getErrorMessage(error, 'Failed to save permission toggles.'));
     } finally {
       setIsSavingPermissions(false);
     }
@@ -1081,42 +1017,67 @@ export function App() {
   async function handleSaveAppearance(): Promise<void> {
     setIsSavingAppearance(true);
     setAppearanceSaveState('idle');
+    setAppearanceMessage('');
 
     try {
-      const nextSettings: ExtensionSettings = {
-        ...savedSettings,
-        theme: settings.theme,
-        language: settings.language,
-      };
+      await sendExtensionRequest(
+        'SETTINGS_UPDATE',
+        {
+          settings: {
+            theme: settings.theme,
+            language: settings.language,
+          },
+        },
+        'options',
+      );
 
-      await chrome.storage.local.set({
-        [STORAGE_KEYS.settings]: nextSettings,
-      });
-
-      setSavedSettings(nextSettings);
-      setSettings((current) => ({
-        ...current,
-        theme: nextSettings.theme,
-        language: nextSettings.language,
-      }));
+      setMode(settings.theme);
+      try {
+        localStorage.setItem('flux-agent-theme', settings.theme);
+      } catch {
+        // Ignore storage errors in restricted contexts.
+      }
+      await reloadState(true);
       setAppearanceSaveState('success');
       setAppearanceMessage(
         'Appearance settings saved. Theme and language will stay consistent across Flux surfaces.',
       );
-    } catch {
+    } catch (error) {
       setAppearanceSaveState('error');
-      setAppearanceMessage('Failed to save appearance settings.');
+      setAppearanceMessage(getErrorMessage(error, 'Failed to save appearance settings.'));
     } finally {
       setIsSavingAppearance(false);
     }
   }
 
   async function handleTestConnection(): Promise<void> {
+    const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
+    const selectedConfig = providerConfigs[selectedProvider];
     const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
+    const savedMetadata = apiKeyMetadata[selectedProvider];
 
-    if (selectedDefinition.requiresApiKey && !rawApiKey) {
+    if (selectedDefinition.authMethod === 'api-key' && !rawApiKey && !savedMetadata) {
       setValidationState('error');
-      setValidationMessage('Enter an API key before testing this provider.');
+      setValidationMessage('Enter an API key or unlock a stored vault credential before testing this provider.');
+      clearApiKeyInputValue();
+      return;
+    }
+
+    if (selectedDefinition.authMethod === 'oauth-github' && !savedMetadata) {
+      setValidationState('error');
+      setValidationMessage('Connect GitHub Copilot before testing this provider.');
+      clearApiKeyInputValue();
+      return;
+    }
+
+    if (
+      (selectedDefinition.authMethod === 'api-key' || selectedDefinition.authMethod === 'oauth-github') &&
+      !rawApiKey &&
+      vaultState.lockState !== 'unlocked'
+    ) {
+      setValidationState('error');
+      setValidationMessage('Unlock the vault or enter a fresh credential before testing this provider.');
+      clearApiKeyInputValue();
       return;
     }
 
@@ -1136,16 +1097,33 @@ export function App() {
 
       setIsTesting(true);
       setValidationState('idle');
+      setValidationMessage('');
 
-      const isValid = await validateProviderConnection(selectedProvider, selectedConfig, rawApiKey);
-      setValidationState(isValid ? 'success' : 'error');
+      const response = await sendExtensionRequest(
+        'API_KEY_VALIDATE',
+        {
+          provider: selectedProvider,
+          apiKey: rawApiKey || undefined,
+          authKind:
+            selectedDefinition.authMethod === 'oauth-github'
+              ? 'oauth-token'
+              : selectedDefinition.authMethod === 'api-key'
+                ? 'api-key'
+                : undefined,
+          config: selectedConfig,
+        },
+        'options',
+      );
+
+      syncVaultState(response.vault);
+      setValidationState(response.valid ? 'success' : 'error');
       setValidationMessage(
-        isValid
+        response.valid
           ? `${selectedDefinition.label} responded successfully.`
           : `${selectedDefinition.label} could not be validated with the current settings.`,
       );
 
-      if (isValid) {
+      if (response.valid) {
         const currentOnboarding = onboardingStateRef.current;
         await persistOnboardingState({
           ...currentOnboarding,
@@ -1153,16 +1131,79 @@ export function App() {
           validatedProvider: selectedProvider,
         });
       }
-    } catch {
+    } catch (error) {
       setValidationState('error');
-      setValidationMessage('Connection test failed unexpectedly.');
+      setValidationMessage(getErrorMessage(error, 'Connection test failed unexpectedly.'));
     } finally {
       setIsTesting(false);
-      if (apiKeyInputRef.current) {
-        apiKeyInputRef.current.value = '';
-      }
+      clearApiKeyInputValue();
     }
   }
+
+  const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
+  const selectedConfig = providerConfigs[selectedProvider];
+  const selectedCredentialRecord = vaultState.credentials[selectedProvider];
+  const advancedModeEnabled = isAdvancedModeEnabled(settings);
+  const customScriptingEnabled = isCustomScriptingEnabled(settings);
+  const visiblePermissionDefinitions = advancedModeEnabled
+    ? PERMISSION_DEFINITIONS
+    : PERMISSION_DEFINITIONS.filter((permission) => permission.key !== 'allowCustomScripts');
+  const savedMetadata = apiKeyMetadata[selectedProvider];
+  const shouldShowOnboarding = isReady && showOnboarding;
+  const vaultStatusLabel =
+    vaultState.lockState === 'uninitialized'
+      ? 'Not initialized'
+      : vaultState.lockState === 'locked'
+        ? 'Locked'
+        : 'Unlocked';
+  const vaultStatusDescription =
+    vaultState.lockState === 'uninitialized'
+      ? 'Create a passphrase to encrypt provider credentials locally.'
+      : vaultState.lockState === 'locked'
+        ? 'Unlock once per browser session before saving, validating, or using credentials.'
+        : 'Credentials are available for this browser session only.';
+  const credentialStatusLabel = !selectedDefinition.requiresCredential
+    ? 'Not required'
+    : vaultState.lockState === 'uninitialized'
+      ? 'Vault not initialized'
+      : vaultState.lockState === 'locked'
+        ? savedMetadata
+          ? 'Vault locked'
+          : selectedDefinition.authMethod === 'oauth-github'
+            ? 'OAuth required'
+            : 'Credential missing'
+        : !savedMetadata
+          ? selectedDefinition.authMethod === 'oauth-github'
+            ? 'OAuth required'
+            : 'Credential missing'
+          : selectedCredentialRecord?.stale
+            ? 'Credential stale'
+            : selectedCredentialRecord?.validatedAt
+              ? selectedDefinition.authMethod === 'oauth-github'
+                ? 'OAuth connected'
+                : 'Validated'
+              : selectedDefinition.authMethod === 'oauth-github'
+                ? 'OAuth connected'
+                : 'Credential saved';
+  const credentialHelperMessage = !savedMetadata
+    ? selectedDefinition.authMethod === 'oauth-github'
+      ? 'Connect GitHub Copilot and store the token in the vault before running this provider.'
+      : selectedDefinition.requiresCredential
+        ? 'Save a vault-backed credential or enter a fresh one when testing.'
+        : 'No credential is required for this provider.'
+    : selectedCredentialRecord?.stale
+      ? 'The provider configuration changed after the last validation. Re-test before relying on this credential.'
+      : vaultState.lockState === 'locked'
+        ? 'Unlock the vault to validate, rotate, or remove this credential.'
+        : selectedCredentialRecord?.validatedAt
+          ? 'Credential validated against the current provider settings.'
+          : 'Credential is stored in the vault. Run a connection test to validate it.';
+  const vaultTone =
+    vaultNoticeState === 'success'
+      ? 'border-success-500/30 bg-success-50 text-success-700'
+      : vaultNoticeState === 'error'
+        ? 'border-error-500/30 bg-error-50 text-error-700'
+        : 'border-border bg-surface-elevated text-content-secondary';
 
   const statusTone =
     validationState === 'success'
@@ -1247,14 +1288,128 @@ export function App() {
           />
         ) : null}
 
-        {selectedDefinition.requiresApiKey ? (
+        <div className="space-y-3 rounded-2xl border border-border bg-surface-elevated px-4 py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-content-primary">Credential vault</p>
+              <p className="mt-1 text-xs leading-5 text-content-secondary">
+                {vaultStatusDescription}
+              </p>
+            </div>
+            <Badge
+              variant={
+                vaultState.lockState === 'unlocked'
+                  ? 'success'
+                  : vaultState.lockState === 'locked'
+                    ? 'warning'
+                    : 'default'
+              }
+            >
+              {vaultStatusLabel}
+            </Badge>
+          </div>
+
+          {vaultState.lockState !== 'unlocked' ? (
+            <Input
+              label={vaultState.lockState === 'uninitialized' ? 'Vault passphrase' : 'Unlock passphrase'}
+              type="password"
+              value={vaultPassphrase}
+              onChange={(event) => setVaultPassphrase(event.target.value)}
+              placeholder={
+                vaultState.lockState === 'uninitialized'
+                  ? 'Create a passphrase for local encryption'
+                  : 'Enter the vault passphrase'
+              }
+              helperText={
+                vaultState.lockState === 'uninitialized'
+                  ? 'You will enter this passphrase once per browser session to unlock saved credentials.'
+                  : 'Credentials stay unavailable until the correct passphrase unlocks this session.'
+              }
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+          ) : (
+            <div className="rounded-2xl border border-success-500/20 bg-success-50 px-4 py-3 text-sm text-success-700">
+              Credentials are unlocked in memory for this browser session.
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            {vaultState.lockState === 'uninitialized' ? (
+              <Button
+                type="button"
+                variant="secondary"
+                loading={isVaultBusy}
+                onClick={() => {
+                  void runVaultAction('init');
+                }}
+                disabled={!isReady}
+              >
+                Initialize vault
+              </Button>
+            ) : vaultState.lockState === 'locked' ? (
+              <Button
+                type="button"
+                variant="secondary"
+                loading={isVaultBusy}
+                onClick={() => {
+                  void runVaultAction('unlock');
+                }}
+                disabled={!isReady}
+              >
+                Unlock vault
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                loading={isVaultBusy}
+                onClick={() => {
+                  void runVaultAction('lock');
+                }}
+                disabled={!isReady}
+              >
+                Lock vault
+              </Button>
+            )}
+
+            {selectedDefinition.requiresCredential && savedMetadata ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  void handleDeleteCredential();
+                }}
+                iconLeft={<Trash2 className="h-4 w-4" />}
+                disabled={!isReady || isVaultBusy || vaultState.lockState !== 'unlocked'}
+              >
+                Remove credential
+              </Button>
+            ) : null}
+          </div>
+
+          {vaultState.hasLegacySecrets ? (
+            <p className="text-xs leading-5 text-content-tertiary">
+              Legacy secrets were detected and will be migrated into the encrypted vault the next
+              time you unlock it.
+            </p>
+          ) : null}
+
+          <div className={`rounded-2xl border px-4 py-3 text-sm ${vaultTone}`}>
+            {vaultNotice || 'Initialize or unlock the vault before storing long-lived credentials.'}
+          </div>
+        </div>
+
+        {selectedDefinition.authMethod === 'api-key' ? (
           <div className="space-y-3">
             <Input
               ref={apiKeyInputRef}
               label="API key"
               type="password"
               placeholder="Paste a provider key when needed"
-              helperText="This field is not persisted. Save stores only masked metadata, and test clears the field after validation."
+              helperText="Enter a fresh key to test immediately, or save it into the unlocked vault for later sessions."
               autoComplete="off"
               autoCapitalize="none"
               autoCorrect="off"
@@ -1266,24 +1421,22 @@ export function App() {
               <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
                   <KeyRound className="h-4 w-4 text-primary-600" />
-                  Saved key metadata
+                  Vault credential
                 </div>
                 <p className="mt-2 text-sm text-content-secondary">
                   {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
                 </p>
-                <p className="mt-1 text-xs text-content-tertiary">
-                  Re-enter the raw key whenever you want to test until encrypted key persistence is
-                  wired.
-                </p>
+                <p className="mt-1 text-xs text-content-tertiary">{credentialHelperMessage}</p>
               </div>
             ) : null}
           </div>
         ) : selectedDefinition.authMethod === 'oauth-github' ? (
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4">
-              <p className="text-sm font-medium text-content-primary">GitHub Copilot Authentication</p>
+              <p className="text-sm font-medium text-content-primary">GitHub Copilot authentication</p>
               <p className="mt-1 text-xs leading-5 text-content-secondary">
-                Sign in with your GitHub account that has an active Copilot subscription. No API key needed.
+                Sign in with a GitHub account that has an active Copilot subscription. The OAuth
+                token is stored in the unlocked vault instead of plain extension storage.
               </p>
 
               {oauthState === 'idle' || oauthState === 'error' ? (
@@ -1291,20 +1444,25 @@ export function App() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => { void handleGitHubOAuth(); }}
+                    onClick={() => {
+                      void handleGitHubOAuth();
+                    }}
                     iconLeft={<Github className="h-4 w-4" />}
-                    disabled={!isReady}
+                    disabled={!isReady || vaultState.lockState !== 'unlocked'}
                   >
                     Connect with GitHub
                   </Button>
-                  {oauthError ? (
-                    <p className="text-xs text-error-600">{oauthError}</p>
+                  {vaultState.lockState !== 'unlocked' ? (
+                    <p className="text-xs text-content-tertiary">
+                      Unlock the vault first so the Copilot token can be stored securely.
+                    </p>
                   ) : null}
+                  {oauthError ? <p className="text-xs text-error-600">{oauthError}</p> : null}
                 </div>
               ) : oauthState === 'requesting' ? (
                 <div className="mt-3 flex items-center gap-2 text-sm text-content-secondary">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Requesting device code…
+                  Requesting device code...
                 </div>
               ) : oauthState === 'waiting' ? (
                 <div className="mt-3 space-y-3">
@@ -1327,7 +1485,7 @@ export function App() {
                   </a>
                   <div className="flex items-center gap-2 text-xs text-content-tertiary">
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Waiting for authorization…
+                    Waiting for authorization...
                   </div>
                   <Button
                     type="button"
@@ -1353,11 +1511,12 @@ export function App() {
               <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
                   <Github className="h-4 w-4" />
-                  Copilot token stored
+                  Copilot token in vault
                 </div>
                 <p className="mt-2 text-sm text-content-secondary">
                   {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
                 </p>
+                <p className="mt-1 text-xs text-content-tertiary">{credentialHelperMessage}</p>
               </div>
             ) : null}
           </div>
@@ -1365,11 +1524,12 @@ export function App() {
           <div className="rounded-2xl border border-dashed border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
             {selectedProvider === 'ollama'
               ? 'Ollama skips API keys. Use the test button to verify the loopback runtime is reachable.'
-              : 'Custom provider baseline currently validates the endpoint only. Secret persistence stays disabled until secure encryption flow is connected.'}
+              : 'Custom provider validation is endpoint-only. No secret is stored for this provider.'}
           </div>
         )}
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
+
           {validationMessage ||
             saveMessage ||
             'Save changes, then test the selected provider configuration.'}
@@ -1418,7 +1578,7 @@ export function App() {
         onComplete={() => {
           void handleOnboardingComplete();
         }}
-        providerRequiresApiKey={selectedDefinition.requiresApiKey}
+        providerRequiresApiKey={selectedDefinition.authMethod === 'api-key'}
         canComplete={isProviderReadyForOnboarding()}
         isBusy={isSaving || isTesting || isCompletingOnboarding}
         isCompleting={isCompletingOnboarding}
@@ -1442,8 +1602,9 @@ export function App() {
                   Configure providers and capability boundaries in one place.
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-content-secondary sm:text-base">
-                  The options workspace now covers provider setup and the first pass of runtime
-                  permission toggles without falling back to placeholder settings.
+                  The options workspace now drives provider setup, the encrypted vault, and
+                  runtime permission boundaries through the same background APIs used during live
+                  automation.
                 </p>
               </div>
             </div>
@@ -1459,14 +1620,10 @@ export function App() {
               </div>
               <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-content-tertiary">
-                  Key status
+                  Credential status
                 </p>
                 <p className="mt-2 text-sm font-semibold text-content-primary">
-                  {savedMetadata
-                    ? 'Masked metadata saved'
-                    : selectedDefinition.requiresApiKey
-                      ? 'Needs entry'
-                      : 'Not required'}
+                  {credentialStatusLabel}
                 </p>
               </div>
               <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
@@ -1487,7 +1644,7 @@ export function App() {
               <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
                 <CardTitle as="h2">Provider settings</CardTitle>
                 <CardDescription>
-                  Provider dropdown, model config, masked API-key capture, and connection testing.
+                  Provider dropdown, model config, vault-backed credentials, and connection testing.
                 </CardDescription>
               </CardHeader>
 
@@ -1518,7 +1675,7 @@ export function App() {
                       Sensitive toggles
                     </p>
                     <p className="mt-2 text-lg font-semibold text-content-primary">
-                      {settings.allowCustomScripts ? '1 enabled' : '0 enabled'}
+                      {customScriptingEnabled ? '1 enabled' : advancedModeEnabled ? '0 enabled' : 'Advanced mode off'}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3 sm:col-span-2 xl:col-span-1">
@@ -1531,8 +1688,40 @@ export function App() {
                   </div>
                 </div>
 
+                <div className="rounded-[22px] border border-border bg-surface-primary px-4 py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p id="advanced-mode-title" className="text-sm font-semibold text-content-primary">
+                          Enable Advanced mode
+                        </p>
+                        <Badge variant={advancedModeEnabled ? 'info' : 'default'}>Advanced</Badge>
+                      </div>
+                      <p
+                        id="advanced-mode-description"
+                        className="text-sm leading-6 text-content-secondary"
+                      >
+                        Reveal high-risk controls such as custom scripts and evaluate actions. Keep
+                        this off unless you need those workflows.
+                      </p>
+                    </div>
+
+                    <Switch
+                      checked={advancedModeEnabled}
+                      onCheckedChange={handleAdvancedModeToggle}
+                      aria-labelledby="advanced-mode-title"
+                      aria-describedby="advanced-mode-description"
+                    />
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-content-tertiary">
+                    {advancedModeEnabled
+                      ? 'Advanced mode is on. Evaluate actions still require custom scripts to be enabled and saved.'
+                      : 'Advanced mode is off. High-risk scripting controls remain hidden and evaluate actions stay blocked.'}
+                  </p>
+                </div>
+
                 <div className="grid gap-4 lg:grid-cols-2">
-                  {PERMISSION_DEFINITIONS.map((permission) => {
+                  {visiblePermissionDefinitions.map((permission) => {
                     const titleId = `${permission.key}-title`;
                     const descriptionId = `${permission.key}-description`;
 
@@ -1570,7 +1759,7 @@ export function App() {
                   })}
                 </div>
 
-                {settings.allowCustomScripts ? (
+                {customScriptingEnabled ? (
                   <div className="rounded-[22px] border border-error-500/20 bg-error-50 px-4 py-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="error">High-risk capability</Badge>
@@ -1696,9 +1885,9 @@ export function App() {
           <div className="space-y-6">
             <Card className="border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
               <CardHeader>
-                <CardTitle as="h2">What is ready now</CardTitle>
+                <CardTitle as="h2">Control surface status</CardTitle>
                 <CardDescription>
-                  Immediate capabilities available from the current options baseline.
+                  Live state pulled from the background runtime and the credential vault.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
@@ -1709,7 +1898,7 @@ export function App() {
                     </p>
                     <p className="mt-1 text-sm text-content-secondary">
                       {onboardingState.completed
-                        ? 'Rerun the guided setup whenever you want to revisit the welcome flow and first-run tips.'
+                        ? 'Rerun the guided setup whenever you want to revisit the first-run flow and provider checks.'
                         : `Continue the guided setup from step ${onboardingState.lastStep + 1} before tuning the full dashboard.`}
                     </p>
                   </div>
@@ -1720,29 +1909,28 @@ export function App() {
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <ServerCog className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>
-                    Provider selection persists through `chrome.storage.local` with a real dropdown
-                    control.
+                    Active provider: <span className="font-medium text-content-primary">{selectedDefinition.label}</span> on model{' '}
+                    <span className="font-medium text-content-primary">{selectedConfig.model}</span>.
                   </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <KeyRound className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>
-                    Raw API keys are not written to extension storage; only masked metadata remains
-                    after save.
+                    Credential state: <span className="font-medium text-content-primary">{credentialStatusLabel}</span>. {credentialHelperMessage}
                   </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <RotateCw className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>
-                    The test action validates the selected provider and clears the key field after
-                    the check completes.
+                    Connection tests run through the background runtime and clear the visible input
+                    field after each attempt.
                   </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>
-                    Permission toggles now persist capability boundaries like screenshots,
-                    highlights, floating UI, and custom scripts.
+                    Permission toggles persist capability boundaries like screenshots, highlights,
+                    floating UI, and custom scripts.
                   </p>
                 </div>
               </CardContent>
@@ -1750,28 +1938,28 @@ export function App() {
 
             <Card className="border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
               <CardHeader>
-                <CardTitle as="h2">Next in the queue</CardTitle>
-                <CardDescription>Upcoming work already mapped in the tracker.</CardDescription>
+                <CardTitle as="h2">Runtime posture</CardTitle>
+                <CardDescription>How this configuration affects live automation right now.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
-                    <LaptopMinimal className="h-4 w-4 text-primary-600" />
-                    U-11 highlight overlay
+                    <ShieldCheck className="h-4 w-4 text-primary-600" />
+                    Vault session
                   </div>
-                  <p className="mt-1">
-                    Visual targeting overlays can inherit the same theme profile for a more
-                    consistent feedback layer.
-                  </p>
+                  <p className="mt-1">{vaultStatusDescription}</p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
                     <Sparkles className="h-4 w-4 text-primary-600" />
-                    U-12 action status overlay
+                    Scripting guardrail
                   </div>
                   <p className="mt-1">
-                    Transient run feedback can mirror the permission and theme decisions already
-                    stored in shared settings.
+                    {customScriptingEnabled
+                      ? 'Advanced mode and custom scripts are enabled. Treat workflow sources as fully trusted before running evaluate actions.'
+                      : advancedModeEnabled
+                        ? 'Advanced mode is available, but custom scripts are still off. Standard guarded actions remain available.'
+                        : 'Advanced mode is off. Custom scripts stay hidden and blocked by default.'}
                   </p>
                 </div>
               </CardContent>

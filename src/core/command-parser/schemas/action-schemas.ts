@@ -1,4 +1,5 @@
 import type { ActionType } from '@shared/types';
+import { SHIPPED_ACTION_TYPES } from '@shared/config';
 import { z } from 'zod';
 
 const NETWORK_RESOURCE_TYPES = [
@@ -12,45 +13,7 @@ const NETWORK_RESOURCE_TYPES = [
   'Other',
 ] as const;
 
-const ACTION_TYPES = [
-  'navigate',
-  'goBack',
-  'goForward',
-  'reload',
-  'click',
-  'doubleClick',
-  'rightClick',
-  'hover',
-  'focus',
-  'fill',
-  'type',
-  'clear',
-  'uploadFile',
-  'select',
-  'check',
-  'uncheck',
-  'press',
-  'hotkey',
-  'scroll',
-  'scrollIntoView',
-  'wait',
-  'waitForElement',
-  'waitForNavigation',
-  'waitForNetwork',
-  'extract',
-  'extractAll',
-  'screenshot',
-  'fullPageScreenshot',
-  'newTab',
-  'closeTab',
-  'switchTab',
-  'evaluate',
-  'emulateDevice',
-  'interceptNetwork',
-  'mockResponse',
-  'mockGeolocation',
-  'savePdf',
-] as const satisfies readonly ActionType[];
+const ACTION_TYPES = SHIPPED_ACTION_TYPES satisfies readonly ActionType[];
 
 const actionTypeSchema = z.enum(ACTION_TYPES);
 const networkResourceTypeSchema = z.enum(NETWORK_RESOURCE_TYPES);

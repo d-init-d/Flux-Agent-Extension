@@ -86,8 +86,8 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     expect(
       within(pageCard).getByText('workspace.notion.site/flux-agent-extension-roadmap'),
     ).toBeInTheDocument();
-    expect(within(pageCard).getByText('Ready to analyze')).toBeInTheDocument();
-    expect(screen.getByText('Live tab context')).toBeInTheDocument();
+    expect(within(pageCard).getByText('Ready for quick actions')).toBeInTheDocument();
+    expect(screen.getByText('Ready for live actions')).toBeInTheDocument();
   });
 
   it('renders exactly four quick action controls', async () => {
@@ -113,10 +113,8 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     renderApp();
 
     expect(await screen.findByText('Active tab unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Preview mode')).toBeInTheDocument();
-    expect(
-      screen.getByText('Quick actions stay available while the popup waits for tab access.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Quick actions need an accessible active tab before they can run.')).toBeInTheDocument();
+    expect(screen.getByText('The popup is waiting for an active tab it can access.')).toBeInTheDocument();
   });
 
   it('exposes the theme toggle and applies a persisted selection', async () => {
@@ -150,7 +148,7 @@ describe('Popup App (U-06 quick actions + page info)', () => {
 
     const cta = await screen.findByRole('button', { name: /open guided setup/i });
     expect(screen.getByText('Guided setup')).toBeInTheDocument();
-    expect(screen.getByText(/quick actions stay in preview mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/complete guided setup to unlock live quick actions/i)).toBeInTheDocument();
 
     await user.click(cta);
 
@@ -177,7 +175,21 @@ describe('Popup App (U-06 quick actions + page info)', () => {
   });
 
   it('defaults to guided setup when onboarding state loading fails', async () => {
-    vi.spyOn(chrome.storage.local, 'get').mockRejectedValueOnce(new Error('storage unavailable'));
+    vi.spyOn(chrome.storage.local, 'get').mockImplementation(async (keys: string | string[] | Record<string, unknown>) => {
+      if (keys === 'onboarding') {
+        throw new Error('storage unavailable');
+      }
+
+      if (typeof keys === 'string') {
+        return {};
+      }
+
+      if (Array.isArray(keys)) {
+        return Object.fromEntries(keys.map((key) => [key, undefined]));
+      }
+
+      return { ...keys };
+    });
 
     renderApp();
 

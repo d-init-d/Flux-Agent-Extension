@@ -15,15 +15,15 @@ Use the side panel to send natural-language requests, follow execution in a read
 What is available today:
 
 - Side panel workspace for chat, session switching, action-log review, recording, playback, workflow saving, and exports
-- Popup quick actions for page summary, data extraction, element inspection, and replay preview
+- Popup quick actions for page summary, data extraction, element inspection, and replaying the latest recorded run
 - Guided setup that keeps popup quick actions locked until onboarding is complete
-- Options page for provider selection, model configuration, connection testing, permission toggles, and appearance settings
+- Options page for provider selection, model configuration, encrypted-vault credential handling, connection testing, permission toggles, and appearance settings
 - Workflow library for saving recorded sessions and re-running them from the side panel
 
 Built for controlled automation, not hidden background behavior:
 
 - Capability toggles let you review what the extension is allowed to do before a run starts
-- Provider setup makes current key-handling limits explicit instead of hiding them
+- Provider setup keeps credential handling explicit through a local encrypted vault
 - Action history stays visible in the side panel so runs are easier to inspect
 
 Best fit for:
@@ -54,6 +54,6 @@ Best fit for:
 Keep the store listing aligned with the current build:
 
 - Do say the extension supports recording, playback, export, saved workflows, popup quick actions, onboarding, and options-based provider setup.
-- Do not claim final Chrome Web Store packaging, encrypted key persistence, or fully completed launch polish.
+- Do not claim Chrome Web Store approval or hidden background autonomy.
 - Do not imply autonomous background operation outside the visible extension surfaces.
-- When mentioning API keys, note that provider setup exists but raw keys are not presented as permanently stored plaintext in the UI.
+- When mentioning credentials, note that provider setup uses a local encrypted vault and that raw values are not left visible in the UI after save/validation.

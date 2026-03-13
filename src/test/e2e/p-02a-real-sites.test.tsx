@@ -648,7 +648,7 @@ describe('P-02a real-site E2E expansion', () => {
       ],
       expectedExecutedActions: [
         { id: 'github-fill-search', type: 'fill' },
-        { id: 'github-submit-search', type: 'press' },
+        { id: 'github-submit-search-focus', type: 'focus' },
         { id: 'github-open-repo', type: 'click' },
         { id: 'github-open-issues', type: 'click' },
       ],

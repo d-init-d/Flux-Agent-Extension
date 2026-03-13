@@ -2,6 +2,35 @@ import type { AIProviderType, AIMessage } from './ai';
 import type { SessionConfig } from './session';
 import type { SavedWorkflowCollection } from './workflow';
 
+export type VaultLockState = 'uninitialized' | 'locked' | 'unlocked';
+export type ProviderAuthKind = 'api-key' | 'oauth-token' | 'none';
+
+export interface ProviderCredentialRecord {
+  version: number;
+  provider: AIProviderType;
+  authKind: ProviderAuthKind;
+  maskedValue: string;
+  updatedAt: number;
+  validatedAt?: number;
+  stale?: boolean;
+}
+
+export interface VaultMetadata {
+  version: number;
+  initialized: boolean;
+  credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>>;
+  migratedFromLegacyAt?: number;
+}
+
+export interface VaultState {
+  version: number;
+  initialized: boolean;
+  lockState: VaultLockState;
+  unlockedAt?: number;
+  hasLegacySecrets: boolean;
+  credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>>;
+}
+
 /**
  * Extension settings stored in chrome.storage.local
  */
@@ -18,8 +47,8 @@ export interface StorageSchema {
   // Active provider
   activeProvider: AIProviderType;
 
-  // Encrypted API keys (encrypted with user's passphrase)
-  encryptedKeys: Record<AIProviderType, string>;
+  // Credential vault metadata. Ciphertext is stored separately by SecureStorage.
+  vault: VaultMetadata;
 
   // Conversation history (per session)
   conversationHistory: Record<string, AIMessage[]>;

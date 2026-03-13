@@ -70,11 +70,28 @@ function buildJsonExport(session: Session, exportedAt: Date): SessionRecordingJs
     recordingStatus: session.recording.status,
     startedAt: session.recording.startedAt,
     updatedAt: session.recording.updatedAt,
-    actions: session.recording.actions.map((entry) => ({
+    actions: session.recording.actions.map((entry) => annotateRecordedActionRisk({
       action: JSON.parse(JSON.stringify(entry.action)) as Action,
       timestamp: entry.timestamp,
+      riskLevel: entry.riskLevel,
+      riskReason: entry.riskReason,
     })),
   });
+}
+
+function annotateRecordedActionRisk(entry: RecordedSessionAction): RecordedSessionAction {
+  if (entry.riskLevel === 'high' || entry.action.type === 'evaluate') {
+    return {
+      ...entry,
+      riskLevel: 'high',
+      riskReason: entry.riskReason ?? 'Runs arbitrary page script during replay/export.',
+    };
+  }
+
+  return {
+    ...entry,
+    riskLevel: entry.riskLevel ?? 'standard',
+  };
 }
 
 function sanitizeRecordingExport(
@@ -280,6 +297,16 @@ async function runAction(page, recordedAction) {
       await locator.type(action.text, typeof action.delay === 'number' ? { delay: action.delay } : undefined);
       return;
     }
+    case 'evaluate':
+      console.warn('High-risk evaluate action in recording export', recordedAction.riskReason || 'Runs arbitrary page script during replay/export.');
+      await page.evaluate(
+        ({ script, args }) => {
+          const run = new Function('args', script);
+          return run(args);
+        },
+        { script: action.script, args: action.args || [] },
+      );
+      return;
     default:
       throw new Error('Unsupported recorded action type for Playwright export: ' + action.type);
   }
@@ -545,6 +572,16 @@ async function runAction(page, recordedAction) {
       await resolved.element.dispose();
       return;
     }
+    case 'evaluate':
+      console.warn('High-risk evaluate action in recording export', recordedAction.riskReason || 'Runs arbitrary page script during replay/export.');
+      await page.evaluate(
+        ({ script, args }) => {
+          const run = new Function('args', script);
+          return run(args);
+        },
+        { script: action.script, args: action.args || [] },
+      );
+      return;
     default:
       throw new Error('Unsupported recorded action type for Puppeteer export: ' + action.type);
   }

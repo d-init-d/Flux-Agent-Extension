@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Bolt, Eye, FileText, MousePointerClick, Sparkles, TimerReset } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  Bolt,
+  Eye,
+  FileText,
+  MousePointerClick,
+  Sparkles,
+  TimerReset,
+} from 'lucide-react';
 import {
   Badge,
   Button,
@@ -9,7 +16,9 @@ import {
   CardHeader,
   CardTitle,
 } from '@/ui/components';
+import { sendExtensionRequest } from '@/shared/extension-client';
 import { normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@/shared/storage/onboarding';
+import type { Session } from '@/shared/types';
 import { ThemeToggle } from '@/ui/theme';
 
 interface PageInfo {
@@ -21,6 +30,19 @@ interface PageInfo {
   isFallback: boolean;
 }
 
+type QuickActionId =
+  | 'summarize-page'
+  | 'extract-data'
+  | 'inspect-elements'
+  | 'replay-last-run';
+
+interface QuickActionDefinition {
+  id: QuickActionId;
+  label: string;
+  description: string;
+  icon: typeof FileText;
+}
+
 const DEFAULT_PAGE_INFO: PageInfo = {
   title: 'Waiting for active tab',
   url: 'No page URL available yet.',
@@ -30,32 +52,41 @@ const DEFAULT_PAGE_INFO: PageInfo = {
   isFallback: true,
 };
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS: QuickActionDefinition[] = [
   {
     id: 'summarize-page',
     label: 'Summarize page',
-    description: 'Generate a quick brief of visible content.',
+    description: 'Send a concise brief request to the side panel.',
     icon: FileText,
   },
   {
     id: 'extract-data',
     label: 'Extract data',
-    description: 'Capture key entities from the current view.',
+    description: 'Ask Flux to capture the most important structured data.',
     icon: Sparkles,
   },
   {
     id: 'inspect-elements',
     label: 'Inspect elements',
-    description: 'Review clickable targets and page structure.',
+    description: 'Review likely targets, controls, and next actions on the page.',
     icon: Eye,
   },
   {
     id: 'replay-last-run',
     label: 'Replay last run',
-    description: 'Rerun the previous automation recipe.',
+    description: 'Start playback for the latest recorded automation session.',
     icon: TimerReset,
   },
 ] as const;
+
+const QUICK_ACTION_PROMPTS: Record<Exclude<QuickActionId, 'replay-last-run'>, string> = {
+  'summarize-page':
+    'Summarize the current page. Focus on the visible content, the main sections, and the most actionable takeaways.',
+  'extract-data':
+    'Extract the most important structured data from the current page. Return concise entities, fields, and values that matter.',
+  'inspect-elements':
+    'Inspect the current page and identify the main interactive elements, forms, clickable targets, and likely next steps.',
+};
 
 function formatUrlParts(url?: string): Pick<PageInfo, 'url' | 'domain'> {
   if (!url) {
@@ -89,7 +120,7 @@ function mapTabToPageInfo(tab?: chrome.tabs.Tab): PageInfo {
   const urlParts = formatUrlParts(tab.url);
   const title = tab.title?.trim() || 'Untitled tab';
   const summary = tab.url
-    ? `Live context loaded from the active tab so popup actions can target the current page.`
+    ? 'Live context loaded from the active tab so popup actions can target the current page.'
     : 'Active tab found, but the page URL is not available yet.';
 
   return {
@@ -97,33 +128,99 @@ function mapTabToPageInfo(tab?: chrome.tabs.Tab): PageInfo {
     url: urlParts.url,
     domain: urlParts.domain,
     summary,
-    status: tab.status === 'loading' ? 'Loading tab context' : 'Ready to analyze',
+    status: tab.status === 'loading' ? 'Loading tab context' : 'Ready for quick actions',
     isFallback: false,
   };
 }
 
-async function getActiveTabPageInfo(): Promise<PageInfo> {
+function sortSessionsByActivity(sessions: Session[]): Session[] {
+  return [...sessions].sort((left, right) => right.lastActivityAt - left.lastActivityAt);
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
+}
+
+async function getActiveTabContext(): Promise<{
+  tab: chrome.tabs.Tab | null;
+  pageInfo: PageInfo;
+}> {
   if (typeof chrome === 'undefined' || !chrome.tabs?.query) {
-    return DEFAULT_PAGE_INFO;
+    return {
+      tab: null,
+      pageInfo: DEFAULT_PAGE_INFO,
+    };
   }
 
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    return mapTabToPageInfo(tabs[0]);
+    const activeTab = tabs[0] ?? null;
+
+    return {
+      tab: activeTab,
+      pageInfo: mapTabToPageInfo(activeTab ?? undefined),
+    };
   } catch {
     return {
-      ...DEFAULT_PAGE_INFO,
-      status: 'Active tab unavailable',
-      summary:
-        'The popup could not read the current tab context, so quick actions stay in preview mode.',
+      tab: null,
+      pageInfo: {
+        ...DEFAULT_PAGE_INFO,
+        status: 'Active tab unavailable',
+        summary:
+          'The popup could not read the current tab context, so live quick actions are temporarily unavailable.',
+      },
     };
   }
 }
 
+async function openSidePanelForTab(tab: chrome.tabs.Tab | null): Promise<void> {
+  if (!tab?.id || tab.windowId === undefined || !chrome.sidePanel?.open) {
+    return;
+  }
+
+  await chrome.sidePanel.open({
+    tabId: tab.id,
+    windowId: tab.windowId,
+  });
+}
+
 export function App() {
+  const [activeTab, setActiveTab] = useState<chrome.tabs.Tab | null>(null);
   const [pageInfo, setPageInfo] = useState<PageInfo>(DEFAULT_PAGE_INFO);
   const [isOnboardingLocked, setIsOnboardingLocked] = useState(true);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<QuickActionId | null>(null);
+  const [actionMessage, setActionMessage] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [replaySession, setReplaySession] = useState<Session | null>(null);
+  const [replayReason, setReplayReason] = useState('Checking recorded sessions...');
+
+  const refreshReplayAvailability = useCallback(async (tabId?: number): Promise<void> => {
+    try {
+      const response = await sendExtensionRequest('SESSION_LIST', undefined, 'popup');
+      const sessions = sortSessionsByActivity(response.sessions);
+      const sessionForCurrentTab =
+        tabId !== undefined
+          ? sessions.find(
+              (session) => session.targetTabId === tabId && session.recording.actions.length > 0,
+            ) ?? null
+          : null;
+      const nextReplaySession =
+        sessionForCurrentTab ?? sessions.find((session) => session.recording.actions.length > 0) ?? null;
+
+      setReplaySession(nextReplaySession);
+      setReplayReason(
+        nextReplaySession
+          ? tabId !== undefined && nextReplaySession.targetTabId !== tabId
+            ? 'Latest replayable session is on a different tab. Flux will open the side panel here and replay that session.'
+            : 'Latest recorded session is ready to replay.'
+          : 'No recorded automation run is available yet.',
+      );
+    } catch (error) {
+      setReplaySession(null);
+      setReplayReason(getErrorMessage(error, 'Recorded sessions could not be loaded.'));
+    }
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -132,6 +229,13 @@ export function App() {
       const onboardingState = normalizeOnboardingState(rawValue);
       setNeedsOnboarding(!onboardingState.completed);
       setIsOnboardingLocked(false);
+
+      if (onboardingState.completed) {
+        void refreshReplayAvailability(activeTab?.id);
+      } else {
+        setReplaySession(null);
+        setReplayReason('Complete guided setup before loading replay actions.');
+      }
     }
 
     function handleStorageChange(
@@ -145,10 +249,13 @@ export function App() {
       applyOnboardingState(changes[ONBOARDING_STORAGE_KEY]?.newValue);
     }
 
-    void getActiveTabPageInfo().then((nextPageInfo) => {
-      if (isActive) {
-        setPageInfo(nextPageInfo);
+    void getActiveTabContext().then(({ tab, pageInfo: nextPageInfo }) => {
+      if (!isActive) {
+        return;
       }
+
+      setActiveTab(tab);
+      setPageInfo(nextPageInfo);
     });
 
     void chrome.storage.local
@@ -164,6 +271,8 @@ export function App() {
         if (isActive) {
           setNeedsOnboarding(true);
           setIsOnboardingLocked(false);
+          setReplaySession(null);
+          setReplayReason('Complete guided setup before loading replay actions.');
         }
       });
 
@@ -173,7 +282,15 @@ export function App() {
       isActive = false;
       chrome.storage.onChanged.removeListener(handleStorageChange);
     };
-  }, []);
+  }, [activeTab?.id, refreshReplayAvailability]);
+
+  useEffect(() => {
+    if (needsOnboarding || isOnboardingLocked || !activeTab?.id) {
+      return;
+    }
+
+    void refreshReplayAvailability(activeTab.id);
+  }, [activeTab?.id, isOnboardingLocked, needsOnboarding, refreshReplayAvailability]);
 
   async function handleFinishSetup(): Promise<void> {
     if (typeof chrome === 'undefined' || !chrome.runtime?.openOptionsPage) {
@@ -203,7 +320,108 @@ export function App() {
     await chrome.runtime.openOptionsPage();
   }
 
-  const quickActionsDisabled = isOnboardingLocked || needsOnboarding;
+  async function ensureSessionForTab(tab: chrome.tabs.Tab): Promise<Session> {
+    const response = await sendExtensionRequest('SESSION_LIST', undefined, 'popup');
+    const sessions = sortSessionsByActivity(response.sessions);
+    const existingSession = sessions.find((session) => session.targetTabId === tab.id);
+
+    if (existingSession) {
+      return existingSession;
+    }
+
+    const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined, 'popup');
+    const provider = settingsSnapshot.activeProvider;
+    const configuredModel = settingsSnapshot.providers[provider]?.model;
+    const model =
+      typeof configuredModel === 'string' && configuredModel.trim().length > 0
+        ? configuredModel
+        : 'gpt-4o-mini';
+
+    const created = await sendExtensionRequest(
+      'SESSION_CREATE',
+      {
+        tabId: tab.id,
+        config: {
+          provider,
+          model,
+          name: tab.title?.trim() ? `${tab.title.trim()} quick action` : 'Quick action session',
+        },
+      },
+      'popup',
+    );
+
+    return created.session;
+  }
+
+  async function handleQuickAction(actionId: QuickActionId): Promise<void> {
+    if (needsOnboarding || isOnboardingLocked) {
+      return;
+    }
+
+    if (!activeTab?.id) {
+      setActionError('Open a tab first so Flux has a live page context to target.');
+      setActionMessage('');
+      return;
+    }
+
+    if (pageInfo.isFallback) {
+      setActionError('The active tab context is unavailable right now. Try again after the page is accessible.');
+      setActionMessage('');
+      return;
+    }
+
+    setPendingActionId(actionId);
+    setActionError('');
+    setActionMessage('');
+
+    try {
+      await openSidePanelForTab(activeTab);
+
+      if (actionId === 'replay-last-run') {
+        const latestReplaySession = replaySession ?? null;
+        if (!latestReplaySession) {
+          throw new Error('No recorded automation run is available to replay yet.');
+        }
+
+        await sendExtensionRequest(
+          'SESSION_PLAYBACK_START',
+          {
+            sessionId: latestReplaySession.config.id,
+            speed: latestReplaySession.playback.speed,
+          },
+          'popup',
+        );
+
+        setActionMessage('Started playback for the latest recorded automation session in the side panel.');
+      } else {
+        const session = await ensureSessionForTab(activeTab);
+        await sendExtensionRequest(
+          'SESSION_SEND_MESSAGE',
+          {
+            sessionId: session.config.id,
+            message: QUICK_ACTION_PROMPTS[actionId],
+          },
+          'popup',
+        );
+
+        const selectedAction = QUICK_ACTIONS.find((action) => action.id === actionId);
+        setActionMessage(
+          selectedAction
+            ? `${selectedAction.label} was sent to the side panel for the current tab.`
+            : 'Quick action started in the side panel.',
+        );
+      }
+
+      await refreshReplayAvailability(activeTab.id);
+    } catch (error) {
+      setActionError(getErrorMessage(error, 'Quick action failed.'));
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
+  const tabContextUnavailable = !activeTab?.id || pageInfo.isFallback;
+  const baseQuickActionsDisabled = isOnboardingLocked || needsOnboarding || tabContextUnavailable;
 
   return (
     <div
@@ -323,6 +541,8 @@ export function App() {
           <div className="grid grid-cols-2 gap-3" data-testid="popup-quick-actions">
             {QUICK_ACTIONS.map((action) => {
               const Icon = action.icon;
+              const isReplayDisabled = action.id === 'replay-last-run' && replaySession === null;
+              const disabled = baseQuickActionsDisabled || isReplayDisabled || pendingActionId !== null;
 
               return (
                 <Button
@@ -330,8 +550,12 @@ export function App() {
                   type="button"
                   variant="secondary"
                   size="lg"
-                  disabled={quickActionsDisabled}
+                  loading={pendingActionId === action.id}
+                  disabled={disabled}
                   className="group flex h-full min-h-28 flex-col items-start justify-start rounded-2xl border border-[rgb(var(--color-border-default))] px-3 py-3 text-left shadow-sm"
+                  onClick={() => {
+                    void handleQuickAction(action.id);
+                  }}
                 >
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgb(var(--color-primary-50))] text-[rgb(var(--color-primary-700))] transition-transform duration-150 group-hover:-translate-y-0.5">
                     <Icon className="h-4 w-4" aria-hidden="true" />
@@ -347,11 +571,19 @@ export function App() {
             })}
           </div>
 
-          {quickActionsDisabled ? (
+          {needsOnboarding ? (
             <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              Quick actions stay in preview mode until guided setup is complete.
+              Complete guided setup to unlock live quick actions for the current tab.
             </p>
-          ) : null}
+          ) : tabContextUnavailable ? (
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              Quick actions need an accessible active tab before they can run.
+            </p>
+          ) : replaySession === null ? (
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">{replayReason}</p>
+          ) : (
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">{replayReason}</p>
+          )}
         </section>
       </main>
 
@@ -359,18 +591,30 @@ export function App() {
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-primary))] px-3 py-2">
           <div className="min-w-0">
             <p className="text-xs font-semibold tracking-tight">
-              {quickActionsDisabled
+              {needsOnboarding
                 ? 'Guided setup required'
-                : pageInfo.isFallback
-                  ? 'Preview mode'
-                  : 'Live tab context'}
+                : pendingActionId
+                  ? 'Launching quick action'
+                  : actionError
+                    ? 'Action failed'
+                    : tabContextUnavailable
+                      ? 'Active tab unavailable'
+                      : actionMessage
+                        ? 'Side panel launched'
+                        : 'Ready for live actions'}
             </p>
             <p className="truncate text-xs text-[rgb(var(--color-text-secondary))]">
-              {quickActionsDisabled
+              {needsOnboarding
                 ? 'Finish guided setup to unlock quick actions for the current tab.'
-                : pageInfo.isFallback
-                  ? 'Quick actions stay available while the popup waits for tab access.'
-                  : 'Popup is synced to the active tab. Key-based providers still require a fresh API key entry until secure persistence ships.'}
+                : pendingActionId
+                  ? 'Flux is opening the side panel and handing off the request.'
+                  : actionError
+                    ? actionError
+                    : tabContextUnavailable
+                      ? 'The popup is waiting for an active tab it can access.'
+                      : actionMessage
+                        ? actionMessage
+                        : 'Popup quick actions now create or reuse sessions and hand work to the side panel.'}
             </p>
           </div>
 

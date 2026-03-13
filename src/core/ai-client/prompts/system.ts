@@ -15,6 +15,7 @@
  */
 
 import type { ActionType } from '@shared/types';
+import { SHIPPED_ACTION_TYPES } from '@shared/config';
 
 // ---------------------------------------------------------------------------
 // System Prompt Components
@@ -264,42 +265,4 @@ export function getCompactSystemPrompt(): string {
 /**
  * All supported action types — exported for validation.
  */
-export const SUPPORTED_ACTION_TYPES: readonly ActionType[] = [
-  'navigate',
-  'goBack',
-  'goForward',
-  'reload',
-  'click',
-  'doubleClick',
-  'rightClick',
-  'hover',
-  'focus',
-  'fill',
-  'type',
-  'clear',
-  'uploadFile',
-  'select',
-  'check',
-  'uncheck',
-  'press',
-  'hotkey',
-  'scroll',
-  'scrollIntoView',
-  'wait',
-  'waitForElement',
-  'waitForNavigation',
-  'waitForNetwork',
-  'extract',
-  'extractAll',
-  'screenshot',
-  'fullPageScreenshot',
-  'newTab',
-  'closeTab',
-  'switchTab',
-  'evaluate',
-  'emulateDevice',
-  'interceptNetwork',
-  'mockResponse',
-  'mockGeolocation',
-  'savePdf',
-] as const;
+export const SUPPORTED_ACTION_TYPES: readonly ActionType[] = SHIPPED_ACTION_TYPES;

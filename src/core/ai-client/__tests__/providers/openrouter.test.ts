@@ -1,5 +1,5 @@
 import type { AIModelConfig, AIStreamChunk } from '@shared/types';
-import { ErrorCode, ExtensionError } from '@shared/errors';
+import { ErrorCode } from '@shared/errors';
 import { OpenRouterProvider } from '../../providers/openrouter';
 
 function formatSSEData(data: unknown): string {

@@ -1,7 +1,7 @@
 # Flux Agent Privacy Policy
 
-Last updated: 2026-03-12  
-Effective date: 2026-03-12
+Last updated: 2026-03-13
+Effective date: 2026-03-13
 
 This policy describes how the Flux Agent Chrome extension handles data.
 
@@ -15,31 +15,36 @@ Depending on the feature you use, Flux Agent may process:
 
 - page URLs, titles, visible page context, links, forms, DOM summaries, and frame/tab context
 - prompts, chat messages, and automation instructions
-- provider settings such as model choice and endpoint
-- saved workflows and recorded actions
-- local settings such as theme, language, and runtime toggles
-- screenshots when a screenshot-related feature is enabled or triggered
-- exported files you explicitly ask the extension to create or download
+- provider configuration such as model choice, endpoint, and masked credential metadata
+- encrypted provider credentials that you explicitly store in the local credential vault
+- saved workflows, recordings, exports, and action history
+- local settings such as theme, language, onboarding state, and runtime toggles
+- screenshots when a screenshot-related feature is enabled or explicitly triggered
 
 ## Where data is processed
 
 ### Local processing
-The extension stores all settings and state locally in Chrome extension storage, including settings, onboarding state, provider metadata, and saved workflows.
+
+Flux Agent stores extension state locally in Chrome extension storage. This includes settings, onboarding state, provider configuration, saved workflows, and vault metadata.
+
+Stored provider credentials are encrypted at rest in local extension storage. The vault is unlocked with a user passphrase and the unlocked key material remains only in memory for the current browser session.
 
 ### Third-party provider processing
-If you use an AI-backed feature, Flux Agent may send relevant prompt and page-context data to the provider you configure, such as OpenAI, Anthropic, Google Gemini, OpenRouter, a custom HTTPS endpoint, or a local Ollama server on loopback.
+
+If you use an AI-backed feature, Flux Agent may send prompt and page-context data to the provider you configure, such as OpenAI, Anthropic, Google Gemini, OpenRouter, a custom HTTPS endpoint, or a local Ollama server on loopback.
 
 Those providers process data under their own terms and privacy policies.
 
-## API Key Handling
+## Credential handling
 
-- Raw API keys entered in the Options page are used only for authentication and cleared from the UI after save or validation
-- Only masked metadata (e.g., that a key was configured and when) is stored locally
-- Keys are never transmitted to any party other than the configured provider
+- Raw provider credentials entered in the options page are cleared from the UI after save or validation
+- Long-lived provider credentials are stored in the encrypted local vault only when you explicitly save them
+- Vault metadata may retain masked information such as provider, masked value, and validation timestamps
+- Credentials are sent only to the configured provider or endpoint when required to fulfill the feature you requested
 
 ## Broad site access
 
-The extension requests `"<all_urls>"` host access because Flux Agent is designed as a general browser automation tool rather than a single-site extension. Content scripts are configured on `"<all_urls>"`, run in all frames, and can inspect and act on page context during automation flows.
+The extension requests `"<all_urls>"` host access because Flux Agent is a general browser automation tool rather than a single-site helper. Content scripts run on pages you choose to use with the extension, in all frames, so automation flows can inspect context and act on the page.
 
 ## Data sent off device
 
@@ -52,7 +57,7 @@ Examples include:
 - selected page context, such as URL, title, visible text, DOM summaries, links, and forms
 - screenshots, if screenshot sharing is enabled or a screenshot feature is used
 
-Flux Agent does not claim that all sensitive data is fully removed before provider transmission. You should only use the extension on pages and with data you are authorized to process.
+Flux Agent does not claim that all sensitive page data is automatically removed before provider transmission. You should only use the extension on pages and with data you are authorized to process.
 
 ## Data sharing and selling
 
@@ -62,10 +67,11 @@ Flux Agent does not claim that all sensitive data is fully removed before provid
 
 ## Retention
 
-Flux Agent does not operate a publisher-hosted backend for extension telemetry or cloud sync.
+Flux Agent does not operate a publisher-hosted backend for telemetry or cloud sync.
 
-- Masked provider-key metadata remains locally until overwritten or removed
-- Saved workflows remain locally until deleted or the extension is removed
+- Local settings, workflows, recordings, and chat/session state remain in extension storage until overwritten, deleted, or the extension is removed
+- Encrypted credential vault records remain locally until replaced or deleted
+- Vault metadata may remain until a credential is rotated or removed
 - Exported files remain wherever you save them on your device
 - Third-party providers may retain submitted data under their own policies
 
@@ -73,11 +79,13 @@ Flux Agent does not operate a publisher-hosted backend for extension telemetry o
 
 You can:
 
-- Choose which provider or endpoint to use
-- Avoid remote providers by using local Ollama where suitable
-- Keep screenshot sharing off by default
-- Leave high-risk custom-script execution disabled
-- Remove the extension to clear extension-managed local storage from your browser environment
+- choose which provider or endpoint to use
+- avoid remote providers by using local Ollama where suitable
+- keep screenshot sharing off by default
+- leave Advanced mode and custom-script execution disabled
+- lock the credential vault for the current browser session
+- remove stored credentials and workflows from local extension storage
+- remove the extension to clear extension-managed local storage from your browser environment
 
 ## GDPR-oriented note
 
@@ -89,7 +97,7 @@ Flux Agent is not directed at children under the age of 13. We do not knowingly 
 
 ## International Data Transfers
 
-When you use a third-party AI provider, your data may be processed in countries where that provider operates. By configuring and using a remote provider, you acknowledge that your data will be transferred to and processed by that provider according to their privacy policy.
+When you use a third-party AI provider, your data may be processed in countries where that provider operates. By configuring and using a remote provider, you acknowledge that your data will be transferred to and processed by that provider according to that provider's privacy policy.
 
 ## Changes to This Policy
 

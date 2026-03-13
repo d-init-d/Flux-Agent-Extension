@@ -6,7 +6,7 @@
  * runtime level changes, and output format.
  */
 
-import { Logger, type LogLevel } from '../logger';
+import { Logger } from '../logger';
 
 describe('Logger', () => {
   // Spy on all console methods before each test

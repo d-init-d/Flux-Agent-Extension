@@ -19,6 +19,8 @@ function mapEventEntry(entry: ActionLogEventEntry): ActionLogEntry {
     detail: entry.detail,
     timeLabel: formatActionTimeLabel(entry.timestamp),
     status: entry.status,
+    riskLevel: entry.riskLevel,
+    riskReason: entry.riskReason,
   };
 }
 

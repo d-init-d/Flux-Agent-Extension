@@ -366,8 +366,10 @@ export class ClaudeProvider extends BaseProvider {
    */
   private extractTextFromContent(content: AIMessageContent[]): string {
     return content
-      .filter((part) => part.type === 'text' && part.text)
-      .map((part) => part.text!)
+      .filter((part): part is AIMessageContent & { type: 'text'; text: string } =>
+        part.type === 'text' && typeof part.text === 'string',
+      )
+      .map((part) => part.text)
       .join('\n');
   }
 

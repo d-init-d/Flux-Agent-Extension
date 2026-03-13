@@ -6,6 +6,8 @@ export interface ActionLogEntry {
   detail: string;
   timeLabel: string;
   status: ActionLogStatus;
+  riskLevel?: 'standard' | 'high';
+  riskReason?: string;
 }
 
 export const MOCK_ACTION_LOG: ActionLogEntry[] = [

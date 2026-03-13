@@ -8,15 +8,7 @@ import {
   Sparkles,
   WandSparkles,
 } from 'lucide-react';
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@ui/components';
+import { Badge, Button, Card, CardContent } from '@ui/components';
 import { ONBOARDING_STEP_COUNT } from '@shared/storage/onboarding';
 import type { ExtensionSettings } from '@shared/types';
 
@@ -53,7 +45,7 @@ const CAN_DO = [
 const CANNOT_DO = [
   'Store raw provider keys in plaintext inside extension storage.',
   'Bypass blocked domains or hidden browser permissions on its own.',
-  'Run custom scripts unless you explicitly enable that capability.',
+  'Run custom scripts unless you explicitly enable Advanced mode and that capability.',
   'Guarantee actions on sites that block extension or debugger access.',
 ];
 
@@ -284,9 +276,8 @@ export function OnboardingFlow({
                     </p>
                     {providerRequiresApiKey ? (
                       <p className="mt-3 text-sm leading-6 text-content-secondary">
-                        Flux still clears raw API keys after save and test. You will re-enter a key
-                        when validating or running key-based providers until secure encrypted key
-                        persistence ships.
+                        Key-based providers now store credentials in the encrypted vault. Unlock the
+                        vault once per browser session before validating or running those providers.
                       </p>
                     ) : null}
                   </div>

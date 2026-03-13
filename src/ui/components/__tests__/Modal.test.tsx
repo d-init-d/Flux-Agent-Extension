@@ -88,9 +88,7 @@ describe('Modal', () => {
   });
 
   it('does not render footer section when no footer prop', () => {
-    const { container } = render(<Modal {...defaultProps} />);
-    // The footer has a border-t class, check it's not present
-    const footerDivs = container.querySelectorAll('.border-t');
+    render(<Modal {...defaultProps} />);
     // In portal, check document.body
     const portalFooters = document.body.querySelectorAll('.border-t.border-border');
     expect(portalFooters.length).toBe(0);
