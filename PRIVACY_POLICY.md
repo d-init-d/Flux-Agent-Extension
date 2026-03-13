@@ -97,4 +97,4 @@ We may update this Privacy Policy from time to time. Changes will be reflected i
 
 ## Contact
 
-- Privacy contact: `privacy@fluxagent.dev`
+- Privacy contact: `d.init.d.contact@gmail.com`

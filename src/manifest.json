@@ -10,10 +10,7 @@
     "storage",
     "sidePanel",
     "debugger",
-    "cookies",
     "webNavigation",
-    "offscreen",
-    "notifications",
     "downloads"
   ],
   "host_permissions": ["<all_urls>"],
