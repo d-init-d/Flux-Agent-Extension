@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Use Disclosure — Flux Agent</title>
+  <style>
+    :root {
+      --bg: #f5f5f0;
+      --text: #1a1a1a;
+      --accent: #1b3a1b;
+      --muted: #6b6b6b;
+      --border: #d4d4c8;
+      --card-bg: #ffffff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 3rem 1.5rem;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .back-link {
+      display: inline-block;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+    .back-link:hover { background: rgba(27, 58, 27, 0.08); }
+    .last-updated {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 2rem;
+    }
+    h1 span { color: var(--accent); }
+    h2 {
+      font-size: 1.4rem;
+      color: var(--accent);
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 {
+      font-size: 1.15rem;
+      color: var(--text);
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    p, li {
+      color: var(--text);
+      margin-bottom: 0.5rem;
+    }
+    ul {
+      margin: 0.5rem 0 1rem 1.5rem;
+    }
+    li {
+      margin-bottom: 0.35rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: rgba(27, 58, 27, 0.08);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background: rgba(0, 0, 0, 0.02);
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    code {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+      background: rgba(0, 0, 0, 0.06);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+    }
+    .section {
+      margin-bottom: 2rem;
+    }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    footer a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <a href="index.html" class="back-link">&larr; Back to Flux Agent</a>
+
+  <p class="last-updated">Last updated: 2026-03-12</p>
+
+  <h1>Flux Agent — Data Use <span>Disclosure</span></h1>
+
+  <p>This document describes how Flux Agent collects, uses, and shares user data, in accordance with Chrome Web Store data disclosure requirements.</p>
+
+  <section class="section">
+    <h2>Summary</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Question</th>
+          <th>Answer</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Sold to third parties</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td>Used for personalized advertising</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td>Used for credit, lending, or insurance decisions</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td>Used to train publisher AI/ML models</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td>Shared outside the extension</td>
+          <td>Only to the user-configured AI provider, to fulfill the requested feature</td>
+        </tr>
+        <tr>
+          <td>Remote data transfer</td>
+          <td>Yes, when using a remote AI provider</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="section">
+    <h2>Data categories</h2>
+
+    <h3>Website content</h3>
+    <ul>
+      <li><strong>Includes:</strong> page URL, title, visible text/context, DOM summaries, links, forms, frame/tab context, and optional screenshots.</li>
+      <li><strong>Purpose:</strong> understand the current page and execute the requested automation.</li>
+      <li><strong>Storage/transfer:</strong> processed locally; sent to the configured AI provider when needed for inference.</li>
+      <li><strong>Retention:</strong> session/runtime dependent locally; provider policy if sent remotely.</li>
+      <li>Not sold, not used for advertising or model training.</li>
+    </ul>
+
+    <h3>User prompts and chat content</h3>
+    <ul>
+      <li><strong>Includes:</strong> prompts, instructions, chat messages, and recent message context.</li>
+      <li><strong>Purpose:</strong> generate plans, responses, and automation steps.</li>
+      <li><strong>Storage/transfer:</strong> local runtime/session state; sent to the configured AI provider when needed.</li>
+      <li><strong>Retention:</strong> session/runtime dependent locally; provider policy if sent remotely.</li>
+      <li>Not sold, not used for advertising or model training.</li>
+    </ul>
+
+    <h3>Settings and configuration</h3>
+    <ul>
+      <li><strong>Includes:</strong> theme, language, provider choice, model, endpoint, onboarding state, and capability toggles.</li>
+      <li><strong>Purpose:</strong> configure and persist the extension experience.</li>
+      <li><strong>Storage/transfer:</strong> stored locally in extension storage; endpoint values are used when making provider requests.</li>
+      <li><strong>Retention:</strong> until changed, cleared, or extension removal.</li>
+      <li>Not sold, not used for advertising or model training.</li>
+    </ul>
+
+    <h3>Provider authentication material</h3>
+    <ul>
+      <li><strong>Includes:</strong> raw provider API keys entered by the user and masked metadata retained after save/test.</li>
+      <li><strong>Purpose:</strong> authenticate requests to the chosen provider.</li>
+      <li><strong>Storage/transfer:</strong> raw key is used transiently during save/test/validation; masked metadata is stored locally.</li>
+      <li><strong>Retention:</strong> raw key is cleared after save/test in the current options flow; masked metadata remains until overwritten or removed.</li>
+      <li>Not sold, not used for advertising or model training.</li>
+    </ul>
+
+    <h3>Saved workflows and exports</h3>
+    <ul>
+      <li><strong>Includes:</strong> recorded workflow steps, saved workflow metadata, PDFs, and exported artifacts.</li>
+      <li><strong>Purpose:</strong> let users save, replay, export, and download results.</li>
+      <li><strong>Storage/transfer:</strong> saved locally in extension storage or the local Downloads path.</li>
+      <li><strong>Retention:</strong> until deleted locally or extension removal.</li>
+      <li>Not sold, not used for advertising or model training.</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>Third-party recipients</h2>
+    <p>Depending on user configuration, data may be sent to:</p>
+    <ul>
+      <li>OpenAI</li>
+      <li>Anthropic</li>
+      <li>Google Gemini</li>
+      <li>OpenRouter</li>
+      <li>a user-specified custom HTTPS endpoint</li>
+      <li>a local Ollama server on loopback</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>Permissions</h2>
+    <p>The following manifest permissions support core extension functionality:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Permission</th>
+          <th>Purpose</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>&lt;all_urls&gt;</code></td>
+          <td>General browser automation across any website</td>
+        </tr>
+        <tr>
+          <td><code>cookies</code></td>
+          <td>Cookie management for automation workflows</td>
+        </tr>
+        <tr>
+          <td><code>offscreen</code></td>
+          <td>Background processing for long-running tasks</td>
+        </tr>
+        <tr>
+          <td><code>notifications</code></td>
+          <td>User notifications for task completion</td>
+        </tr>
+        <tr>
+          <td><code>debugger</code></td>
+          <td>Chrome DevTools Protocol access for device emulation, network interception, and geolocation mocking</td>
+        </tr>
+        <tr>
+          <td><code>storage</code></td>
+          <td>Local settings and workflow persistence</td>
+        </tr>
+        <tr>
+          <td><code>tabs</code></td>
+          <td>Tab management and navigation</td>
+        </tr>
+        <tr>
+          <td><code>activeTab</code></td>
+          <td>Access to the currently active tab for automation</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    &copy; 2026 Flux Agent &middot; Contact: <a href="mailto:d.init.d.contact@gmail.com">d.init.d.contact@gmail.com</a>
+  </footer>
+</body>
+</html>

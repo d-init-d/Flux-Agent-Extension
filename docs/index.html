@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flux Agent</title>
+  <style>
+    :root {
+      --bg: #f5f5f0;
+      --text: #1a1a1a;
+      --accent: #1b3a1b;
+      --muted: #6b6b6b;
+      --border: #d4d4c8;
+      --card-bg: #ffffff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 3rem 1.5rem;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
+    }
+    h1 span { color: var(--accent); }
+    .tagline {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin-bottom: 2.5rem;
+    }
+    nav {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    nav a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      transition: background 0.2s;
+    }
+    nav a:hover { background: rgba(27, 58, 27, 0.08); }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+    .card p { color: var(--muted); font-size: 0.95rem; }
+    footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Flux<span>Agent</span></h1>
+  <p class="tagline">AI-powered browser automation for Chrome</p>
+
+  <nav>
+    <a href="privacy-policy.html">Privacy Policy</a>
+    <a href="data-use-disclosure.html">Data Use Disclosure</a>
+    <a href="https://github.com/d-init-d/Flux-Agent-Extension">GitHub</a>
+  </nav>
+
+  <div class="card">
+    <h2>What is Flux Agent?</h2>
+    <p>A Chrome extension that lets you control your browser with natural language. Record workflows, replay actions, and automate repetitive tasks — all from a clean side panel interface.</p>
+  </div>
+
+  <div class="card">
+    <h2>Privacy First</h2>
+    <p>Your data stays on your device. Flux Agent only sends data to AI providers you explicitly configure. No tracking, no ads, no data selling.</p>
+  </div>
+
+  <div class="card">
+    <h2>Open Source</h2>
+    <p>The full source code is available on GitHub. Review every line of code that runs in your browser.</p>
+  </div>
+
+  <footer>
+    &copy; 2026 Flux Agent &middot; Contact: d.init.d.contact@gmail.com
+  </footer>
+</body>
+</html>
