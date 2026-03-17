@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import * as providerLoader from '../../core/ai-client/provider-loader';
+import { importCodexAccountArtifact } from '../../core/auth/codex-account-import';
 import { PROVIDER_LOOKUP, createDefaultProviderConfigs } from '../../shared/config';
 import type {
   AIProviderType,
@@ -140,14 +141,102 @@ function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountReco
   };
 }
 
-function createNotImplementedResponse<T>(message: string, details?: unknown): ExtensionResponse<T> {
-  return {
-    success: false,
-    error: {
-      code: 'NOT_IMPLEMENTED',
-      message,
-      details,
+async function upsertImportedCodexAccount(
+  state: Awaited<ReturnType<typeof getSettingsState>>,
+  request: RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START'] | RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'],
+  options?: { validatedAt?: number },
+): Promise<{
+  vault: VaultState;
+  account: ProviderAccountRecord;
+  imported: Awaited<ReturnType<typeof importCodexAccountArtifact>>;
+}> {
+  if (!request.artifact) {
+    throw new Error('Codex account import requires an artifact');
+  }
+
+  const imported = await importCodexAccountArtifact(request.artifact, {
+    label: 'label' in request ? request.label : undefined,
+  });
+  const currentAccounts = [...(state.vault.accounts.codex ?? [])].map(cloneAccountRecord);
+  const existingIndex = currentAccounts.findIndex(
+    (account) => account.accountId === imported.derived.accountId,
+  );
+  const existingAccount = existingIndex >= 0 ? currentAccounts[existingIndex] : undefined;
+  const isActive = existingAccount?.isActive ?? !state.vault.activeAccounts.codex;
+  const now = options?.validatedAt ?? Date.now();
+  const nextAccount: ProviderAccountRecord = {
+    version: 1,
+    provider: 'codex',
+    providerFamily: 'chatgpt-account',
+    authFamily: 'account-backed',
+    accountId: imported.derived.accountId,
+    label: existingAccount?.label ?? imported.derived.label,
+    maskedIdentifier: imported.derived.maskedIdentifier,
+    credentialKey: `account-artifact::codex::${imported.derived.accountId}`,
+    status: isActive ? 'active' : 'available',
+    isActive,
+    updatedAt: now,
+    validatedAt: options?.validatedAt,
+    stale: false,
+    metadata: {
+      ...(existingAccount?.metadata ? { ...existingAccount.metadata } : {}),
+      ...(imported.metadata ? { ...imported.metadata } : {}),
+      lastErrorAt: undefined,
+      lastErrorCode: undefined,
     },
+  };
+
+  if (existingIndex >= 0) {
+    currentAccounts[existingIndex] = nextAccount;
+  } else {
+    currentAccounts.push(nextAccount);
+  }
+
+  const nextVault: VaultState = {
+    ...state.vault,
+    initialized: true,
+    lockState: 'unlocked',
+    unlockedAt: state.vault.unlockedAt ?? now,
+    credentials: {
+      ...state.vault.credentials,
+      codex: {
+        ...buildCredentialRecord('codex', imported.derived.credentialMaskedValue, imported.authKind),
+        updatedAt: now,
+        validatedAt: options?.validatedAt,
+        stale: false,
+      },
+    },
+    accounts: {
+      ...state.vault.accounts,
+      codex: currentAccounts.map((account) => ({
+        ...account,
+        isActive: isActive ? account.accountId === imported.derived.accountId : account.isActive,
+        status:
+          isActive && account.accountId === imported.derived.accountId
+            ? 'active'
+            : account.status === 'active'
+              ? 'available'
+              : account.status,
+      })),
+    },
+    activeAccounts: {
+      ...state.vault.activeAccounts,
+      ...(isActive ? { codex: imported.derived.accountId } : {}),
+    },
+  };
+  await saveVault(nextVault);
+
+  const savedAccount = nextVault.accounts.codex?.find(
+    (account) => account.accountId === imported.derived.accountId,
+  );
+  if (!savedAccount) {
+    throw new Error('Failed to persist imported codex account');
+  }
+
+  return {
+    vault: nextVault,
+    account: savedAccount,
+    imported,
   };
 }
 
@@ -515,10 +604,18 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        return createNotImplementedResponse(
-          `Account-backed auth connect is not implemented for ${request.provider} yet.`,
-          { provider: request.provider, transport: request.transport },
-        );
+        if (request.transport !== 'artifact-import') {
+          throw new Error(`Unsupported account auth transport ${request.transport}`);
+        }
+
+        const { imported } = await upsertImportedCodexAccount(state, request);
+        return success({
+          provider: request.provider,
+          transport: request.transport,
+          accepted: true,
+          nextStep: 'validate',
+          message: `Imported ${imported.derived.label}. Run validation to confirm the persisted auth state.`,
+        });
       }
       case 'ACCOUNT_AUTH_VALIDATE': {
         const request = payload as RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'];
@@ -526,10 +623,66 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        return createNotImplementedResponse(
-          `Account-backed auth validation is not implemented for ${request.provider} yet.`,
-          { provider: request.provider, accountId: request.accountId },
-        );
+        if (request.transport && request.transport !== 'artifact-import') {
+          throw new Error(`Unsupported account auth transport ${request.transport}`);
+        }
+
+        if (request.artifact) {
+          const { vault, account } = await upsertImportedCodexAccount(state, request, {
+            validatedAt: Date.now(),
+          });
+          return success({
+            provider: request.provider,
+            valid: true,
+            account,
+            checkedAt: Date.now(),
+            message: `Validated artifact shape for ${account.label}. Token exchange remains deferred.`,
+            vault,
+          });
+        }
+
+        const accounts = [...(state.vault.accounts[request.provider] ?? [])].map(cloneAccountRecord);
+        const target = request.accountId
+          ? accounts.find((account) => account.accountId === request.accountId)
+          : undefined;
+        if (!target) {
+          throw new Error(`Account ${request.accountId ?? '<missing>'} was not found`);
+        }
+
+        const now = Date.now();
+        target.validatedAt = now;
+        target.stale = false;
+        target.updatedAt = now;
+        const nextVault = {
+          ...state.vault,
+          credentials: {
+            ...state.vault.credentials,
+            [request.provider]: state.vault.credentials[request.provider]
+              ? {
+                  ...state.vault.credentials[request.provider],
+                  validatedAt: now,
+                  stale: false,
+                }
+              : undefined,
+          },
+          accounts: {
+            ...state.vault.accounts,
+            [request.provider]: accounts,
+          },
+        };
+        if (!nextVault.credentials[request.provider]) {
+          delete nextVault.credentials[request.provider];
+        }
+        await saveVault(nextVault);
+
+        return success({
+          provider: request.provider,
+          valid: true,
+          account: target,
+          checkedAt: now,
+          message: `Validated artifact shape for ${target.label}. Token exchange remains deferred.`,
+          vault: nextVault,
+        });
       }
       case 'ACCOUNT_ACTIVATE': {
         const request = payload as RequestPayloadMap['ACCOUNT_ACTIVATE'];

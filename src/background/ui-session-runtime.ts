@@ -72,6 +72,7 @@ import { GeolocationMockManager, type IGeolocationMockManager } from './geolocat
 import { FileUploadManager, type IFileUploadManager } from './file-upload-manager';
 import { buildSessionRecordingExportArtifact } from './session-recording-export';
 import { CredentialVault } from './credential-vault';
+import { importCodexAccountArtifact } from '@core/auth/codex-account-import';
 
 const STREAM_CHUNK_INTERVAL_MS = 20;
 const PLAYBACK_SPEEDS: readonly SessionPlaybackSpeed[] = [0.5, 1, 2];
@@ -1184,14 +1185,50 @@ export class UISessionRuntime {
       );
     }
 
-    return this.createNotImplementedResponse(
-      'ACCOUNT_AUTH_CONNECT_START',
-      `Account-backed auth connect is not implemented for ${payload.provider} yet. Artifact import plumbing lands in Tasks 6-7.`,
-      {
+    this.assertAccountArtifactTransport(payload.transport);
+    if (!payload.artifact) {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        'Codex account import requires an auth artifact payload',
+        true,
+      );
+    }
+
+    const imported = await importCodexAccountArtifact(payload.artifact, { label: payload.label });
+    const existingAccount = await this.credentialVault.getAccount(
+      payload.provider,
+      imported.derived.accountId,
+    );
+    const vault = await this.credentialVault.getState();
+    const isActive = existingAccount?.isActive ?? !vault.activeAccounts[payload.provider];
+
+    await this.credentialVault.saveAccount(payload.provider, {
+      accountId: imported.derived.accountId,
+      label: imported.derived.label,
+      maskedIdentifier: imported.derived.maskedIdentifier,
+      credentialMaskedValue: imported.derived.credentialMaskedValue,
+      status: isActive ? 'active' : 'available',
+      isActive,
+      stale: false,
+      metadata: imported.metadata,
+      artifact: {
+        authKind: imported.authKind,
+        value: imported.storageValue,
+        filename: payload.artifact.filename,
+        format: imported.storageFormat,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
         provider: payload.provider,
         transport: payload.transport,
+        accepted: true,
+        nextStep: 'validate',
+        message: `Imported ${imported.derived.label}. Run validation to confirm the persisted auth state.`,
       },
-    );
+    };
   }
 
   private async handleAccountAuthValidate(
@@ -1204,15 +1241,94 @@ export class UISessionRuntime {
       );
     }
 
-    return this.createNotImplementedResponse(
-      'ACCOUNT_AUTH_VALIDATE',
-      `Account-backed auth validation is not implemented for ${payload.provider} yet. Validation logic lands in Tasks 7 and 9.`,
-      {
-        provider: payload.provider,
-        accountId: payload.accountId,
-        transport: payload.transport,
+    const checkedAt = Date.now();
+    let imported = payload.artifact
+      ? await importCodexAccountArtifact(payload.artifact)
+      : undefined;
+    if (payload.transport) {
+      this.assertAccountArtifactTransport(payload.transport);
+    }
+
+    const targetAccountId = payload.accountId ?? imported?.derived.accountId;
+    if (!targetAccountId) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Codex account validation requires an accountId or auth artifact',
+        true,
+      );
+    }
+
+    const existingAccount = await this.credentialVault.getAccount(payload.provider, targetAccountId);
+    if (!existingAccount && !imported) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Account "${targetAccountId}" was not found`,
+        true,
+      );
+    }
+
+    if (!imported) {
+      const storedArtifact = await this.credentialVault.getAccountArtifact(payload.provider, targetAccountId);
+      if (!storedArtifact) {
+        throw new ExtensionError(
+          ErrorCode.AI_INVALID_KEY,
+          `No stored auth artifact was found for account "${targetAccountId}"`,
+          true,
+        );
+      }
+
+      imported = await importCodexAccountArtifact({
+        format: storedArtifact.format ?? 'unknown',
+        value: storedArtifact.value,
+        filename: storedArtifact.filename,
+      });
+    }
+
+    if (payload.accountId && imported.derived.accountId !== payload.accountId) {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        'The imported auth artifact does not match the requested accountId',
+        true,
+      );
+    }
+
+    const account = await this.credentialVault.saveAccount(payload.provider, {
+      accountId: imported.derived.accountId,
+      label: existingAccount?.label ?? imported.derived.label,
+      maskedIdentifier: imported.derived.maskedIdentifier,
+      credentialMaskedValue: imported.derived.credentialMaskedValue,
+      status: existingAccount?.isActive ? 'active' : existingAccount?.status === 'revoked' ? 'needs-auth' : 'available',
+      isActive: existingAccount?.isActive ?? false,
+      validatedAt: checkedAt,
+      stale: false,
+      metadata: {
+        ...(existingAccount?.metadata ? { ...existingAccount.metadata } : {}),
+        ...(imported.metadata ? { ...imported.metadata } : {}),
+        lastErrorAt: undefined,
+        lastErrorCode: undefined,
       },
-    );
+      artifact: payload.artifact
+        ? {
+            authKind: imported.authKind,
+            value: imported.storageValue,
+            filename: payload.artifact.filename,
+            format: imported.storageFormat,
+          }
+        : undefined,
+    });
+    await this.credentialVault.markValidated(payload.provider);
+
+    return {
+      success: true,
+      data: {
+        provider: payload.provider,
+        valid: true,
+        account: this.cloneAccountRecord(account),
+        checkedAt,
+        message: `Validated artifact shape for ${account.label}. Token exchange remains deferred.`,
+        vault: await this.credentialVault.getState(),
+      },
+    };
   }
 
   private async handleAccountList(
@@ -2079,6 +2195,16 @@ export class UISessionRuntime {
 
   private supportsAccountBackedAuth(provider: SessionConfig['provider']): boolean {
     return PROVIDER_LOOKUP[provider].authFamily === 'account-backed';
+  }
+
+  private assertAccountArtifactTransport(transport: RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START']['transport']): void {
+    if (transport !== 'artifact-import') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Unsupported account auth transport "${transport}"`,
+        true,
+      );
+    }
   }
 
   private async getAccountSurfaceSnapshot(provider: SessionConfig['provider']): Promise<{

@@ -28,7 +28,7 @@
 - [x] `T4` Provider/account/token/quota type expansion
 - [x] `T5` Auth message surface expansion
 - [x] `T6` Secure account store
-- [ ] `T7` ChatGPT account auth module
+- [x] `T7` ChatGPT account auth module
 - [ ] `T8` Manifest/auth callback wiring
 - [ ] `T9` Background account/session manager
 - [ ] `T10` ChatGPT/Codex provider adapter
@@ -64,6 +64,10 @@
 - `T6` PASS
   - Scope: encrypted codex account artifact storage, account CRUD, activation, revocation, removal, and quota metadata plumbing
   - Verification: `pnpm vitest run src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
+  - Commit: `8d32aae` - `feat: add codex secure account store`
+- `T7` PASS
+  - Scope: import-based Codex auth parser, runtime connect/validate handlers, persisted account artifact validation baseline
+  - Verification: `pnpm exec vitest run src/core/auth/__tests__/codex-account-import.test.ts src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

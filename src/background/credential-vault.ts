@@ -55,6 +55,7 @@ type SaveAccountInput = {
   accountId: string;
   label: string;
   maskedIdentifier?: string;
+  credentialMaskedValue?: string;
   status?: ProviderAccountRecord['status'];
   isActive?: boolean;
   validatedAt?: number;
@@ -65,6 +66,16 @@ type SaveAccountInput = {
 };
 
 type ProviderQuotaMetadata = NonNullable<ProviderAccountRecord['metadata']>['quota'];
+
+export type AccountArtifactRecord = {
+  provider: 'codex';
+  accountId: string;
+  authKind: Extract<ProviderAuthKind, 'account-artifact' | 'session-token'>;
+  value: string;
+  updatedAt: number;
+  filename?: string;
+  format?: 'json' | 'text' | 'unknown';
+};
 
 const DEFAULT_VAULT_METADATA: VaultMetadata = {
   version: 1,
@@ -539,6 +550,20 @@ export class CredentialVault {
         format: input.artifact.format ?? 'unknown',
         updatedAt: now,
       } satisfies StoredAccountArtifact);
+
+      metadata.credentials[provider] = {
+        ...buildCredentialRecord(
+          provider,
+          input.artifact.authKind ?? 'account-artifact',
+          now,
+          input.credentialMaskedValue?.trim() ||
+            existingAccount?.maskedIdentifier ||
+            metadata.credentials[provider]?.maskedValue ||
+            GENERIC_MASK,
+        ),
+        validatedAt: input.validatedAt,
+        stale: input.stale,
+      };
     }
 
     const nextAccount: ProviderAccountRecord = {
@@ -791,6 +816,32 @@ export class CredentialVault {
     await this.saveMetadata(metadata);
 
     return cloneAccountRecord(nextAccount);
+  }
+
+  async getAccountArtifact(
+    provider: AIProviderType,
+    accountId: string,
+  ): Promise<AccountArtifactRecord | null> {
+    const account = await this.getAccount(provider, accountId);
+    if (!account?.credentialKey) {
+      return null;
+    }
+
+    const secureStorage = await this.requireUnlockedStorage();
+    const stored = await secureStorage.getEncrypted<StoredAccountArtifact>(account.credentialKey);
+    if (!stored) {
+      return null;
+    }
+
+    return {
+      provider: stored.provider,
+      accountId: stored.accountId,
+      authKind: stored.authKind,
+      value: stored.value,
+      updatedAt: stored.updatedAt,
+      filename: stored.filename,
+      format: stored.format,
+    };
   }
 
   async markValidated(provider: AIProviderType): Promise<ProviderCredentialRecord | undefined> {

@@ -40,6 +40,14 @@ function createExtensionMessage<T extends keyof RequestPayloadMap>(
   };
 }
 
+function encodeBase64UrlJson(payload: Record<string, unknown>): string {
+  return btoa(JSON.stringify(payload)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '');
+}
+
+function createJwt(payload: Record<string, unknown>): string {
+  return `${encodeBase64UrlJson({ alg: 'none', typ: 'JWT' })}.${encodeBase64UrlJson(payload)}.signature`;
+}
+
 function createPageContext(): PageContext {
   return {
     url: 'https://example.com/form',
@@ -3746,6 +3754,13 @@ describe('UI session runtime', () => {
 
   it('executes baseline codex account-store mutations while keeping auth exchange deferred', async () => {
     const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+    const idToken = createJwt({
+      email: 'imported@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'pro',
+        chatgpt_user_id: 'user_imported',
+      },
+    });
     await chrome.storage.local.set({
       vault: {
         version: 1,
@@ -3828,15 +3843,44 @@ describe('UI session runtime', () => {
         transport: 'artifact-import',
         artifact: {
           format: 'json',
-          value: '{"refresh_token":"opaque"}',
+          value: JSON.stringify({
+            auth_mode: 'chatgpt',
+            tokens: {
+              access_token: 'access-imported',
+              id_token: idToken,
+              refresh_token: 'refresh-imported',
+            },
+          }),
         },
       }),
     );
-    expect(connectResponse.success).toBe(false);
-    expect(connectResponse.error).toEqual(
+    expect(connectResponse.success).toBe(true);
+    expect(connectResponse.data).toEqual({
+      provider: 'codex',
+      transport: 'artifact-import',
+      accepted: true,
+      nextStep: 'validate',
+      message: 'Imported ChatGPT Pro account (im***@example.com). Run validation to confirm the persisted auth state.',
+    });
+
+    const validateResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_VALIDATE', {
+        provider: 'codex',
+        accountId: 'acct_5aea75ff65d29e4c',
+      }),
+    );
+    expect(validateResponse.success).toBe(true);
+    expect(validateResponse.data).toEqual(
       expect.objectContaining({
-        code: 'NOT_IMPLEMENTED',
-        message: expect.stringContaining('Tasks 6-7'),
+        provider: 'codex',
+        valid: true,
+        checkedAt: expect.any(Number),
+        message: 'Validated artifact shape for ChatGPT Pro account (im***@example.com). Token exchange remains deferred.',
+        account: expect.objectContaining({
+          accountId: 'acct_5aea75ff65d29e4c',
+          maskedIdentifier: 'im***@example.com',
+          validatedAt: expect.any(Number),
+        }),
       }),
     );
 
@@ -3897,17 +3941,25 @@ describe('UI session runtime', () => {
       createExtensionMessage('ACCOUNT_LIST', { provider: 'codex' }),
     );
     expect(accountListResponse.success).toBe(true);
-    expect(accountListResponse.data).toEqual({
-      provider: 'codex',
-      accounts: [
-        expect.objectContaining({
-          accountId: 'acct_backup',
-          status: 'revoked',
-          isActive: false,
-          stale: true,
-        }),
-      ],
-      activeAccountId: undefined,
-    });
+    expect(accountListResponse.data).toEqual(
+      expect.objectContaining({
+        provider: 'codex',
+        activeAccountId: undefined,
+        accounts: expect.arrayContaining([
+          expect.objectContaining({
+            accountId: 'acct_5aea75ff65d29e4c',
+            status: 'available',
+            isActive: false,
+            validatedAt: expect.any(Number),
+          }),
+          expect.objectContaining({
+            accountId: 'acct_backup',
+            status: 'revoked',
+            isActive: false,
+            stale: true,
+          }),
+        ]),
+      }),
+    );
   });
 });
