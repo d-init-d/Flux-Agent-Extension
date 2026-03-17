@@ -1,10 +1,12 @@
 import { MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   CheckCircle2,
   ExternalLink,
   Github,
   KeyRound,
   Loader2,
+  PlugZap,
   RotateCw,
   ServerCog,
   ShieldCheck,
@@ -29,11 +31,16 @@ import {
   ONBOARDING_STORAGE_KEY,
 } from '@shared/storage/onboarding';
 import type {
+  AccountAuthArtifactImportPayload,
+  AccountAuthStatusGetResponse,
+  AccountQuotaStatusGetResponse,
   AIProviderType,
   ExtensionSettings,
   OnboardingState,
   ProviderAccountRecord,
   ProviderConfig,
+  ProviderQuotaState,
+  ProviderSessionStatus,
   SettingsGetResponse,
   VaultState,
 } from '@shared/types';
@@ -284,6 +291,147 @@ function formatUpdatedAt(timestamp: number): string {
   }).format(timestamp);
 }
 
+function formatObservedAt(timestamp: number | undefined): string | null {
+  if (!timestamp) {
+    return null;
+  }
+
+  return formatUpdatedAt(timestamp);
+}
+
+function inferArtifactFormat(value: string): AccountAuthArtifactImportPayload['format'] {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return 'unknown';
+  }
+
+  return trimmed.startsWith('{') ? 'json' : 'text';
+}
+
+function getPreferredAccountId(
+  accounts: ProviderAccountRecord[],
+  activeAccountId: string | undefined,
+): string | undefined {
+  return (
+    activeAccountId ?? accounts.find((account) => account.isActive)?.accountId ?? accounts[0]?.accountId
+  );
+}
+
+function formatQuotaSummary(quota: ProviderQuotaState | undefined): string {
+  if (!quota) {
+    return 'Quota telemetry has not been observed yet.';
+  }
+
+  const periodLabel = quota.period === 'unknown' ? 'window' : quota.period;
+  const unitLabel = quota.unit === 'unknown' ? 'credits' : quota.unit;
+
+  if (typeof quota.remaining === 'number' && typeof quota.limit === 'number') {
+    return `${quota.remaining}/${quota.limit} ${unitLabel} remaining this ${periodLabel}.`;
+  }
+
+  if (typeof quota.used === 'number' && typeof quota.limit === 'number') {
+    return `${quota.used}/${quota.limit} ${unitLabel} used this ${periodLabel}.`;
+  }
+
+  return `Quota snapshot observed for this ${periodLabel}.`;
+}
+
+function getAccountSessionStatus(account: ProviderAccountRecord | undefined): ProviderSessionStatus | undefined {
+  return account?.metadata?.session?.status;
+}
+
+function getAccountBadgeVariant(account: ProviderAccountRecord): BadgeVariant {
+  const sessionStatus = getAccountSessionStatus(account);
+
+  if (account.status === 'revoked' || sessionStatus === 'revoked') {
+    return 'error';
+  }
+
+  if (
+    account.stale ||
+    account.status === 'needs-auth' ||
+    sessionStatus === 'refresh-required' ||
+    sessionStatus === 'expired'
+  ) {
+    return 'warning';
+  }
+
+  if (account.validatedAt || account.status === 'active') {
+    return 'success';
+  }
+
+  return 'default';
+}
+
+function getAccountBadgeLabel(account: ProviderAccountRecord): string {
+  const sessionStatus = getAccountSessionStatus(account);
+
+  if (account.status === 'revoked' || sessionStatus === 'revoked') {
+    return 'Revoked';
+  }
+
+  if (sessionStatus === 'refresh-required') {
+    return 'Refresh required';
+  }
+
+  if (sessionStatus === 'expired') {
+    return 'Session expired';
+  }
+
+  if (account.status === 'needs-auth') {
+    return 'Needs auth';
+  }
+
+  if (account.stale) {
+    return 'Stale';
+  }
+
+  if (account.validatedAt) {
+    return 'Validated';
+  }
+
+  if (account.status === 'active') {
+    return 'Active';
+  }
+
+  return 'Imported';
+}
+
+function getAccountStatusDetail(account: ProviderAccountRecord, vaultLocked: boolean): string {
+  const sessionStatus = getAccountSessionStatus(account);
+  const lastChecked = formatObservedAt(account.validatedAt ?? account.updatedAt);
+
+  if (account.status === 'revoked' || sessionStatus === 'revoked') {
+    return 'This imported account has been revoked. Remove it or import a fresh official artifact before using Codex again.';
+  }
+
+  if (sessionStatus === 'refresh-required') {
+    return 'The imported account needs a newer official artifact before Codex runtime sessions can resume safely.';
+  }
+
+  if (sessionStatus === 'expired') {
+    return 'The recorded runtime session looks expired. Re-import the official artifact, then validate again.';
+  }
+
+  if (account.status === 'needs-auth') {
+    return 'This account is stored, but it still needs a fresh official auth artifact before it can be trusted.';
+  }
+
+  if (account.stale) {
+    return 'The imported account changed after the last validation. Re-run validation before relying on it.';
+  }
+
+  if (vaultLocked) {
+    return 'Unlock the vault to validate, activate, or refresh quota for this imported account.';
+  }
+
+  if (account.validatedAt && lastChecked) {
+    return `Validated against the background runtime on ${lastChecked}.`;
+  }
+
+  return 'Imported and stored in the encrypted vault. Run validation before treating it as ready.';
+}
+
 function isLoopbackUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
@@ -402,6 +550,17 @@ export function App() {
   const [oauthUserCode, setOauthUserCode] = useState('');
   const [oauthVerifyUrl, setOauthVerifyUrl] = useState('');
   const [oauthError, setOauthError] = useState('');
+  const [accountAuthStatus, setAccountAuthStatus] = useState<AccountAuthStatusGetResponse | null>(
+    null,
+  );
+  const [accountQuotaStatus, setAccountQuotaStatus] = useState<AccountQuotaStatusGetResponse | null>(
+    null,
+  );
+  const [accountArtifactValue, setAccountArtifactValue] = useState('');
+  const [accountImportLabel, setAccountImportLabel] = useState('');
+  const [accountMessageState, setAccountMessageState] = useState<SaveState>('idle');
+  const [accountMessage, setAccountMessage] = useState('');
+  const [accountActionKey, setAccountActionKey] = useState<string | null>(null);
   const oauthAbortRef = useRef<AbortController | null>(null);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
   const onboardingStateRef = useRef<OnboardingState>(createDefaultOnboardingState());
@@ -417,6 +576,49 @@ export function App() {
     setVaultState(nextVault);
     setApiKeyMetadata(mapVaultToMetadata(nextVault));
   }, []);
+
+  const resetAccountMessage = useCallback((): void => {
+    setAccountMessageState('idle');
+    setAccountMessage('');
+  }, []);
+
+  const loadAccountSurface = useCallback(
+    async (provider: AIProviderType): Promise<AccountAuthStatusGetResponse> => {
+      const authStatus = await sendExtensionRequest(
+        'ACCOUNT_AUTH_STATUS_GET',
+        { provider },
+        'options',
+      );
+      const accountList = await sendExtensionRequest('ACCOUNT_LIST', { provider }, 'options');
+      const mergedStatus: AccountAuthStatusGetResponse = {
+        ...authStatus,
+        accounts: accountList.accounts,
+        activeAccountId: accountList.activeAccountId ?? authStatus.activeAccountId,
+      };
+
+      syncVaultState(mergedStatus.vault);
+      setAccountAuthStatus(mergedStatus);
+
+      const preferredAccountId = getPreferredAccountId(
+        mergedStatus.accounts,
+        mergedStatus.activeAccountId,
+      );
+
+      if (mergedStatus.status === 'ready' && preferredAccountId) {
+        const quota = await sendExtensionRequest(
+          'ACCOUNT_QUOTA_STATUS_GET',
+          { provider, accountId: preferredAccountId },
+          'options',
+        );
+        setAccountQuotaStatus(quota);
+      } else {
+        setAccountQuotaStatus(null);
+      }
+
+      return mergedStatus;
+    },
+    [syncVaultState],
+  );
 
   const applyRuntimeSnapshot = useCallback(
     (snapshot: SettingsGetResponse, preserveDismissedOnboarding: boolean): void => {
@@ -527,6 +729,27 @@ export function App() {
       chrome.storage.onChanged.removeListener(handleStorageChange);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isReady || !providerUsesAccountImport(selectedProvider)) {
+      setAccountAuthStatus(null);
+      setAccountQuotaStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void loadAccountSurface(selectedProvider).catch((error) => {
+      if (!cancelled) {
+        setAccountMessageState('error');
+        setAccountMessage(getErrorMessage(error, 'Failed to load imported account status.'));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isReady, loadAccountSurface, selectedProvider]);
 
   async function persistOnboardingState(nextState: OnboardingState): Promise<void> {
     onboardingStateRef.current = nextState;
@@ -688,6 +911,10 @@ export function App() {
     setOauthError('');
     setOauthUserCode('');
     setOauthVerifyUrl('');
+    setAccountArtifactValue('');
+    setAccountImportLabel('');
+    setAccountActionKey(null);
+    resetAccountMessage();
     clearApiKeyInputValue();
   }
 
@@ -827,6 +1054,238 @@ export function App() {
       setOauthError(getErrorMessage(error, 'OAuth flow failed'));
     } finally {
       oauthAbortRef.current = null;
+    }
+  }
+
+  function ensureUnlockedVaultForAccounts(message: string): boolean {
+    if (vaultState.lockState === 'unlocked') {
+      return true;
+    }
+
+    setAccountMessageState('error');
+    setAccountMessage(message);
+    return false;
+  }
+
+  async function handleAccountImportConnect(): Promise<void> {
+    const artifactValue = accountArtifactValue.trim();
+
+    if (!artifactValue) {
+      setAccountMessageState('error');
+      setAccountMessage('Paste an official Codex auth artifact before importing.');
+      return;
+    }
+
+    if (
+      !ensureUnlockedVaultForAccounts(
+        'Unlock the vault before importing an official auth artifact for Codex.',
+      )
+    ) {
+      return;
+    }
+
+    setAccountActionKey('connect');
+    resetAccountMessage();
+
+    try {
+      const response = await sendExtensionRequest(
+        'ACCOUNT_AUTH_CONNECT_START',
+        {
+          provider: selectedProvider,
+          transport: 'artifact-import',
+          artifact: {
+            format: inferArtifactFormat(artifactValue),
+            value: artifactValue,
+          },
+          label: accountImportLabel.trim() || undefined,
+        },
+        'options',
+      );
+
+      setAccountArtifactValue('');
+      setAccountImportLabel('');
+      await loadAccountSurface(selectedProvider);
+      setAccountMessageState('success');
+      setAccountMessage(
+        `${response.message} The artifact body was cleared from the form immediately after import.`,
+      );
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to import the official auth artifact.'));
+    } finally {
+      setAccountActionKey(null);
+    }
+  }
+
+  async function handleAccountValidate(accountId: string): Promise<void> {
+    if (
+      !ensureUnlockedVaultForAccounts(
+        'Unlock the vault before validating an imported Codex account.',
+      )
+    ) {
+      return;
+    }
+
+    setAccountActionKey(`validate:${accountId}`);
+    resetAccountMessage();
+
+    try {
+      const accountSnapshot = await sendExtensionRequest(
+        'ACCOUNT_GET',
+        { provider: selectedProvider, accountId },
+        'options',
+      );
+
+      if (!accountSnapshot.account) {
+        setAccountMessageState('error');
+        setAccountMessage('That imported account is no longer available. Refresh the list and try again.');
+        return;
+      }
+
+      const response = await sendExtensionRequest(
+        'ACCOUNT_AUTH_VALIDATE',
+        { provider: selectedProvider, accountId },
+        'options',
+      );
+
+      syncVaultState(response.vault);
+      await loadAccountSurface(selectedProvider);
+      setAccountMessageState(response.valid ? 'success' : 'error');
+      setAccountMessage(
+        response.valid
+          ? (response.message ?? `Validated ${accountSnapshot.account.label}.`)
+          : `${accountSnapshot.account.label} could not be validated.`,
+      );
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to validate the imported account.'));
+    } finally {
+      setAccountActionKey(null);
+    }
+  }
+
+  async function handleAccountActivate(accountId: string): Promise<void> {
+    if (
+      !ensureUnlockedVaultForAccounts('Unlock the vault before activating an imported Codex account.')
+    ) {
+      return;
+    }
+
+    setAccountActionKey(`activate:${accountId}`);
+    resetAccountMessage();
+
+    try {
+      const response = await sendExtensionRequest(
+        'ACCOUNT_ACTIVATE',
+        { provider: selectedProvider, accountId },
+        'options',
+      );
+      await loadAccountSurface(selectedProvider);
+      setAccountMessageState('success');
+      setAccountMessage(`Active Codex account switched to ${response.accountId}.`);
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to activate the selected account.'));
+    } finally {
+      setAccountActionKey(null);
+    }
+  }
+
+  async function handleAccountRevoke(accountId: string): Promise<void> {
+    if (
+      !ensureUnlockedVaultForAccounts('Unlock the vault before revoking an imported Codex account.')
+    ) {
+      return;
+    }
+
+    setAccountActionKey(`revoke:${accountId}`);
+    resetAccountMessage();
+
+    try {
+      const response = await sendExtensionRequest(
+        'ACCOUNT_REVOKE',
+        { provider: selectedProvider, accountId, revokeCredential: true },
+        'options',
+      );
+      await loadAccountSurface(selectedProvider);
+      setAccountMessageState(response.revoked ? 'success' : 'error');
+      setAccountMessage(
+        response.revoked
+          ? 'Imported account revoked. Keep it for audit or remove it entirely below.'
+          : 'The imported account could not be revoked.',
+      );
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to revoke the imported account.'));
+    } finally {
+      setAccountActionKey(null);
+    }
+  }
+
+  async function handleAccountRemove(accountId: string): Promise<void> {
+    if (
+      !ensureUnlockedVaultForAccounts('Unlock the vault before removing an imported Codex account.')
+    ) {
+      return;
+    }
+
+    setAccountActionKey(`remove:${accountId}`);
+    resetAccountMessage();
+
+    try {
+      const response = await sendExtensionRequest(
+        'ACCOUNT_REMOVE',
+        { provider: selectedProvider, accountId },
+        'options',
+      );
+      await loadAccountSurface(selectedProvider);
+      setAccountMessageState(response.removed ? 'success' : 'error');
+      setAccountMessage(
+        response.removed
+          ? 'Imported account removed from the local vault-backed store.'
+          : 'That imported account was already missing.',
+      );
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to remove the imported account.'));
+    } finally {
+      setAccountActionKey(null);
+    }
+  }
+
+  async function handleAccountQuotaRefresh(accountId: string): Promise<void> {
+    if (
+      !ensureUnlockedVaultForAccounts('Unlock the vault before refreshing Codex account quota.')
+    ) {
+      return;
+    }
+
+    setAccountActionKey(`quota:${accountId}`);
+    resetAccountMessage();
+
+    try {
+      const response = await sendExtensionRequest(
+        'ACCOUNT_QUOTA_REFRESH',
+        { provider: selectedProvider, accountId },
+        'options',
+      );
+      setAccountQuotaStatus({
+        provider: response.provider,
+        accountId: response.accountId,
+        quota: response.quota,
+      });
+      await loadAccountSurface(selectedProvider);
+      setAccountMessageState('success');
+      setAccountMessage(
+        response.quota
+          ? `Quota refreshed. ${formatQuotaSummary(response.quota)}`
+          : 'Quota refresh completed, but no quota snapshot is available yet.',
+      );
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to refresh account quota.'));
+    } finally {
+      setAccountActionKey(null);
     }
   }
 
@@ -1257,6 +1716,18 @@ export function App() {
   const providerAccounts = getProviderAccounts(vaultState, selectedProvider);
   const activeProviderAccount = getActiveProviderAccount(vaultState, selectedProvider);
   const selectedCredentialRecord = vaultState.credentials[selectedProvider];
+  const surfacedProviderAccounts = accountAuthStatus?.accounts ?? providerAccounts;
+  const surfacedActiveAccountId =
+    accountAuthStatus?.activeAccountId ??
+    getPreferredAccountId(providerAccounts, vaultState.activeAccounts[selectedProvider]);
+  const surfacedActiveProviderAccount =
+    surfacedProviderAccounts.find((account) => account.accountId === surfacedActiveAccountId) ??
+    activeProviderAccount;
+  const activeProviderSessionStatus = getAccountSessionStatus(surfacedActiveProviderAccount);
+  const activeProviderQuota =
+    accountQuotaStatus?.accountId && accountQuotaStatus.accountId === surfacedActiveProviderAccount?.accountId
+      ? accountQuotaStatus.quota
+      : surfacedActiveProviderAccount?.metadata?.quota;
   const advancedModeEnabled = isAdvancedModeEnabled(settings);
   const customScriptingEnabled = isCustomScriptingEnabled(settings);
   const visiblePermissionDefinitions = advancedModeEnabled
@@ -1282,20 +1753,27 @@ export function App() {
       ? vaultState.lockState === 'uninitialized'
         ? 'Vault not initialized'
         : vaultState.lockState === 'locked'
-          ? providerAccounts.length > 0
+          ? surfacedProviderAccounts.length > 0
             ? 'Vault locked'
             : 'Account missing'
-          : !activeProviderAccount
-            ? providerAccounts.length > 0
+          : !surfacedActiveProviderAccount
+            ? surfacedProviderAccounts.length > 0
               ? 'Account available'
               : 'Account missing'
-            : activeProviderAccount.status === 'revoked'
+            : surfacedActiveProviderAccount.status === 'revoked' ||
+                activeProviderSessionStatus === 'revoked'
               ? 'Account revoked'
-              : activeProviderAccount.stale
+              : activeProviderSessionStatus === 'refresh-required'
+                ? 'Refresh required'
+                : activeProviderSessionStatus === 'expired'
+                  ? 'Session expired'
+                  : surfacedActiveProviderAccount.status === 'needs-auth'
+                    ? 'Needs auth'
+                    : surfacedActiveProviderAccount.stale
                 ? 'Account stale'
-                : activeProviderAccount.validatedAt
+                : surfacedActiveProviderAccount.validatedAt
                   ? 'Account validated'
-                  : activeProviderAccount.status === 'active'
+                  : surfacedActiveProviderAccount.status === 'active'
                     ? 'Account imported'
                     : 'Account available'
       : vaultState.lockState === 'uninitialized'
@@ -1320,18 +1798,25 @@ export function App() {
                   ? 'OAuth connected'
                   : 'Credential saved';
   const credentialHelperMessage = providerUsesAccountImport(selectedDefinition)
-    ? providerAccounts.length === 0
+    ? surfacedProviderAccounts.length === 0
       ? 'No imported account is available yet. Use the account import flow before testing or using this provider.'
-      : activeProviderAccount?.status === 'revoked'
+      : surfacedActiveProviderAccount?.status === 'revoked' ||
+          activeProviderSessionStatus === 'revoked'
         ? 'The active imported account was revoked. Re-import or activate another account before using this provider.'
-        : activeProviderAccount?.stale
+        : activeProviderSessionStatus === 'refresh-required'
+          ? 'The active imported account needs a fresh official auth artifact before runtime sessions can continue.'
+          : activeProviderSessionStatus === 'expired'
+            ? 'The active imported account looks expired. Re-import a fresh official auth artifact, then validate again.'
+            : surfacedActiveProviderAccount?.status === 'needs-auth'
+              ? 'The active imported account still needs an official auth artifact refresh before Codex can rely on it.'
+              : surfacedActiveProviderAccount?.stale
           ? 'The imported account changed after the last validation. Re-test before relying on this provider.'
           : vaultState.lockState === 'locked'
             ? 'Unlock the vault to validate or inspect the imported account state.'
-            : activeProviderAccount?.validatedAt
-              ? `Imported account ${activeProviderAccount.label} validated against the current runtime.`
-              : activeProviderAccount
-                ? `Imported account ${activeProviderAccount.label} is stored. Run a connection test to confirm the current account session.`
+            : surfacedActiveProviderAccount?.validatedAt
+              ? `Imported account ${surfacedActiveProviderAccount.label} validated against the current runtime.`
+              : surfacedActiveProviderAccount
+                ? `Imported account ${surfacedActiveProviderAccount.label} is stored. Run a connection test to confirm the current account session.`
                 : 'Select and validate an imported account before using this provider.'
     : !savedMetadata
       ? providerUsesOAuthToken(selectedDefinition)
@@ -1377,6 +1862,13 @@ export function App() {
     appearanceSaveState === 'success'
       ? 'border-success-500/30 bg-success-50 text-success-700'
       : appearanceSaveState === 'error'
+        ? 'border-error-500/30 bg-error-50 text-error-700'
+        : 'border-border bg-surface-primary text-content-secondary';
+
+  const accountTone =
+    accountMessageState === 'success'
+      ? 'border-success-500/30 bg-success-50 text-success-700'
+      : accountMessageState === 'error'
         ? 'border-error-500/30 bg-error-50 text-error-700'
         : 'border-border bg-surface-primary text-content-secondary';
 
@@ -1676,56 +2168,354 @@ export function App() {
           </div>
         ) : providerUsesAccountImport(selectedDefinition) ? (
           <div className="space-y-3">
-            <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4">
-              <p className="text-sm font-medium text-content-primary">
-                Account-backed authentication
-              </p>
-              <p className="mt-1 text-xs leading-5 text-content-secondary">
-                Codex uses an imported official auth artifact instead of a manual API key. Imported
-                accounts appear here and are validated through the background account runtime.
-              </p>
-
-              {activeProviderAccount ? (
-                <div className="mt-3 rounded-xl border border-border bg-surface-primary px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
-                    Active imported account
-                  </p>
-                  <p className="mt-2 text-sm font-medium text-content-primary">
-                    {activeProviderAccount.label}
-                  </p>
-                  <p className="mt-1 text-xs text-content-secondary">
-                    {activeProviderAccount.maskedIdentifier ?? activeProviderAccount.accountId}
-                  </p>
-                  <p className="mt-2 text-xs text-content-tertiary">
-                    Status: {credentialStatusLabel}. {credentialHelperMessage}
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-3 rounded-xl border border-dashed border-border bg-surface-primary px-4 py-3 text-xs leading-5 text-content-secondary">
-                  No imported account is available yet. Once an official auth artifact is imported,
-                  this surface will validate the active account without asking for an API key.
-                </div>
-              )}
-
-              {savedMetadata ? (
-                <div className="mt-3 rounded-xl border border-border bg-surface-primary px-4 py-3">
-                  <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
-                    <KeyRound className="h-4 w-4 text-primary-600" />
-                    Stored auth artifact
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface-elevated">
+              <div className="border-b border-border/80 bg-[linear-gradient(135deg,_rgb(var(--color-primary-500)/0.10),_transparent_55%)] px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-content-primary">
+                        Account-backed authentication
+                      </p>
+                      <Badge variant="warning">Experimental</Badge>
+                      <Badge variant="default">Official artifacts only</Badge>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-content-secondary">
+                      Codex follows the OpenCode account flow: import an official ChatGPT/Codex auth
+                      artifact, validate it against the background runtime, then choose which
+                      imported account stays active.
+                    </p>
                   </div>
-                  <p className="mt-2 text-sm text-content-secondary">
-                    {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
-                  </p>
-                  <p className="mt-1 text-xs text-content-tertiary">{credentialHelperMessage}</p>
-                </div>
-              ) : null}
 
-              {providerAccounts.length > 1 ? (
-                <p className="mt-3 text-xs text-content-tertiary">
-                  {providerAccounts.length} imported accounts are available. The active one is used
-                  for validation until the dedicated account-management UI lands.
-                </p>
-              ) : null}
+                  <div className="rounded-xl border border-border bg-surface-primary px-3 py-2 text-right">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-content-tertiary">
+                      Auth surface
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-content-primary">
+                      {accountAuthStatus?.status === 'vault-locked'
+                        ? 'Vault locked'
+                        : accountAuthStatus?.status === 'needs-auth'
+                          ? 'Needs import'
+                          : surfacedActiveProviderAccount
+                            ? getAccountBadgeLabel(surfacedActiveProviderAccount)
+                            : 'Awaiting import'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 px-4 py-4">
+                <div className="rounded-xl border border-warning-500/25 bg-warning-50 px-4 py-3 text-sm text-warning-800">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>
+                      Experimental provider boundary: Flux only supports importing official auth
+                      artifacts that already exist. Token exchange, session renewal, and quota
+                      telemetry remain best-effort and may require re-importing a fresh artifact.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-xl border border-border bg-surface-primary px-4 py-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                          Account auth status
+                        </p>
+                        <p className="mt-2 text-sm font-semibold text-content-primary">
+                          {surfacedActiveProviderAccount?.label ?? 'No imported account yet'}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-content-secondary">
+                          {credentialHelperMessage}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={
+                          surfacedActiveProviderAccount
+                            ? getAccountBadgeVariant(surfacedActiveProviderAccount)
+                            : accountAuthStatus?.status === 'vault-locked'
+                              ? 'warning'
+                              : 'default'
+                        }
+                      >
+                        {credentialStatusLabel}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg border border-border bg-surface-elevated px-3 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                          Active account
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-content-primary">
+                          {surfacedActiveProviderAccount?.maskedIdentifier ??
+                            surfacedActiveProviderAccount?.accountId ??
+                            'No active account'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg border border-border bg-surface-elevated px-3 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                          Quota snapshot
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-content-primary">
+                          {formatQuotaSummary(activeProviderQuota)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {savedMetadata ? (
+                      <div className="mt-3 rounded-lg border border-border bg-surface-elevated px-3 py-3">
+                        <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
+                          <KeyRound className="h-4 w-4 text-primary-600" />
+                          Stored auth artifact
+                        </div>
+                        <p className="mt-2 text-sm text-content-secondary">
+                          {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
+                        </p>
+                        <p className="mt-1 text-xs text-content-tertiary">
+                          The raw artifact body is never shown again after a successful import.
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-surface-primary px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                      Import official auth artifact
+                    </p>
+                    <p className="mt-2 text-xs leading-5 text-content-secondary">
+                      Paste an official `auth.json` export or supported text bundle. The vault must
+                      be unlocked before Flux can store or validate the imported account.
+                    </p>
+
+                    <div className="mt-3 space-y-3">
+                      <Input
+                        label="Account label (optional)"
+                        value={accountImportLabel}
+                        onChange={(event) => setAccountImportLabel(event.target.value)}
+                        placeholder="Workspace Codex seat"
+                        helperText="Use a short label if you want this account to be easier to recognize later."
+                        disabled={!isReady || accountActionKey === 'connect'}
+                      />
+
+                      <div className="flex flex-col gap-1.5">
+                        <label
+                          htmlFor="codex-auth-artifact"
+                          className="text-sm font-medium text-content-primary"
+                        >
+                          Auth artifact payload
+                        </label>
+                        <textarea
+                          id="codex-auth-artifact"
+                          value={accountArtifactValue}
+                          onChange={(event) => setAccountArtifactValue(event.target.value)}
+                          placeholder="Paste official auth.json or a supported token bundle here"
+                          className="min-h-[10rem] w-full rounded-xl border border-border bg-surface-primary px-3 py-3 text-sm text-content-primary placeholder:text-content-tertiary transition-all duration-fast focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                          spellCheck={false}
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          disabled={!isReady || accountActionKey === 'connect'}
+                        />
+                        <p className="text-xs leading-snug text-content-tertiary">
+                          Supported fields include `refresh_token`, `id_token`, and `account_id`.
+                          Flux stores only the masked account record after import.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="lg"
+                        className="min-h-11"
+                        loading={accountActionKey === 'connect'}
+                        onClick={() => {
+                          void handleAccountImportConnect();
+                        }}
+                        iconLeft={<PlugZap className="h-4 w-4" />}
+                        disabled={!isReady}
+                      >
+                        Import and connect
+                      </Button>
+
+                      {vaultState.lockState !== 'unlocked' ? (
+                        <p className="text-xs leading-5 text-content-tertiary">
+                          Unlock the vault first. Imported account artifacts are never kept in plain
+                          extension storage.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={`rounded-xl border px-4 py-3 text-sm ${accountTone}`}>
+                  {accountMessage ||
+                    'Imported Codex accounts stay local, vault-backed, and provider-specific. Validate before relying on an account for runtime work.'}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                        Imported accounts
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-content-secondary">
+                        Activate one account at a time. Revoked or refresh-required accounts stay
+                        visible until you explicitly remove them.
+                      </p>
+                    </div>
+                    <Badge variant="default">{surfacedProviderAccounts.length} account(s)</Badge>
+                  </div>
+
+                  {surfacedProviderAccounts.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border bg-surface-primary px-4 py-4 text-sm leading-6 text-content-secondary">
+                      No imported account is available yet. Once an official auth artifact is
+                      imported, Flux will show the active account, validation status, and quota
+                      refresh controls here.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {surfacedProviderAccounts.map((account) => {
+                        const isActive = account.accountId === surfacedActiveAccountId;
+                        const accountQuota =
+                          accountQuotaStatus?.accountId === account.accountId
+                            ? accountQuotaStatus.quota
+                            : account.metadata?.quota;
+                        const isBusy =
+                          accountActionKey === `validate:${account.accountId}` ||
+                          accountActionKey === `activate:${account.accountId}` ||
+                          accountActionKey === `revoke:${account.accountId}` ||
+                          accountActionKey === `remove:${account.accountId}` ||
+                          accountActionKey === `quota:${account.accountId}`;
+
+                        return (
+                          <div
+                            key={account.accountId}
+                            className={`rounded-xl border px-4 py-4 ${
+                              isActive
+                                ? 'border-primary-500/30 bg-primary-50/60'
+                                : 'border-border bg-surface-primary'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-sm font-semibold text-content-primary">
+                                    {account.label}
+                                  </p>
+                                  {isActive ? <Badge variant="success">Active</Badge> : null}
+                                  <Badge variant={getAccountBadgeVariant(account)}>
+                                    {getAccountBadgeLabel(account)}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 text-xs text-content-secondary">
+                                  {account.maskedIdentifier ?? account.accountId}
+                                </p>
+                              </div>
+
+                              <div className="text-right text-[11px] leading-5 text-content-tertiary">
+                                <p>Updated {formatUpdatedAt(account.updatedAt)}</p>
+                                {account.validatedAt ? (
+                                  <p>Validated {formatUpdatedAt(account.validatedAt)}</p>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid gap-3 md:grid-cols-[1.15fr_0.85fr]">
+                              <div className="rounded-lg border border-border bg-surface-elevated px-3 py-3 text-xs leading-5 text-content-secondary">
+                                {getAccountStatusDetail(account, vaultState.lockState !== 'unlocked')}
+                              </div>
+                              <div className="rounded-lg border border-border bg-surface-elevated px-3 py-3 text-xs leading-5 text-content-secondary">
+                                <p className="font-medium text-content-primary">Quota</p>
+                                <p className="mt-1">{formatQuotaSummary(accountQuota)}</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="lg"
+                                className="min-h-11"
+                                loading={accountActionKey === `validate:${account.accountId}`}
+                                onClick={() => {
+                                  void handleAccountValidate(account.accountId);
+                                }}
+                                disabled={!isReady || isBusy}
+                                aria-label={`Validate account ${account.label}`}
+                              >
+                                Validate
+                              </Button>
+
+                              {!isActive ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="lg"
+                                  className="min-h-11"
+                                  loading={accountActionKey === `activate:${account.accountId}`}
+                                  onClick={() => {
+                                    void handleAccountActivate(account.accountId);
+                                  }}
+                                  disabled={!isReady || isBusy}
+                                  aria-label={`Activate account ${account.label}`}
+                                >
+                                  Activate
+                                </Button>
+                              ) : null}
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="lg"
+                                className="min-h-11"
+                                loading={accountActionKey === `quota:${account.accountId}`}
+                                onClick={() => {
+                                  void handleAccountQuotaRefresh(account.accountId);
+                                }}
+                                disabled={!isReady || isBusy}
+                                aria-label={`Refresh quota for ${account.label}`}
+                              >
+                                Refresh quota
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="lg"
+                                className="min-h-11"
+                                loading={accountActionKey === `revoke:${account.accountId}`}
+                                onClick={() => {
+                                  void handleAccountRevoke(account.accountId);
+                                }}
+                                disabled={!isReady || isBusy}
+                                aria-label={`Revoke account ${account.label}`}
+                              >
+                                Revoke
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="danger"
+                                size="lg"
+                                className="min-h-11"
+                                loading={accountActionKey === `remove:${account.accountId}`}
+                                onClick={() => {
+                                  void handleAccountRemove(account.accountId);
+                                }}
+                                iconLeft={<Trash2 className="h-4 w-4" />}
+                                disabled={!isReady || isBusy}
+                                aria-label={`Remove account ${account.label}`}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         ) : (

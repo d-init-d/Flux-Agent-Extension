@@ -74,6 +74,14 @@ function mockPendingProviderValidation() {
   };
 }
 
+function encodeBase64UrlJson(payload: Record<string, unknown>): string {
+  return btoa(JSON.stringify(payload)).replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '');
+}
+
+function createJwt(payload: Record<string, unknown>): string {
+  return `${encodeBase64UrlJson({ alg: 'none', typ: 'JWT' })}.${encodeBase64UrlJson(payload)}.signature`;
+}
+
 describe('Options App', () => {
   beforeEach(async () => {
     installOptionsRuntimeMock();
@@ -234,12 +242,59 @@ describe('Options App', () => {
     await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
 
     expect(await screen.findByText(/account-backed authentication/i)).toBeInTheDocument();
+    expect(screen.getByText(/experimental provider boundary/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/auth artifact payload/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /import and connect/i })).toBeInTheDocument();
     expect(
       screen.getByText(
         /no imported account is available yet\. once an official auth artifact is imported/i,
       ),
     ).toBeInTheDocument();
     expect(screen.getAllByText('Account missing')).not.toHaveLength(0);
+  });
+
+  it('imports a codex auth artifact without leaving the raw artifact visible in the UI', async () => {
+    const user = userEvent.setup();
+    const refreshToken = 'refresh-imported-1234';
+    const idToken = createJwt({
+      email: 'imported@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'plus',
+        chatgpt_user_id: 'user_imported',
+      },
+    });
+    const artifact = JSON.stringify({
+      auth_mode: 'chatgpt',
+      tokens: {
+        access_token: 'access-imported-1234',
+        id_token: idToken,
+        refresh_token: refreshToken,
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+    await user.type(screen.getByLabelText(/account label/i), 'Imported Seat');
+    fireEvent.change(screen.getByLabelText(/auth artifact payload/i), {
+      target: { value: artifact },
+    });
+    await user.click(screen.getByRole('button', { name: /import and connect/i }));
+
+    expect(await screen.findByText(/the artifact body was cleared from the form immediately after import/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/auth artifact payload/i)).toHaveValue('');
+    expect(screen.queryByDisplayValue(artifact)).not.toBeInTheDocument();
+    expect((await screen.findAllByText('Imported Seat')).length).toBeGreaterThan(0);
+
+    const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
+      const message = call[0] as { type?: string };
+      return message.type;
+    });
+
+    expect(messageTypes).toContain('ACCOUNT_AUTH_CONNECT_START');
+    expect(messageTypes).toContain('ACCOUNT_AUTH_STATUS_GET');
+    expect(messageTypes).toContain('ACCOUNT_LIST');
   });
 
   it('blocks codex validation with a clear message when no account is imported', async () => {
@@ -320,6 +375,113 @@ describe('Options App', () => {
     expect(messageTypes).toContain('ACCOUNT_AUTH_STATUS_GET');
     expect(messageTypes).toContain('ACCOUNT_AUTH_VALIDATE');
     expect(messageTypes).not.toContain('API_KEY_VALIDATE');
+  });
+
+  it('manages imported codex accounts through validate, activate, quota, revoke, and remove actions', async () => {
+    const user = userEvent.setup();
+    const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+
+    await seedStorage({
+      vault: {
+        version: 1,
+        initialized: true,
+        lockState: 'unlocked',
+        unlockedAt: observedAt,
+        hasLegacySecrets: false,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'chatgpt:im***@example.com',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_codex_primary',
+              label: 'Codex Primary',
+              maskedIdentifier: 'primary@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              metadata: {
+                quota: {
+                  scope: 'account',
+                  unit: 'requests',
+                  period: 'day',
+                  used: 20,
+                  limit: 100,
+                  remaining: 80,
+                  observedAt,
+                },
+                session: {
+                  authKind: 'session-token',
+                  status: 'refresh-required',
+                  observedAt,
+                },
+              },
+            },
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_codex_backup',
+              label: 'Codex Backup',
+              maskedIdentifier: 'backup@example.com',
+              status: 'available',
+              isActive: false,
+              updatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_codex_primary',
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+
+    expect((await screen.findAllByText(/refresh required/i)).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: /validate account codex primary/i }));
+    expect(await screen.findByText(/validated artifact shape for codex primary/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /refresh quota for codex primary/i }));
+    expect(await screen.findByText(/quota refreshed/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /activate account codex backup/i }));
+    expect(await screen.findByText(/active codex account switched to acct_codex_backup/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /revoke account codex backup/i }));
+    expect(await screen.findByText(/imported account revoked/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /remove account codex primary/i }));
+    expect(await screen.findByText(/imported account removed from the local vault-backed store/i)).toBeInTheDocument();
+
+    const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
+      const message = call[0] as { type?: string };
+      return message.type;
+    });
+
+    expect(messageTypes).toContain('ACCOUNT_GET');
+    expect(messageTypes).toContain('ACCOUNT_AUTH_VALIDATE');
+    expect(messageTypes).toContain('ACCOUNT_ACTIVATE');
+    expect(messageTypes).toContain('ACCOUNT_REVOKE');
+    expect(messageTypes).toContain('ACCOUNT_REMOVE');
+    expect(messageTypes).toContain('ACCOUNT_QUOTA_REFRESH');
   });
 
   it('keeps onboarding completion locked for codex until an imported account is validated', async () => {

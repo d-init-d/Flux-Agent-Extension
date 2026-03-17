@@ -39,8 +39,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | T9 - Background account/session manager | DONE | Background session state machine, memory-only caching, and fail-safe refresh deferral landed |
 | T10 - ChatGPT/Codex provider adapter | DONE | Codex provider adapter now consumes account-backed runtime tokens and streams Responses-style output |
 | T11 - Registry/loader/default config updates | DONE | Codex is now a first-class validated provider surface across registry, runtime, and options-state plumbing |
-| T12 - Options account-connect UI | IN PROGRESS | Replace API-key UX with Connect Account flow |
-| T13 - Onboarding/popup/sidepanel UX | TODO | Reflect login state, entitlement, and failure modes |
+| T12 - Options account-connect UI | DONE | Options page now supports Codex artifact import, account actions, and explicit experimental UX |
+| T13 - Onboarding/popup/sidepanel UX | IN PROGRESS | Reflect login state, entitlement, and failure modes |
 | T14 - Unit and integration tests | TODO | Cover auth, storage, runtime, and provider behavior |
 | T15 - Manual QA checklist | TODO | Validate with a real ChatGPT Plus account |
 | T16 - Docs and tester guidance | TODO | Update README, TESTING, SECURITY, and operator docs |

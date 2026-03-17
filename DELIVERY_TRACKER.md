@@ -33,7 +33,7 @@
 - [x] `T9` Background account/session manager
 - [x] `T10` ChatGPT/Codex provider adapter
 - [x] `T11` Registry/loader/default config/validation
-- [ ] `T12` Options connect-account UI
+- [x] `T12` Options connect-account UI
 - [ ] `T13` Onboarding/popup/sidepanel/error UX
 - [ ] `T14` Unit + integration tests
 - [ ] `T15` Manual QA checklist
@@ -84,6 +84,10 @@
 - `T11` PASS
   - Scope: first-class codex provider validation path, options/runtime registry helpers, onboarding gating, and consistency tests
   - Verification: `pnpm vitest run src/options/__tests__/App.test.tsx src/shared/config/__tests__/surface-consistency.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
+  - Commit: `0a43af5` - `feat: first-class codex provider validation surface`
+- `T12` PASS
+  - Scope: Codex options connect-account UI, artifact import flow, account actions, and experimental boundary UX
+  - Verification: `pnpm vitest run src/options/__tests__/App.test.tsx && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol
