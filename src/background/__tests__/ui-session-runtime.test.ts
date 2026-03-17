@@ -3875,11 +3875,18 @@ describe('UI session runtime', () => {
         provider: 'codex',
         valid: true,
         checkedAt: expect.any(Number),
-        message: 'Validated artifact shape for ChatGPT Pro account (im***@example.com). Token exchange remains deferred.',
+        message:
+          'Validated artifact shape for ChatGPT Pro account (im***@example.com). Validated stored Codex artifact and hydrated an in-memory runtime session.',
         account: expect.objectContaining({
           accountId: 'acct_5aea75ff65d29e4c',
           maskedIdentifier: 'im***@example.com',
           validatedAt: expect.any(Number),
+          metadata: expect.objectContaining({
+            session: expect.objectContaining({
+              authKind: 'session-token',
+              status: 'active',
+            }),
+          }),
         }),
       }),
     );
@@ -3951,6 +3958,12 @@ describe('UI session runtime', () => {
             status: 'available',
             isActive: false,
             validatedAt: expect.any(Number),
+            metadata: expect.objectContaining({
+              session: expect.objectContaining({
+                authKind: 'session-token',
+                status: 'active',
+              }),
+            }),
           }),
           expect.objectContaining({
             accountId: 'acct_backup',

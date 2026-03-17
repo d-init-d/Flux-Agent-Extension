@@ -73,6 +73,7 @@ import { FileUploadManager, type IFileUploadManager } from './file-upload-manage
 import { buildSessionRecordingExportArtifact } from './session-recording-export';
 import { CredentialVault } from './credential-vault';
 import { importCodexAccountArtifact } from '@core/auth/codex-account-import';
+import { CodexAccountSessionManager } from './codex-account-session-manager';
 
 const STREAM_CHUNK_INTERVAL_MS = 20;
 const PLAYBACK_SPEEDS: readonly SessionPlaybackSpeed[] = [0.5, 1, 2];
@@ -166,6 +167,7 @@ export class UISessionRuntime {
   private readonly tabManager: TabManager;
   private readonly debuggerAdapter: DebuggerAdapter;
   private readonly credentialVault = new CredentialVault();
+  private readonly codexAccountSessionManager: CodexAccountSessionManager;
   private readonly orchestrator: ActionOrchestrator;
   private readonly networkInterceptionManager: INetworkInterceptionManager;
   private readonly deviceEmulationManager: IDeviceEmulationManager;
@@ -215,6 +217,10 @@ export class UISessionRuntime {
       new FileUploadManager({
         logger: this.logger.child('FileUploadManager'),
       });
+    this.codexAccountSessionManager = new CodexAccountSessionManager(
+      this.credentialVault,
+      this.logger,
+    );
     this.orchestrator = new ActionOrchestrator({
       execute: (action, context) => this.executeAutomationAction(action, context.sessionId),
     });
@@ -1292,7 +1298,7 @@ export class UISessionRuntime {
       );
     }
 
-    const account = await this.credentialVault.saveAccount(payload.provider, {
+    await this.credentialVault.saveAccount(payload.provider, {
       accountId: imported.derived.accountId,
       label: existingAccount?.label ?? imported.derived.label,
       maskedIdentifier: imported.derived.maskedIdentifier,
@@ -1318,14 +1324,20 @@ export class UISessionRuntime {
     });
     await this.credentialVault.markValidated(payload.provider);
 
+    const sessionSnapshot = await this.codexAccountSessionManager.ensureSession({
+      accountId: imported.derived.accountId,
+      purpose: 'validate',
+      forceRefresh: payload.forceRefresh,
+    });
+
     return {
       success: true,
       data: {
         provider: payload.provider,
         valid: true,
-        account: this.cloneAccountRecord(account),
+        account: this.cloneAccountRecord(sessionSnapshot.account),
         checkedAt,
-        message: `Validated artifact shape for ${account.label}. Token exchange remains deferred.`,
+        message: `Validated artifact shape for ${sessionSnapshot.account.label}. ${sessionSnapshot.message}`,
         vault: await this.credentialVault.getState(),
       },
     };
@@ -1464,6 +1476,12 @@ export class UISessionRuntime {
     }
     const vault = await this.credentialVault.getState();
     const accountId = payload.accountId ?? vault.activeAccounts[payload.provider];
+    if (accountId) {
+      await this.codexAccountSessionManager.ensureSession({
+        accountId,
+        purpose: 'quota-refresh',
+      });
+    }
     const quota = accountId
       ? await this.credentialVault.getQuotaMetadata(payload.provider, accountId)
       : undefined;

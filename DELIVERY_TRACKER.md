@@ -30,7 +30,7 @@
 - [x] `T6` Secure account store
 - [x] `T7` ChatGPT account auth module
 - [x] `T8` Manifest/auth callback wiring
-- [ ] `T9` Background account/session manager
+- [x] `T9` Background account/session manager
 - [ ] `T10` ChatGPT/Codex provider adapter
 - [ ] `T11` Registry/loader/default config/validation
 - [ ] `T12` Options connect-account UI
@@ -72,6 +72,10 @@
 - `T8` PASS
   - Artifact: `docs/task-08-manifest-auth-wiring.md`
   - Verification: `pnpm typecheck`
+  - Commit: `dbba6dc` - `docs: record codex auth manifest decision`
+- `T9` PASS
+  - Scope: codex background session manager, memory-only runtime cache, session-state metadata, and fail-safe refresh deferral
+  - Verification: `pnpm vitest run src/background/__tests__/codex-account-session-manager.test.ts src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

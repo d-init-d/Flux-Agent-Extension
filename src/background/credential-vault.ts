@@ -65,6 +65,17 @@ type SaveAccountInput = {
   artifact?: AccountArtifactInput;
 };
 
+type PatchAccountInput = {
+  label?: string;
+  maskedIdentifier?: string | null;
+  status?: ProviderAccountRecord['status'];
+  isActive?: boolean;
+  validatedAt?: number | null;
+  lastUsedAt?: number | null;
+  stale?: boolean;
+  metadata?: ProviderAccountRecord['metadata'];
+};
+
 type ProviderQuotaMetadata = NonNullable<ProviderAccountRecord['metadata']>['quota'];
 
 export type AccountArtifactRecord = {
@@ -678,6 +689,71 @@ export class CredentialVault {
     }
 
     return cloneAccountRecord(activated);
+  }
+
+  async patchAccount(
+    provider: AIProviderType,
+    accountId: string,
+    patch: PatchAccountInput,
+  ): Promise<ProviderAccountRecord | null> {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      return null;
+    }
+
+    const metadata = await this.getMetadata();
+    const providerAccounts = [...(metadata.accounts[provider] ?? [])];
+    const targetIndex = providerAccounts.findIndex(
+      (candidate) => candidate.accountId === normalizedAccountId,
+    );
+    if (targetIndex < 0) {
+      return null;
+    }
+
+    const current = providerAccounts[targetIndex];
+    const now = Date.now();
+    const nextAccount: ProviderAccountRecord = {
+      ...current,
+      label: patch.label?.trim() || current.label,
+      maskedIdentifier:
+        patch.maskedIdentifier === null
+          ? undefined
+          : patch.maskedIdentifier?.trim() || current.maskedIdentifier,
+      status: patch.status ?? current.status,
+      isActive: patch.isActive ?? current.isActive,
+      updatedAt: now,
+      validatedAt:
+        patch.validatedAt === null
+          ? undefined
+          : patch.validatedAt !== undefined
+            ? patch.validatedAt
+            : current.validatedAt,
+      lastUsedAt:
+        patch.lastUsedAt === null
+          ? undefined
+          : patch.lastUsedAt !== undefined
+            ? patch.lastUsedAt
+            : current.lastUsedAt,
+      stale: patch.stale ?? current.stale,
+      metadata:
+        patch.metadata !== undefined
+          ? cloneAccountMetadata(patch.metadata)
+          : cloneAccountMetadata(current.metadata),
+    };
+
+    providerAccounts[targetIndex] = nextAccount;
+    metadata.accounts[provider] = providerAccounts;
+
+    if (patch.isActive === true) {
+      metadata.activeAccounts[provider] = normalizedAccountId;
+    } else if (patch.isActive === false && metadata.activeAccounts[provider] === normalizedAccountId) {
+      delete metadata.activeAccounts[provider];
+    } else if (nextAccount.isActive) {
+      metadata.activeAccounts[provider] = normalizedAccountId;
+    }
+
+    await this.saveMetadata(metadata);
+    return cloneAccountRecord(nextAccount);
   }
 
   async removeAccount(provider: AIProviderType, accountId: string): Promise<boolean> {
