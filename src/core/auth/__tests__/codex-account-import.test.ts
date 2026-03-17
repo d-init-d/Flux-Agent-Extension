@@ -93,6 +93,107 @@ describe('importCodexAccountArtifact', () => {
     );
   });
 
+  it('parses flat json artifacts and normalizes explicit account ids', async () => {
+    const idToken = createJwt({
+      'https://api.openai.com/profile': {
+        email: 'Flat.User@example.com',
+      },
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'education',
+        user_id: 'user_flat',
+      },
+    });
+
+    const artifact = await importCodexAccountArtifact({
+      format: 'json',
+      value: JSON.stringify({
+        auth_mode: 'chatgpt',
+        last_refresh: 1_763_100_800_000,
+        access_token: 'access-flat',
+        id_token: idToken,
+        refresh_token: 'refresh-flat',
+        account_id: ' acct/team 001 ',
+      }),
+    });
+
+    expect(artifact.source).toBe('flat-json');
+    expect(artifact.lastRefreshAt).toBe(1_763_100_800_000);
+    expect(artifact.tokens.accountId).toBe('acct/team 001');
+    expect(artifact.identity).toEqual(
+      expect.objectContaining({
+        email: 'flat.user@example.com',
+        plan: 'Edu',
+        chatgptUserId: 'user_flat',
+      }),
+    );
+    expect(artifact.derived).toEqual(
+      expect.objectContaining({
+        accountId: 'acct_team_001',
+        maskedIdentifier: 'fl***@example.com',
+        label: 'ChatGPT Edu account (fl***@example.com)',
+      }),
+    );
+  });
+
+  it('parses quoted text bundles with token-prefixed keys and colon separators', async () => {
+    const idToken = createJwt({
+      'https://api.openai.com/profile': {
+        email: 'quoted@example.com',
+      },
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'team',
+        chatgpt_user_id: 'quoted-user',
+      },
+    });
+
+    const artifact = await importCodexAccountArtifact({
+      format: 'text',
+      value: [
+        '# exported from desktop app',
+        'auth_mode: "chatgpt"',
+        `tokens.id_token: "${idToken}"`,
+        "tokens.refresh_token: 'refresh-quoted'",
+        'last_refresh: 2026-03-17T09:30:00.000Z',
+      ].join('\n'),
+    });
+
+    expect(artifact.source).toBe('text-bundle');
+    expect(artifact.authMode).toBe('chatgpt');
+    expect(artifact.lastRefreshAt).toBe(Date.parse('2026-03-17T09:30:00.000Z'));
+    expect(artifact.tokens).toEqual(
+      expect.objectContaining({
+        accessToken: undefined,
+        refreshToken: 'refresh-quoted',
+      }),
+    );
+    expect(artifact.derived).toEqual(
+      expect.objectContaining({
+        accountId: expect.stringMatching(/^acct_[a-f0-9]{16}$/u),
+        maskedIdentifier: 'qu***@example.com',
+        label: 'ChatGPT Team account (qu***@example.com)',
+      }),
+    );
+  });
+
+  it('rejects unsupported auth modes before import completes', async () => {
+    const idToken = createJwt({
+      email: 'unsupported@example.com',
+    });
+
+    await expect(
+      importCodexAccountArtifact({
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'oauth',
+          tokens: {
+            id_token: idToken,
+            refresh_token: 'refresh-token',
+          },
+        }),
+      }),
+    ).rejects.toThrow(/unsupported codex auth mode/i);
+  });
+
   it('rejects artifacts without the required baseline token bundle', async () => {
     await expect(
       importCodexAccountArtifact({

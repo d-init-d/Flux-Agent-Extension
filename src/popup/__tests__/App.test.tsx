@@ -333,6 +333,79 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     ).toBeInTheDocument();
   });
 
+  it('surfaces a vault-locked codex state without hiding the provider guidance', async () => {
+    const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+
+    mockPopupRuntime({
+      activeProvider: 'codex',
+      vault: createVaultState({
+        lockState: 'locked',
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'chatgpt:lo***@example.com',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_codex_locked',
+              label: 'Locked Codex Account',
+              maskedIdentifier: 'locked@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_codex_locked',
+        },
+      }),
+      accountAuthStatus: {
+        provider: 'codex',
+        authFamily: 'account-backed',
+        status: 'vault-locked',
+        availableTransports: ['artifact-import'],
+        accounts: [
+          {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            accountId: 'acct_codex_locked',
+            label: 'Locked Codex Account',
+            maskedIdentifier: 'locked@example.com',
+            status: 'active',
+            isActive: true,
+            updatedAt: observedAt,
+          },
+        ],
+        activeAccountId: 'acct_codex_locked',
+        vault: createVaultState({ lockState: 'locked' }),
+      },
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('Vault locked')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Unlock the vault for Codex')).toBeInTheDocument();
+    expect(
+      within(providerCard).getByText(/unlock the vault in options, then validate the active account again if needed/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+  });
+
   it('falls back gracefully when tab access fails', async () => {
     vi.spyOn(chrome.tabs, 'query').mockRejectedValueOnce(new Error('Permission denied'));
 

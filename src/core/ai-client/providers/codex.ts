@@ -143,12 +143,12 @@ export class CodexProvider extends BaseProvider {
       return new ExtensionError(ErrorCode.AI_MODEL_NOT_FOUND, message, false, { status, code });
     }
 
-    if (status === 429 || code === 'rate_limit_exceeded') {
-      return new ExtensionError(ErrorCode.AI_RATE_LIMIT, message, true, { status, code });
-    }
-
     if (code === 'insufficient_quota') {
       return new ExtensionError(ErrorCode.AI_QUOTA_EXCEEDED, message, false, { status, code });
+    }
+
+    if (status === 429 || code === 'rate_limit_exceeded') {
+      return new ExtensionError(ErrorCode.AI_RATE_LIMIT, message, true, { status, code });
     }
 
     return new ExtensionError(ErrorCode.AI_API_ERROR, message, status >= 500, { status, code });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as codexAccountImport from '../../core/auth/codex-account-import';
+import { ErrorCode } from '../../shared/errors';
 import { Logger } from '../../shared/utils';
 
 import { CodexAccountSessionManager } from '../codex-account-session-manager';
@@ -250,6 +251,139 @@ describe('CodexAccountSessionManager', () => {
         }),
       }),
     );
+
+    vi.useRealTimers();
+  });
+
+  it('keeps validate-only refreshes deferred when the artifact has no usable access token', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    const now = Date.UTC(2026, 2, 17, 12, 30, 0);
+    const idToken = createJwt({
+      email: 'deferred@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'plus',
+        chatgpt_user_id: 'user_deferred',
+      },
+    });
+
+    await vault.saveAccount('codex', {
+      accountId: 'acct_deferred',
+      label: 'Deferred Codex Account',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            id_token: idToken,
+            refresh_token: 'refresh-deferred',
+            account_id: 'acct_deferred',
+          },
+        }),
+      },
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(now + 60_000);
+
+    const manager = new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'));
+    const result = await manager.ensureSession({
+      accountId: 'acct_deferred',
+      purpose: 'validate',
+    });
+
+    expect(result.sessionAvailable).toBe(false);
+    expect(result.sessionStatus).toBe('refresh-required');
+    expect(result.refreshDeferred).toBe(true);
+    expect(result.reauthRequired).toBe(false);
+    expect(result.account.status).toBe('active');
+    expect(result.account.stale).toBe(false);
+    expect(result.account.metadata).toEqual(
+      expect.objectContaining({
+        lastErrorCode: 'ACCOUNT_SESSION_REFRESH_DEFERRED',
+        session: expect.objectContaining({
+          authKind: 'session-token',
+          status: 'refresh-required',
+        }),
+      }),
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('drops cached runtime material once the account is revoked', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    const now = Date.UTC(2026, 2, 17, 13, 0, 0);
+    const idToken = createJwt({
+      email: 'revoked@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'pro',
+        chatgpt_user_id: 'user_revoked',
+      },
+    });
+
+    await vault.saveAccount('codex', {
+      accountId: 'acct_revoked',
+      label: 'Revoked Codex Account',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            access_token: 'access-revoked',
+            id_token: idToken,
+            refresh_token: 'refresh-revoked',
+            account_id: 'acct_revoked',
+          },
+        }),
+      },
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(now + 60_000);
+
+    const manager = new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'));
+
+    const initial = await manager.ensureSession({
+      accountId: 'acct_revoked',
+      purpose: 'validate',
+    });
+    expect(initial.sessionAvailable).toBe(true);
+
+    await vault.patchAccount('codex', 'acct_revoked', {
+      status: 'revoked',
+      isActive: false,
+    });
+
+    const revoked = await manager.ensureSession({
+      accountId: 'acct_revoked',
+      purpose: 'validate',
+    });
+
+    expect(revoked.sessionAvailable).toBe(false);
+    expect(revoked.cacheHit).toBe(false);
+    expect(revoked.sessionStatus).toBe('revoked');
+    expect(revoked.reauthRequired).toBe(true);
+    expect(revoked.account.metadata).toEqual(
+      expect.objectContaining({
+        lastErrorCode: 'ACCOUNT_SESSION_ARTIFACT_INVALID',
+        session: expect.objectContaining({
+          authKind: 'session-token',
+          status: 'revoked',
+        }),
+      }),
+    );
+
+    await expect(manager.getRuntimeSessionMaterial('acct_revoked')).rejects.toMatchObject({
+      code: ErrorCode.AI_INVALID_KEY,
+    });
 
     vi.useRealTimers();
   });

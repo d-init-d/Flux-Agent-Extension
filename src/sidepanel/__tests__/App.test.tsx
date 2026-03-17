@@ -260,6 +260,74 @@ describe('Side panel App (U-15 integration)', () => {
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
+  it('shows vault unlock guidance for codex sessions when the account store is locked', async () => {
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-codex-locked', {
+                config: {
+                  id: 'session-codex-locked',
+                  provider: 'codex',
+                  model: 'codex-mini-latest',
+                  name: 'Codex locked session',
+                },
+              }),
+            ],
+          };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
+        case 'ACCOUNT_AUTH_STATUS_GET':
+          return {
+            provider: 'codex',
+            authFamily: 'account-backed',
+            status: 'vault-locked',
+            availableTransports: ['artifact-import'],
+            activeAccountId: 'acct_codex_locked',
+            accounts: [
+              {
+                version: 1,
+                provider: 'codex',
+                providerFamily: 'chatgpt-account',
+                authFamily: 'account-backed',
+                accountId: 'acct_codex_locked',
+                label: 'Locked Codex Account',
+                maskedIdentifier: 'locked@example.com',
+                status: 'active',
+                isActive: true,
+                updatedAt: Date.now(),
+              },
+            ],
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'locked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText('Unlock the vault for Codex')).toBeInTheDocument();
+    expect(screen.getByText('Vault locked')).toBeInTheDocument();
+    expect(
+      screen.getByText(/unlock the vault in options, then validate the active account again if needed/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
   it('opens the saved workflows library and renders stored workflow metadata with a view toggle', async () => {
     const user = userEvent.setup();
 

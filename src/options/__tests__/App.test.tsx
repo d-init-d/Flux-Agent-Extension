@@ -313,6 +313,68 @@ describe('Options App', () => {
     ).toBeInTheDocument();
   });
 
+  it('blocks codex validation with a clear vault unlock message when imported accounts are locked', async () => {
+    const user = userEvent.setup();
+    const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+
+    await seedStorage({
+      vault: {
+        version: 1,
+        initialized: true,
+        lockState: 'locked',
+        hasLegacySecrets: false,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'chatgpt:lo***@example.com',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_codex_locked',
+              label: 'Locked Codex Account',
+              maskedIdentifier: 'locked@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_codex_locked',
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(
+      await screen.findByText(/unlock the vault before validating an imported account-backed provider/i),
+    ).toBeInTheDocument();
+
+    const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
+      const message = call[0] as { type?: string };
+      return message.type;
+    });
+
+    expect(messageTypes).toContain('ACCOUNT_AUTH_STATUS_GET');
+    expect(messageTypes).not.toContain('ACCOUNT_AUTH_VALIDATE');
+  });
+
   it('routes codex connection tests through the account-backed validation flow', async () => {
     const user = userEvent.setup();
     const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);

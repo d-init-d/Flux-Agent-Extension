@@ -130,6 +130,85 @@ describe('CodexProvider', () => {
     } satisfies Partial<ExtensionError>);
   });
 
+  it('maps insufficient quota HTTP responses ahead of generic rate-limit handling', async () => {
+    const provider = new CodexProvider();
+    await provider.initialize(config);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 429,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      text: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          error: {
+            code: 'insufficient_quota',
+            message: 'Quota exhausted for this seat.',
+          },
+        }),
+      ),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'Hello' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({
+      code: ErrorCode.AI_QUOTA_EXCEEDED,
+      message: 'Quota exhausted for this seat.',
+    } satisfies Partial<ExtensionError>);
+  });
+
+  it('rejects multimodal prompts before sending the request', async () => {
+    const provider = new CodexProvider();
+    await provider.initialize(config);
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      collectChunks(
+        provider.chat([
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Describe this screenshot.' },
+              { type: 'image', image_url: { url: 'data:image/png;base64,AAA' } },
+            ],
+          },
+        ], { maxRetries: 0 }),
+      ),
+    ).rejects.toMatchObject({
+      code: ErrorCode.AI_API_ERROR,
+      message: 'Codex account-backed adapter currently supports text-only prompts.',
+    } satisfies Partial<ExtensionError>);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('surfaces incomplete stream reasons with a retry hint', async () => {
+    const provider = new CodexProvider();
+    await provider.initialize(config);
+
+    const fetchMock = createStreamingFetchMock([
+      formatSSEData({
+        type: 'response.incomplete',
+        response: {
+          incomplete_details: {
+            reason: 'max_output_tokens',
+          },
+        },
+      }),
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      collectChunks(provider.chat([{ role: 'user', content: 'Hello' }], { maxRetries: 0 })),
+    ).rejects.toMatchObject({
+      code: ErrorCode.AI_API_ERROR,
+      message:
+        'Codex returned an incomplete response (max_output_tokens). Re-auth or retry from the official Codex client may be required.',
+    } satisfies Partial<ExtensionError>);
+  });
+
   it('rejects non-JWT runtime tokens during validation', async () => {
     const provider = new CodexProvider();
     await provider.initialize(config);

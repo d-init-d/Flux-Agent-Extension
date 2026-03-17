@@ -35,7 +35,7 @@
 - [x] `T11` Registry/loader/default config/validation
 - [x] `T12` Options connect-account UI
 - [x] `T13` Onboarding/popup/sidepanel/error UX
-- [ ] `T14` Unit + integration tests
+- [x] `T14` Unit + integration tests
 - [ ] `T15` Manual QA checklist
 - [ ] `T16` Docs and tester guidance
 
@@ -92,6 +92,10 @@
 - `T13` PASS
   - Scope: codex-aware onboarding copy, popup quick-action gating, sidepanel guidance banners, and shared UX-state mapping
   - Verification: `pnpm vitest run src/options/__tests__/App.test.tsx src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx && pnpm typecheck`
+  - Commit: `72e1d58` - `feat: surface codex account state across UI`
+- `T14` PASS
+  - Scope: codex parser/session/provider/UI edge cases, regression coverage, and build verification
+  - Verification: `pnpm exec vitest run src/core/auth/__tests__/codex-account-import.test.ts src/background/__tests__/codex-account-session-manager.test.ts src/core/ai-client/__tests__/providers/codex.test.ts src/options/__tests__/App.test.tsx src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx && pnpm build`
   - Commit: pending
 
 ## Workflow Protocol

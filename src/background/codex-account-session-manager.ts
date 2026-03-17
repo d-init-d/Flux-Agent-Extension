@@ -385,7 +385,9 @@ export class CodexAccountSessionManager {
     };
 
     const nextStatus = observation.reauthRequired
-      ? 'needs-auth'
+      ? account.status === 'revoked' || observation.sessionStatus === 'revoked'
+        ? 'revoked'
+        : 'needs-auth'
       : observation.sessionStatus === 'active'
         ? account.isActive
           ? 'active'
