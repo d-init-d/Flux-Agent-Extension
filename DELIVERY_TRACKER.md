@@ -29,7 +29,7 @@
 - [x] `T5` Auth message surface expansion
 - [x] `T6` Secure account store
 - [x] `T7` ChatGPT account auth module
-- [ ] `T8` Manifest/auth callback wiring
+- [x] `T8` Manifest/auth callback wiring
 - [ ] `T9` Background account/session manager
 - [ ] `T10` ChatGPT/Codex provider adapter
 - [ ] `T11` Registry/loader/default config/validation
@@ -68,6 +68,10 @@
 - `T7` PASS
   - Scope: import-based Codex auth parser, runtime connect/validate handlers, persisted account artifact validation baseline
   - Verification: `pnpm exec vitest run src/core/auth/__tests__/codex-account-import.test.ts src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
+  - Commit: `070c7fa` - `feat: import codex account auth artifacts`
+- `T8` PASS
+  - Artifact: `docs/task-08-manifest-auth-wiring.md`
+  - Verification: `pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol
