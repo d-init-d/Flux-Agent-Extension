@@ -37,7 +37,7 @@
 - [x] `T13` Onboarding/popup/sidepanel/error UX
 - [x] `T14` Unit + integration tests
 - [x] `T15` Manual QA checklist
-- [ ] `T16` Docs and tester guidance
+- [x] `T16` Docs and tester guidance
 
 ### PASS Log
 
@@ -100,6 +100,10 @@
 - `T15` PASS
   - Artifact: `docs/task-15-manual-qa-checklist.md`
   - Verification: `git diff --check`
+  - Commit: `ef92557` - `docs: add codex manual qa checklist`
+- `T16` PASS
+  - Scope: README, TESTING, SECURITY, and tester-facing docs now match the implemented Codex account-backed flow
+  - Verification: `pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

@@ -1,7 +1,7 @@
 # Security Architecture & Threat Model
 
 > **Version:** 1.1.0
-> **Last Updated:** 2026-03-13
+> **Last Updated:** 2026-03-17
 > **Classification:** Internal - Security Sensitive
 > **Owner:** @sub-security-auditor
 
@@ -107,6 +107,14 @@ Provider credentials are managed by the background-owned `CredentialVault`.
 4. Legacy secrets in `encryptedKeys` or `providerSessionApiKeys` must be migrated and then removed.
 5. Runtime provider initialization must resolve `provider config + decrypted credential + endpoint` together; there is no supported path that uses a key-based provider without resolving the vault first.
 
+### 3.2.1 Codex Account-Backed Boundary
+
+- `codex` is an `experimental` provider and does not use the normal API-key setup path.
+- The current implementation imports an official ChatGPT/Codex auth artifact into the vault, validates the artifact locally, and hydrates runtime access tokens only inside the background session manager.
+- Popup, sidepanel, and options surfaces receive masked state and health metadata through background messages; they do not store raw artifact bodies, refresh tokens, or live session tokens.
+- Runtime session material is cached in background memory and cleared when the vault is locked, the account is revoked, or the runtime snapshot is no longer trusted.
+- Live refresh is intentionally deferred to the official client flow; stale or expired artifacts require re-import rather than extension-owned token exchange.
+
 ### 3.3 Credential Record Shape
 
 ```typescript
@@ -178,12 +186,14 @@ Most browser actions execute through the standard automation surface. The curren
 
 | Data Type | Classification | Storage | Sent to AI? | Notes |
 |-----------|----------------|---------|-------------|-------|
-| Provider credentials | SECRET | Encrypted vault only | Never | Includes API keys and Copilot OAuth tokens |
+| Provider credentials | SECRET | Encrypted vault only | Never | Includes API keys, Copilot OAuth tokens, and Codex auth artifacts |
 | Vault metadata | INTERNAL | `chrome.storage.local` | Never | Masked record metadata only |
 | Unlock state | SENSITIVE | `chrome.storage.session` + memory | Never | Cleared when the session is locked or browser session ends |
 | Chat/session content | PRIVATE | Local extension storage | Yes, selectively | Depends on user request and provider flow |
 | Page context | CONTEXTUAL | Memory and session pipeline | Yes, sanitized | Used to ground automation requests |
 | Action logs and recordings | INTERNAL | Local extension storage / downloads | No | `evaluate` entries marked high risk |
+
+For Codex specifically, imported auth artifacts are treated as `SECRET` vault-only material even though the runtime consumes them as account-backed session input rather than as a conventional API key.
 
 ### 6.2 Handling Rules
 
@@ -210,6 +220,7 @@ Most browser actions execute through the standard automation surface. The curren
 
 - [ ] Review whether the shipped manifest can narrow `debugger` or host scope without regressing core features
 - [ ] Keep store disclosure and docs aligned with the current broad host-permission model
+- [ ] Keep Codex docs aligned with the current import-only flow; do not describe manifest, callback, or extension-owned refresh behavior that does not exist yet
 - [ ] Continue reducing non-critical lint warnings before final release sign-off
 - [ ] Re-run dependency audit before every release candidate
 
@@ -225,6 +236,14 @@ Before calling a build release-ready:
 4. `pnpm lint` must not introduce new warnings in touched areas.
 5. Store documentation must match the current manifest, vault model, and advanced-mode behavior.
 6. Dependency audit must show no new `high` or `critical` findings.
+
+Codex-specific release notes must also stay honest about these current boundaries:
+
+- `experimental` provider status
+- account-backed artifact import instead of API-key auth
+- no manifest/auth-callback change in the current flow
+- vault/background secret boundary and memory-only runtime session hydration
+- recovery via re-import + validate when sessions are stale, expired, revoked, or refresh-required
 
 ---
 

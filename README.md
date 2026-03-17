@@ -31,6 +31,22 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 - Content script: `src/content/index.ts`
 - Manifest: `src/manifest.json`
 
+## Provider Auth Notes
+
+- Most providers still use the existing API-key or OAuth-backed setup paths in `Options`.
+- `codex` is currently `experimental` and uses an account-backed flow instead of a normal API key.
+- The shipped Codex path imports an official ChatGPT/Codex auth artifact into the background-owned vault, validates it, and hydrates an in-memory runtime session from that artifact.
+- The current flow does not add manifest permissions, callback pages, `chrome.identity`, or extension-owned OAuth handling. See `docs/task-08-manifest-auth-wiring.md`.
+
+## Codex Current Status
+
+- Provider label in-product: `ChatGPT Plus / Codex (Experimental)`.
+- Auth model: account-backed artifact import only; do not document it as a normal API-key provider.
+- Secret boundary: raw artifact material stays in the vault/background path; normal settings storage keeps masked metadata and health state only.
+- Runtime boundary: popup, options, and sidepanel talk to background messages; they do not persist raw Codex artifacts in UI-local state.
+- Known limitation: live refresh is intentionally deferred to the official client flow, so stale or expired sessions require importing a fresh official artifact.
+- Manual QA checklist: `docs/task-15-manual-qa-checklist.md`.
+
 ## Permissions
 
 The manifest currently declares these permissions:
@@ -134,9 +150,10 @@ Release packaging is handled by `.github/workflows/release.yml` on tags matching
 
 - Provider credentials now flow through the background-owned credential vault. Secrets are encrypted at rest, while regular settings storage keeps only masked metadata.
 - Unlocking the vault is a per-browser-session action. The unlock state lives in session storage and memory only; options and popup flows do not persist raw provider secrets.
+- Codex follows the same vault boundary, but with imported official auth artifacts rather than API keys. If the vault is locked, missing, revoked, stale, or refresh-required, Codex runtime flows stay blocked until the account is revalidated or re-imported.
 - `evaluate` and custom scripts stay off by default. They require `Advanced mode` plus the explicit custom-scripts capability, and exported recordings/action logs mark `evaluate` as high risk.
 - See `SECURITY.md` for the threat model and current hardening posture.
-- See `TESTING.md` for the broader QA strategy.
+- See `TESTING.md` for the broader QA strategy and Codex-specific test/recovery guidance.
 - See `ARCHITECTURE.md` for architecture context.
 - See `ROADMAP.md` and `DELIVERY_TRACKER.md` for live delivery status.
 
