@@ -42,8 +42,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | T12 - Options account-connect UI | DONE | Options page now supports Codex artifact import, account actions, and explicit experimental UX |
 | T13 - Onboarding/popup/sidepanel UX | DONE | Codex state-aware onboarding copy, popup gating, and sidepanel guidance are now wired through shared UX helpers |
 | T14 - Unit and integration tests | DONE | Codex auth/provider/runtime/UI coverage now spans parser, session manager, adapter, popup, sidepanel, and options flows |
-| T15 - Manual QA checklist | IN PROGRESS | Validate with a real ChatGPT Plus account |
-| T16 - Docs and tester guidance | TODO | Update README, TESTING, SECURITY, and operator docs |
+| T15 - Manual QA checklist | DONE | Manual QA checklist is captured in `docs/task-15-manual-qa-checklist.md` |
+| T16 - Docs and tester guidance | IN PROGRESS | Update README, TESTING, SECURITY, and operator docs |
 
 ---
 

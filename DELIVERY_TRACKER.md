@@ -36,7 +36,7 @@
 - [x] `T12` Options connect-account UI
 - [x] `T13` Onboarding/popup/sidepanel/error UX
 - [x] `T14` Unit + integration tests
-- [ ] `T15` Manual QA checklist
+- [x] `T15` Manual QA checklist
 - [ ] `T16` Docs and tester guidance
 
 ### PASS Log
@@ -96,6 +96,10 @@
 - `T14` PASS
   - Scope: codex parser/session/provider/UI edge cases, regression coverage, and build verification
   - Verification: `pnpm exec vitest run src/core/auth/__tests__/codex-account-import.test.ts src/background/__tests__/codex-account-session-manager.test.ts src/core/ai-client/__tests__/providers/codex.test.ts src/options/__tests__/App.test.tsx src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx && pnpm build`
+  - Commit: `dd804f1` - `test: harden codex account-backed coverage`
+- `T15` PASS
+  - Artifact: `docs/task-15-manual-qa-checklist.md`
+  - Verification: `git diff --check`
   - Commit: pending
 
 ## Workflow Protocol
