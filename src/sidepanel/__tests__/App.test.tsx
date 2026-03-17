@@ -186,6 +186,80 @@ describe('Side panel App (U-15 integration)', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows actionable codex account guidance when the active session needs a fresh artifact', async () => {
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-codex', {
+                config: {
+                  id: 'session-codex',
+                  provider: 'codex',
+                  model: 'codex-mini-latest',
+                  name: 'Codex troubleshooting',
+                },
+              }),
+            ],
+          };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
+        case 'ACCOUNT_AUTH_STATUS_GET':
+          return {
+            provider: 'codex',
+            authFamily: 'account-backed',
+            status: 'ready',
+            availableTransports: ['artifact-import'],
+            activeAccountId: 'acct_codex_primary',
+            accounts: [
+              {
+                version: 1,
+                provider: 'codex',
+                providerFamily: 'chatgpt-account',
+                authFamily: 'account-backed',
+                accountId: 'acct_codex_primary',
+                label: 'Codex Primary',
+                maskedIdentifier: 'primary@example.com',
+                status: 'active',
+                isActive: true,
+                updatedAt: Date.now(),
+                metadata: {
+                  session: {
+                    authKind: 'session-token',
+                    status: 'refresh-required',
+                    observedAt: Date.now(),
+                  },
+                },
+              },
+            ],
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText('Codex needs a fresh artifact')).toBeInTheDocument();
+    expect(screen.getByText('Refresh required')).toBeInTheDocument();
+    expect(screen.getByText(/re-import a fresh official artifact in options, then validate the account again/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open provider settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
   it('opens the saved workflows library and renders stored workflow metadata with a view toggle', async () => {
     const user = userEvent.setup();
 

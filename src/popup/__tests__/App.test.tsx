@@ -1,6 +1,8 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createDefaultProviderConfigs } from '../../shared/config';
+import type { ExtensionMessage, VaultState } from '../../shared/types';
 import { ThemeProvider } from '../../ui/theme';
 import { createDefaultOnboardingState } from '../../shared/storage/onboarding';
 import { readStorage, seedStorage } from '../../test/helpers';
@@ -43,6 +45,125 @@ function renderApp() {
   );
 }
 
+function createVaultState(overrides: Partial<VaultState> = {}): VaultState {
+  return {
+    version: 1,
+    initialized: true,
+    lockState: 'unlocked',
+    hasLegacySecrets: false,
+    credentials: {},
+    accounts: {},
+    activeAccounts: {},
+    ...overrides,
+  };
+}
+
+function mockPopupRuntime(options?: {
+  activeProvider?: 'openai' | 'codex';
+  vault?: VaultState;
+  accountAuthStatus?: Record<string, unknown>;
+  sessions?: Array<Record<string, unknown>>;
+}): void {
+  const vault = options?.vault ?? createVaultState();
+  const settingsResponse = {
+    settings: {
+      language: 'en',
+      theme: 'system',
+      defaultProvider: options?.activeProvider ?? 'openai',
+      streamResponses: true,
+      includeScreenshotsInContext: true,
+      maxContextLength: 12,
+      defaultTimeout: 30000,
+      autoRetryOnFailure: true,
+      maxRetries: 2,
+      screenshotOnError: true,
+      allowCustomScripts: false,
+      debugMode: false,
+      showFloatingBar: true,
+      highlightElements: true,
+      soundNotifications: false,
+    },
+    providers: createDefaultProviderConfigs(),
+    activeProvider: options?.activeProvider ?? 'openai',
+    onboarding: {
+      version: 1,
+      completed: true,
+      lastStep: 3,
+      completedAt: Date.UTC(2026, 2, 7, 10, 0),
+      providerReady: true,
+      configuredProvider: options?.activeProvider ?? 'openai',
+      validatedProvider: options?.activeProvider ?? 'openai',
+    },
+    vault,
+  };
+
+  vi.mocked(chrome.runtime.sendMessage).mockImplementation(
+    async (message: unknown): Promise<unknown> => {
+      const request = message as ExtensionMessage;
+
+      switch (request.type) {
+        case 'SETTINGS_GET':
+          return { success: true, data: settingsResponse };
+        case 'ACCOUNT_AUTH_STATUS_GET':
+          return {
+            success: true,
+            data:
+              options?.accountAuthStatus ?? {
+                provider: 'codex',
+                authFamily: 'account-backed',
+                status: 'needs-auth',
+                availableTransports: ['artifact-import'],
+                accounts: [],
+                activeAccountId: undefined,
+                vault,
+              },
+          };
+        case 'SESSION_LIST':
+          return { success: true, data: { sessions: options?.sessions ?? [] } };
+        case 'SESSION_CREATE':
+          return {
+            success: true,
+            data: {
+              session: {
+                config: {
+                  id: 'popup-session-1',
+                  provider: options?.activeProvider ?? 'openai',
+                  model: 'gpt-4o-mini',
+                  name: 'Popup quick action session',
+                },
+                status: 'idle',
+                targetTabId: 1,
+                tabSnapshot: [],
+                recording: { status: 'idle', actions: [], startedAt: null, updatedAt: null },
+                playback: {
+                  status: 'idle',
+                  nextActionIndex: 0,
+                  speed: 1,
+                  startedAt: null,
+                  updatedAt: null,
+                  lastCompletedAt: null,
+                  lastError: null,
+                },
+                messages: [],
+                currentTurn: 0,
+                actionHistory: [],
+                variables: {},
+                startedAt: Date.now(),
+                lastActivityAt: Date.now(),
+                errorCount: 0,
+              },
+            },
+          };
+        case 'SESSION_SEND_MESSAGE':
+        case 'SESSION_PLAYBACK_START':
+          return { success: true, data: undefined };
+        default:
+          return { success: true, data: undefined };
+      }
+    },
+  );
+}
+
 describe('Popup App (U-06 quick actions + page info)', () => {
   beforeEach(async () => {
     await seedStorage({
@@ -53,6 +174,7 @@ describe('Popup App (U-06 quick actions + page info)', () => {
         completedAt: Date.UTC(2026, 2, 7, 10, 0),
       },
     });
+    mockPopupRuntime();
   });
 
   it('renders a popup-sized layout with live current page details', async () => {
@@ -107,14 +229,143 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     expect(within(actions).getByRole('button', { name: /replay last run/i })).toBeInTheDocument();
   });
 
+  it('shows the codex empty state and keeps quick actions locked until an account is imported', async () => {
+    mockPopupRuntime({ activeProvider: 'codex' });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('ChatGPT Plus / Codex (Experimental)')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Account missing')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Import a Codex account')).toBeInTheDocument();
+    expect(
+      within(providerCard).getByText(/no official auth artifact is available for the active codex provider yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+    expect(
+      within(providerCard).getByText(/import an official artifact in options, then run validation/i),
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces a refresh-required codex account state in the popup footer', async () => {
+    const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+
+    mockPopupRuntime({
+      activeProvider: 'codex',
+      vault: createVaultState({
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****1234',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_codex_primary',
+              label: 'Codex Primary',
+              maskedIdentifier: 'primary@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              metadata: {
+                session: {
+                  authKind: 'session-token',
+                  status: 'refresh-required',
+                  observedAt,
+                },
+              },
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_codex_primary',
+        },
+      }),
+      accountAuthStatus: {
+        provider: 'codex',
+        authFamily: 'account-backed',
+        status: 'ready',
+        availableTransports: ['artifact-import'],
+        accounts: [
+          {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            accountId: 'acct_codex_primary',
+            label: 'Codex Primary',
+            maskedIdentifier: 'primary@example.com',
+            status: 'active',
+            isActive: true,
+            updatedAt: observedAt,
+            metadata: {
+              session: {
+                authKind: 'session-token',
+                status: 'refresh-required',
+                observedAt,
+              },
+            },
+          },
+        ],
+        activeAccountId: 'acct_codex_primary',
+        vault: createVaultState(),
+      },
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect((await screen.findAllByText('Refresh required')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /extract data/i })).toBeDisabled();
+    expect(screen.getByText('Codex needs a fresh artifact')).toBeInTheDocument();
+    expect(
+      within(providerCard).getByText(/re-import a fresh official artifact in options, then validate the account again/i),
+    ).toBeInTheDocument();
+  });
+
   it('falls back gracefully when tab access fails', async () => {
     vi.spyOn(chrome.tabs, 'query').mockRejectedValueOnce(new Error('Permission denied'));
 
     renderApp();
 
     expect(await screen.findByText('Active tab unavailable')).toBeInTheDocument();
-    expect(screen.getByText('Quick actions need an accessible active tab before they can run.')).toBeInTheDocument();
-    expect(screen.getByText('The popup is waiting for an active tab it can access.')).toBeInTheDocument();
+    expect(
+      screen.getAllByText('Quick actions need an accessible active tab before they can run.'),
+    ).toHaveLength(2);
+  });
+
+  it('blocks quick actions on Chrome internal pages and explains why', async () => {
+    getTabsMock()._setTabs([
+      createMockTab({
+        title: 'The moi',
+        url: 'chrome://newtab',
+        status: 'complete',
+      }),
+    ]);
+
+    renderApp();
+
+    const pageCard = screen.getByTestId('popup-page-card');
+
+    expect(await within(pageCard).findByText('Open a website tab')).toBeInTheDocument();
+    expect(within(pageCard).getByText('chrome page')).toBeInTheDocument();
+    expect(within(pageCard).getByText('chrome://newtab')).toBeInTheDocument();
+    expect(
+      within(pageCard).getByText(
+        'Flux only runs quick actions on regular website tabs (http/https). Chrome internal pages, extension pages, and blank tabs are not supported.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
   });
 
   it('exposes the theme toggle and applies a persisted selection', async () => {
@@ -146,7 +397,8 @@ describe('Popup App (U-06 quick actions + page info)', () => {
 
     expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
 
-    const cta = await screen.findByRole('button', { name: /open guided setup/i });
+    expect(await screen.findByRole('button', { name: /open guided setup/i })).toBeInTheDocument();
+    const cta = screen.getByRole('button', { name: /finish setup/i });
     expect(screen.getByText('Guided setup')).toBeInTheDocument();
     expect(screen.getByText(/complete guided setup to unlock live quick actions/i)).toBeInTheDocument();
 
@@ -175,21 +427,27 @@ describe('Popup App (U-06 quick actions + page info)', () => {
   });
 
   it('defaults to guided setup when onboarding state loading fails', async () => {
-    vi.spyOn(chrome.storage.local, 'get').mockImplementation(async (keys: string | string[] | Record<string, unknown>) => {
-      if (keys === 'onboarding') {
-        throw new Error('storage unavailable');
-      }
+    vi.spyOn(chrome.storage.local, 'get').mockImplementation(
+      async (keys: string | string[] | Record<string, unknown> | null | undefined) => {
+        if (keys === 'onboarding') {
+          throw new Error('storage unavailable');
+        }
 
-      if (typeof keys === 'string') {
+        if (typeof keys === 'string') {
         return {};
       }
 
       if (Array.isArray(keys)) {
-        return Object.fromEntries(keys.map((key) => [key, undefined]));
-      }
+          return Object.fromEntries(keys.map((key) => [key, undefined]));
+        }
 
-      return { ...keys };
-    });
+        if (!keys) {
+          return {};
+        }
+
+        return { ...keys };
+      },
+    );
 
     renderApp();
 

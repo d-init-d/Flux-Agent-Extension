@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   Bolt,
+  CheckCircle2,
   Eye,
   FileText,
+  Lock,
   MousePointerClick,
   Sparkles,
   TimerReset,
@@ -17,8 +20,10 @@ import {
   CardTitle,
 } from '@/ui/components';
 import { sendExtensionRequest } from '@/shared/extension-client';
+import { PROVIDER_LOOKUP, providerUsesAccountImport } from '@/shared/config';
 import { normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@/shared/storage/onboarding';
-import type { Session } from '@/shared/types';
+import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
+import type { AccountAuthStatusGetResponse, AIProviderType, Session, SettingsGetResponse } from '@/shared/types';
 import { ThemeToggle } from '@/ui/theme';
 
 interface PageInfo {
@@ -41,6 +46,17 @@ interface QuickActionDefinition {
   label: string;
   description: string;
   icon: typeof FileText;
+}
+
+interface PopupProviderStatus {
+  provider: AIProviderType | null;
+  providerLabel: string;
+  badgeLabel: string;
+  badgeVariant: 'default' | 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail: string;
+  action: string;
+  blocksQuickActions: boolean;
 }
 
 const DEFAULT_PAGE_INFO: PageInfo = {
@@ -88,6 +104,19 @@ const QUICK_ACTION_PROMPTS: Record<Exclude<QuickActionId, 'replay-last-run'>, st
     'Inspect the current page and identify the main interactive elements, forms, clickable targets, and likely next steps.',
 };
 
+const SUPPORTED_PAGE_PROTOCOLS = new Set(['http:', 'https:']);
+
+const DEFAULT_PROVIDER_STATUS: PopupProviderStatus = {
+  provider: null,
+  providerLabel: 'Provider status',
+  badgeLabel: 'Checking',
+  badgeVariant: 'default',
+  title: 'Checking provider state',
+  detail: 'Flux is loading the current provider and account state for popup quick actions.',
+  action: 'Open options if this status does not update.',
+  blocksQuickActions: false,
+};
+
 function formatUrlParts(url?: string): Pick<PageInfo, 'url' | 'domain'> {
   if (!url) {
     return {
@@ -98,6 +127,14 @@ function formatUrlParts(url?: string): Pick<PageInfo, 'url' | 'domain'> {
 
   try {
     const parsedUrl = new URL(url);
+
+    if (!SUPPORTED_PAGE_PROTOCOLS.has(parsedUrl.protocol)) {
+      return {
+        url,
+        domain: `${parsedUrl.protocol.replace(':', '')} page`,
+      };
+    }
+
     const displayUrl = `${parsedUrl.hostname}${parsedUrl.pathname}${parsedUrl.search}`;
 
     return {
@@ -112,6 +149,18 @@ function formatUrlParts(url?: string): Pick<PageInfo, 'url' | 'domain'> {
   }
 }
 
+function isSupportedTabUrl(url?: string): boolean {
+  if (!url) {
+    return false;
+  }
+
+  try {
+    return SUPPORTED_PAGE_PROTOCOLS.has(new URL(url).protocol);
+  } catch {
+    return false;
+  }
+}
+
 function mapTabToPageInfo(tab?: chrome.tabs.Tab): PageInfo {
   if (!tab) {
     return DEFAULT_PAGE_INFO;
@@ -119,6 +168,31 @@ function mapTabToPageInfo(tab?: chrome.tabs.Tab): PageInfo {
 
   const urlParts = formatUrlParts(tab.url);
   const title = tab.title?.trim() || 'Untitled tab';
+
+  if (!tab.url) {
+    return {
+      title,
+      url: urlParts.url,
+      domain: urlParts.domain,
+      summary:
+        'The active tab has not exposed a page URL yet. Wait for the page to finish loading or switch to a regular website tab.',
+      status: 'Active tab unavailable',
+      isFallback: true,
+    };
+  }
+
+  if (!isSupportedTabUrl(tab.url)) {
+    return {
+      title,
+      url: urlParts.url,
+      domain: urlParts.domain,
+      summary:
+        'Flux only runs quick actions on regular website tabs (http/https). Chrome internal pages, extension pages, and blank tabs are not supported.',
+      status: 'Open a website tab',
+      isFallback: true,
+    };
+  }
+
   const summary = tab.url
     ? 'Live context loaded from the active tab so popup actions can target the current page.'
     : 'Active tab found, but the page URL is not available yet.';
@@ -139,6 +213,70 @@ function sortSessionsByActivity(sessions: Session[]): Session[] {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim().length > 0 ? error.message : fallback;
+}
+
+function createDefaultProviderStatus(snapshot: SettingsGetResponse): PopupProviderStatus {
+  const provider = snapshot.activeProvider;
+  const providerLabel = PROVIDER_LOOKUP[provider].label;
+  const hasCredential = Boolean(snapshot.vault.credentials[provider]);
+
+  if (snapshot.vault.lockState === 'locked' && hasCredential) {
+    return {
+      provider,
+      providerLabel,
+      badgeLabel: 'Vault locked',
+      badgeVariant: 'warning',
+      title: `${providerLabel} is stored but locked`,
+      detail:
+        'The active provider is configured, but the vault is locked for this browser session, so live requests may need options before they can resume.',
+      action: 'Unlock the vault in options if quick actions start failing.',
+      blocksQuickActions: false,
+    };
+  }
+
+  if (hasCredential) {
+    return {
+      provider,
+      providerLabel,
+      badgeLabel: 'Ready',
+      badgeVariant: 'success',
+      title: `${providerLabel} is ready`,
+      detail: 'The popup can hand work to the side panel with the current provider configuration.',
+      action: 'Use options to rotate or revalidate the credential if requests fail later.',
+      blocksQuickActions: false,
+    };
+  }
+
+  return {
+    provider,
+    providerLabel,
+    badgeLabel: 'Setup pending',
+    badgeVariant: 'info',
+    title: `${providerLabel} still needs provider setup`,
+    detail:
+      'The popup can still open the side panel, but the active provider may not answer until its credential or account state is completed in options.',
+    action: 'Open options to save credentials, connect OAuth, or import an account artifact.',
+    blocksQuickActions: false,
+  };
+}
+
+function mapAccountBackedStatusToPopupStatus(
+  provider: AIProviderType,
+  authStatus: AccountAuthStatusGetResponse,
+): PopupProviderStatus {
+  const providerLabel = PROVIDER_LOOKUP[provider].label;
+  const ux = resolveAccountBackedProviderUx(authStatus);
+
+  return {
+    provider,
+    providerLabel,
+    badgeLabel: ux.badgeLabel,
+    badgeVariant: ux.badgeVariant,
+    title: ux.title,
+    detail: ux.detail,
+    action: ux.action,
+    blocksQuickActions: ux.blocksRuntime,
+  };
 }
 
 async function getActiveTabContext(): Promise<{
@@ -194,6 +332,8 @@ export function App() {
   const [actionError, setActionError] = useState('');
   const [replaySession, setReplaySession] = useState<Session | null>(null);
   const [replayReason, setReplayReason] = useState('Checking recorded sessions...');
+  const [providerStatus, setProviderStatus] = useState<PopupProviderStatus>(DEFAULT_PROVIDER_STATUS);
+  const [isProviderStatusLoading, setIsProviderStatusLoading] = useState(true);
 
   const refreshReplayAvailability = useCallback(async (tabId?: number): Promise<void> => {
     try {
@@ -222,6 +362,43 @@ export function App() {
     }
   }, []);
 
+  const refreshProviderStatus = useCallback(async (): Promise<void> => {
+    setIsProviderStatusLoading(true);
+
+    try {
+      const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined, 'popup');
+      const provider = settingsSnapshot.activeProvider;
+
+      if (providerUsesAccountImport(provider)) {
+        const authStatus = await sendExtensionRequest(
+          'ACCOUNT_AUTH_STATUS_GET',
+          { provider },
+          'popup',
+        );
+
+        setProviderStatus(mapAccountBackedStatusToPopupStatus(provider, authStatus));
+      } else {
+        setProviderStatus(createDefaultProviderStatus(settingsSnapshot));
+      }
+    } catch (error) {
+      setProviderStatus({
+        provider: null,
+        providerLabel: 'Provider status',
+        badgeLabel: 'Unavailable',
+        badgeVariant: 'warning',
+        title: 'Provider state could not be refreshed',
+        detail: getErrorMessage(
+          error,
+          'The popup could not load the current provider state, so quick-action status may be stale.',
+        ),
+        action: 'Open options to confirm the active provider and account health.',
+        blocksQuickActions: false,
+      });
+    } finally {
+      setIsProviderStatusLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let isActive = true;
 
@@ -231,8 +408,11 @@ export function App() {
       setIsOnboardingLocked(false);
 
       if (onboardingState.completed) {
+        void refreshProviderStatus();
         void refreshReplayAvailability(activeTab?.id);
       } else {
+        setProviderStatus(DEFAULT_PROVIDER_STATUS);
+        setIsProviderStatusLoading(false);
         setReplaySession(null);
         setReplayReason('Complete guided setup before loading replay actions.');
       }
@@ -271,6 +451,8 @@ export function App() {
         if (isActive) {
           setNeedsOnboarding(true);
           setIsOnboardingLocked(false);
+          setProviderStatus(DEFAULT_PROVIDER_STATUS);
+          setIsProviderStatusLoading(false);
           setReplaySession(null);
           setReplayReason('Complete guided setup before loading replay actions.');
         }
@@ -282,7 +464,7 @@ export function App() {
       isActive = false;
       chrome.storage.onChanged.removeListener(handleStorageChange);
     };
-  }, [activeTab?.id, refreshReplayAvailability]);
+  }, [activeTab?.id, refreshProviderStatus, refreshReplayAvailability]);
 
   useEffect(() => {
     if (needsOnboarding || isOnboardingLocked || !activeTab?.id) {
@@ -291,6 +473,14 @@ export function App() {
 
     void refreshReplayAvailability(activeTab.id);
   }, [activeTab?.id, isOnboardingLocked, needsOnboarding, refreshReplayAvailability]);
+
+  useEffect(() => {
+    if (needsOnboarding || isOnboardingLocked) {
+      return;
+    }
+
+    void refreshProviderStatus();
+  }, [isOnboardingLocked, needsOnboarding, refreshProviderStatus]);
 
   async function handleFinishSetup(): Promise<void> {
     if (typeof chrome === 'undefined' || !chrome.runtime?.openOptionsPage) {
@@ -370,6 +560,12 @@ export function App() {
       return;
     }
 
+    if (providerBlocksQuickActions) {
+      setActionError(`${providerStatus.title}. ${providerStatus.action}`);
+      setActionMessage('');
+      return;
+    }
+
     setPendingActionId(actionId);
     setActionError('');
     setActionMessage('');
@@ -421,7 +617,21 @@ export function App() {
   }
 
   const tabContextUnavailable = !activeTab?.id || pageInfo.isFallback;
-  const baseQuickActionsDisabled = isOnboardingLocked || needsOnboarding || tabContextUnavailable;
+  const providerBlocksQuickActions = providerStatus.blocksQuickActions;
+  const baseQuickActionsDisabled =
+    isOnboardingLocked || needsOnboarding || tabContextUnavailable || providerBlocksQuickActions;
+  const tabContextMessage =
+    activeTab?.id && pageInfo.isFallback
+      ? pageInfo.summary
+      : 'Quick actions need an accessible active tab before they can run.';
+  const tabContextStatusLabel = activeTab?.id && pageInfo.isFallback ? pageInfo.status : 'Active tab unavailable';
+  const quickActionAvailabilityMessage = needsOnboarding
+    ? 'Complete guided setup to unlock live quick actions for the current tab.'
+    : tabContextUnavailable
+      ? tabContextMessage
+      : providerBlocksQuickActions
+        ? `${providerStatus.detail} ${providerStatus.action}`
+        : replayReason;
 
   return (
     <div
@@ -498,7 +708,72 @@ export function App() {
           </CardContent>
         </Card>
 
-        <section aria-labelledby="popup-quick-actions-heading" className="min-h-0 flex-1">
+        <Card
+          variant="elevated"
+          className="overflow-hidden"
+          data-testid="popup-provider-card"
+        >
+          <CardHeader className="pb-1">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardDescription className="text-xs uppercase tracking-[0.14em]">
+                  Active provider
+                </CardDescription>
+                <CardTitle as="h2" className="mt-1 text-base">
+                  {providerStatus.providerLabel}
+                </CardTitle>
+              </div>
+              <Badge variant={providerStatus.badgeVariant} dot>
+                {isProviderStatusLoading ? 'Checking' : providerStatus.badgeLabel}
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-3 pt-2">
+            <div className="flex items-start gap-3 rounded-2xl border border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary))] px-3 py-3">
+              <span
+                className={[
+                  'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                  providerStatus.badgeVariant === 'success'
+                    ? 'bg-[rgb(var(--color-success-50))] text-[rgb(var(--color-success-700))]'
+                    : providerStatus.badgeVariant === 'error'
+                      ? 'bg-[rgb(var(--color-error-50))] text-[rgb(var(--color-error-700))]'
+                      : providerStatus.badgeVariant === 'warning'
+                        ? 'bg-[rgb(var(--color-warning-50))] text-[rgb(var(--color-warning-700))]'
+                        : 'bg-[rgb(var(--color-primary-50))] text-[rgb(var(--color-primary-700))]',
+                ].join(' ')}
+              >
+                {providerStatus.blocksQuickActions ? (
+                  providerStatus.badgeVariant === 'warning' ? (
+                    <Lock className="h-4 w-4" aria-hidden="true" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  )
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                )}
+              </span>
+
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug tracking-tight text-[rgb(var(--color-text-primary))]">
+                  {providerStatus.title}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                  {providerStatus.detail}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs leading-relaxed text-[rgb(var(--color-text-secondary))]">
+              {providerStatus.action}
+            </p>
+          </CardContent>
+        </Card>
+
+        <section
+          aria-labelledby="popup-quick-actions-heading"
+          className="min-h-0 flex-1 overflow-y-auto pr-1"
+        >
           {needsOnboarding ? (
             <Card
               variant="elevated"
@@ -573,16 +848,24 @@ export function App() {
 
           {needsOnboarding ? (
             <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              Complete guided setup to unlock live quick actions for the current tab.
+              {quickActionAvailabilityMessage}
             </p>
           ) : tabContextUnavailable ? (
             <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
-              Quick actions need an accessible active tab before they can run.
+              {quickActionAvailabilityMessage}
+            </p>
+          ) : providerBlocksQuickActions ? (
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              {quickActionAvailabilityMessage}
             </p>
           ) : replaySession === null ? (
-            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">{replayReason}</p>
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              {quickActionAvailabilityMessage}
+            </p>
           ) : (
-            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">{replayReason}</p>
+            <p className="mt-2 text-xs text-[rgb(var(--color-text-secondary))]">
+              {quickActionAvailabilityMessage}
+            </p>
           )}
         </section>
       </main>
@@ -597,8 +880,10 @@ export function App() {
                   ? 'Launching quick action'
                   : actionError
                     ? 'Action failed'
+                    : providerBlocksQuickActions
+                      ? providerStatus.badgeLabel
                     : tabContextUnavailable
-                      ? 'Active tab unavailable'
+                      ? tabContextStatusLabel
                       : actionMessage
                         ? 'Side panel launched'
                         : 'Ready for live actions'}
@@ -610,17 +895,32 @@ export function App() {
                   ? 'Flux is opening the side panel and handing off the request.'
                   : actionError
                     ? actionError
+                    : providerBlocksQuickActions
+                      ? quickActionAvailabilityMessage
                     : tabContextUnavailable
-                      ? 'The popup is waiting for an active tab it can access.'
+                      ? tabContextMessage
                       : actionMessage
                         ? actionMessage
                         : 'Popup quick actions now create or reuse sessions and hand work to the side panel.'}
             </p>
           </div>
 
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--color-bg-secondary))] text-[rgb(var(--color-text-secondary))]">
-            <MousePointerClick className="h-4 w-4" aria-hidden="true" />
-          </span>
+          {needsOnboarding ? (
+            <Button
+              type="button"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                void handleFinishSetup();
+              }}
+            >
+              Finish setup
+            </Button>
+          ) : (
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[rgb(var(--color-bg-secondary))] text-[rgb(var(--color-text-secondary))]">
+              <MousePointerClick className="h-4 w-4" aria-hidden="true" />
+            </span>
+          )}
         </div>
       </footer>
     </div>

@@ -19,6 +19,10 @@ interface OnboardingFlowProps {
   theme: ExtensionSettings['theme'];
   language: ExtensionSettings['language'];
   providerRequiresApiKey: boolean;
+  providerUsesAccountImport?: boolean;
+  providerStatusLabel?: string;
+  providerSetupHint?: string;
+  providerReadyHint?: string;
   providerSetupPanel: ReactNode;
   onStepChange: (step: number) => void;
   onSkip: () => void;
@@ -56,6 +60,10 @@ export function OnboardingFlow({
   theme,
   language,
   providerRequiresApiKey,
+  providerUsesAccountImport = false,
+  providerStatusLabel,
+  providerSetupHint,
+  providerReadyHint,
   providerSetupPanel,
   onStepChange,
   onSkip,
@@ -187,15 +195,38 @@ export function OnboardingFlow({
                   <h2 className="mt-3 text-2xl font-semibold tracking-tight text-content-primary">
                     Start with the provider you trust for your first run.
                   </h2>
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-content-secondary sm:text-base">
-                    This onboarding step reuses the live provider setup controls. For providers with
-                    API keys, save the provider and validate the connection before you finish
-                    onboarding.
-                  </p>
-                </div>
+                    <p className="mt-3 max-w-3xl text-sm leading-7 text-content-secondary sm:text-base">
+                      {providerUsesAccountImport
+                        ? 'This onboarding step reuses the live provider setup controls. For Codex, save the provider, unlock the vault, import an official artifact, then validate the active account before you finish onboarding.'
+                        : 'This onboarding step reuses the live provider setup controls. For providers with API keys, save the provider and validate the connection before you finish onboarding.'}
+                    </p>
+                  </div>
 
-                {providerSetupPanel}
-              </section>
+                  {providerSetupHint ? (
+                    <div className="rounded-[22px] border border-border bg-surface-primary px-5 py-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-content-tertiary">
+                            Current provider state
+                          </p>
+                          <p className="mt-2 text-lg font-semibold tracking-tight text-content-primary">
+                            {providerStatusLabel ?? 'Needs setup'}
+                          </p>
+                          <p className="mt-2 text-sm leading-6 text-content-secondary">
+                            {providerSetupHint}
+                          </p>
+                        </div>
+                        {providerStatusLabel ? (
+                          <Badge variant={providerUsesAccountImport ? 'warning' : 'info'}>
+                            {providerStatusLabel}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {providerSetupPanel}
+                </section>
             ) : null}
 
             {currentStep === 2 ? (
@@ -279,6 +310,16 @@ export function OnboardingFlow({
                         Key-based providers now store credentials in the encrypted vault. Unlock the
                         vault once per browser session before validating or running those providers.
                       </p>
+                    ) : null}
+                    {providerReadyHint ? (
+                      <div className="mt-4 rounded-[22px] border border-border bg-surface-primary px-5 py-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-content-tertiary">
+                          Before you finish
+                        </p>
+                        <p className="mt-2 text-sm leading-6 text-content-secondary">
+                          {providerReadyHint}
+                        </p>
+                      </div>
                     ) : null}
                   </div>
 

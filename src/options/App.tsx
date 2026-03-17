@@ -1829,8 +1829,41 @@ export function App() {
         : vaultState.lockState === 'locked'
           ? 'Unlock the vault to validate, rotate, or remove this credential.'
           : selectedCredentialRecord?.validatedAt
-            ? 'Credential validated against the current provider settings.'
-            : 'Credential is stored in the vault. Run a connection test to validate it.';
+              ? 'Credential validated against the current provider settings.'
+              : 'Credential is stored in the vault. Run a connection test to validate it.';
+  const onboardingProviderStatusLabel = providerUsesAccountImport(selectedDefinition)
+    ? credentialStatusLabel
+    : providerUsesOAuthToken(selectedDefinition)
+      ? savedMetadata
+        ? 'OAuth connected'
+        : 'Connect GitHub'
+      : selectedDefinition.requiresCredential
+        ? credentialStatusLabel
+        : 'Ready';
+  const onboardingProviderSetupHint = providerUsesAccountImport(selectedDefinition)
+    ? surfacedProviderAccounts.length === 0
+      ? 'Codex stays locked until an official auth artifact is imported into the vault and validated against the runtime.'
+      : `${credentialHelperMessage} Popup quick actions and sidepanel sends stay locked until the active Codex account is validated and healthy.`
+    : providerUsesOAuthToken(selectedDefinition)
+      ? savedMetadata
+        ? 'The Copilot token is already in the vault. Run connection validation before you finish onboarding.'
+        : 'Connect GitHub Copilot, keep the token in the unlocked vault, then validate the provider connection.'
+      : selectedDefinition.requiresCredential
+        ? 'Save the provider settings first, then validate the current credential before finishing onboarding.'
+        : 'Save the provider settings so the active model and endpoint are carried into the workspace.';
+  const onboardingProviderReadyHint = providerUsesAccountImport(selectedDefinition)
+    ? isProviderReadyForOnboarding()
+      ? `Codex is ready because ${surfacedActiveProviderAccount?.label ?? 'the active imported account'} is validated and the runtime does not currently require a refresh.`
+      : `Codex is not ready yet. Current state: ${credentialStatusLabel.toLowerCase()}. ${credentialHelperMessage}`
+    : providerUsesOAuthToken(selectedDefinition)
+      ? isProviderReadyForOnboarding()
+        ? 'Copilot is connected and validated, so the side panel and popup can reuse it immediately.'
+        : 'Copilot still needs a connected vault token plus a successful validation before onboarding can finish.'
+      : selectedDefinition.requiresCredential
+        ? isProviderReadyForOnboarding()
+          ? 'This provider passed validation, so Flux can carry the saved credential into live workflows.'
+          : 'This provider still needs a saved credential and a passing connection test before onboarding can finish.'
+        : 'No credential gate remains for this provider.';
   const vaultTone =
     vaultNoticeState === 'success'
       ? 'border-success-500/30 bg-success-50 text-success-700'
@@ -2570,6 +2603,10 @@ export function App() {
         theme={settings.theme}
         language={settings.language}
         providerSetupPanel={providerSetupPanel}
+        providerUsesAccountImport={providerUsesAccountImport(selectedDefinition)}
+        providerStatusLabel={onboardingProviderStatusLabel}
+        providerSetupHint={onboardingProviderSetupHint}
+        providerReadyHint={onboardingProviderReadyHint}
         onStepChange={handleOnboardingStepChange}
         onSkip={handleOnboardingSkip}
         onComplete={() => {

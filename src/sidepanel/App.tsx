@@ -10,8 +10,11 @@ import { useSession } from './hooks/useSession';
 import { sendExtensionRequest, subscribeToExtensionEvents } from './lib/extension-client';
 import { useWorkflowUIStore } from './store/workflowUIStore';
 import { Button } from '@/ui/components';
+import { PROVIDER_LOOKUP } from '@/shared/config';
+import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
 import { ThemeToggle } from '@/ui/theme';
 import type {
+  AccountAuthStatusGetResponse,
   AIStreamEventPayload,
   ActionProgressEventPayload,
   SavedWorkflowSource,
@@ -21,6 +24,15 @@ import type {
   Session,
   SessionUpdateEventPayload,
 } from '@shared/types';
+
+interface SidepanelProviderNotice {
+  badgeLabel: string;
+  badgeVariant: 'default' | 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  detail: string;
+  action: string;
+  blocksSend: boolean;
+}
 
 type RecordingRequestAction =
   | 'SESSION_RECORDING_START'
@@ -152,6 +164,7 @@ export function App() {
   useEscapeToStopShortcut();
   const [initialSessionCount, setInitialSessionCount] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [providerNotice, setProviderNotice] = useState<SidepanelProviderNotice | null>(null);
   const [recordingRequest, setRecordingRequest] = useState<RecordingRequestAction | null>(null);
   const [recordingExportRequest, setRecordingExportRequest] =
     useState<SessionRecordingExportFormat | null>(null);
@@ -316,6 +329,7 @@ export function App() {
     [selectedWorkflowId, workflowItems],
   );
   const workflowRunDisabled = !activeSessionId;
+  const activeProviderLabel = activeSession ? PROVIDER_LOOKUP[activeSession.config.provider].label : 'Provider';
   const saveModalActionCount =
     workflowSaveMode === 'edit' ? (selectedWorkflow?.actions.length ?? 0) : recordingActionCount;
   const saveModalSourceSessionName =
@@ -326,6 +340,49 @@ export function App() {
   useEffect(() => {
     setPlaybackSpeedDraft(playbackState.speed);
   }, [activeSessionId, playbackState.speed]);
+
+  useEffect(() => {
+    if (activeSession?.config.provider !== 'codex') {
+      setProviderNotice(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', { provider: 'codex' })
+      .then((authStatus) => {
+        if (cancelled) {
+          return;
+        }
+
+        const ux = resolveAccountBackedProviderUx(authStatus as AccountAuthStatusGetResponse);
+        setProviderNotice({
+          badgeLabel: ux.badgeLabel,
+          badgeVariant: ux.badgeVariant,
+          title: ux.title,
+          detail: ux.detail,
+          action: ux.action,
+          blocksSend: ux.blocksRuntime,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProviderNotice({
+            badgeLabel: 'Status unavailable',
+            badgeVariant: 'warning',
+            title: 'Codex account state could not be refreshed',
+            detail:
+              'The side panel could not confirm the current Codex account health, so provider guidance may be stale.',
+            action: 'Open options and re-check the imported account before retrying a live request.',
+            blocksSend: false,
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSession?.config.provider, activeSessionId]);
 
   const handleRecordingRequest = async (type: RecordingRequestAction) => {
     if (!activeSessionId || recordingRequest) {
@@ -480,7 +537,11 @@ export function App() {
 
       await sendMessage(sessionId, value, uploads);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Request failed';
+      const fallbackMessage = error instanceof Error ? error.message : 'Request failed';
+      const message =
+        activeSession?.config.provider === 'codex' && providerNotice?.blocksSend
+          ? `${providerNotice.title}. ${providerNotice.action}`
+          : fallbackMessage;
       setSubmitError(message);
       if (sessionId) {
         appendError(sessionId, message);
@@ -550,6 +611,59 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {activeSession?.config.provider === 'codex' && providerNotice ? (
+        <section className="border-b border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary)/0.7)] px-4 py-3 sm:px-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="rounded-2xl border border-[rgb(var(--color-border-default)/0.8)] bg-[rgb(var(--color-bg-primary))] px-4 py-4 shadow-sm sm:px-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold leading-snug tracking-tight text-[rgb(var(--color-text-primary))]">
+                      {activeProviderLabel}
+                    </p>
+                    <span
+                      className={[
+                        'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium',
+                        providerNotice.badgeVariant === 'success'
+                          ? 'border-[rgb(var(--color-success-500)/0.2)] bg-[rgb(var(--color-success-50))] text-[rgb(var(--color-success-700))]'
+                          : providerNotice.badgeVariant === 'error'
+                            ? 'border-[rgb(var(--color-error-500)/0.2)] bg-[rgb(var(--color-error-50))] text-[rgb(var(--color-error-700))]'
+                            : providerNotice.badgeVariant === 'warning'
+                              ? 'border-[rgb(var(--color-warning-500)/0.2)] bg-[rgb(var(--color-warning-50))] text-[rgb(var(--color-warning-700))]'
+                              : 'border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary))] text-[rgb(var(--color-text-secondary))]',
+                      ].join(' ')}
+                    >
+                      {providerNotice.badgeLabel}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm font-medium text-[rgb(var(--color-text-primary))]">
+                    {providerNotice.title}
+                  </p>
+                  <p className="mt-1 text-sm leading-relaxed text-[rgb(var(--color-text-secondary))]">
+                    {providerNotice.detail}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-[rgb(var(--color-text-tertiary))]">
+                    {providerNotice.action}
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  className="min-h-11 shrink-0 px-4"
+                  onClick={() => {
+                    void chrome.runtime.openOptionsPage();
+                  }}
+                >
+                  Open provider settings
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section
         aria-label="Recording controls"
@@ -890,7 +1004,7 @@ export function App() {
           </p>
         ) : null}
         <InputComposer
-          disabled={activeStreamMessageId !== null}
+          disabled={activeStreamMessageId !== null || providerNotice?.blocksSend === true}
           onSend={(value, uploads) => handleSend(value, uploads)}
         />
       </footer>

@@ -34,7 +34,7 @@
 - [x] `T10` ChatGPT/Codex provider adapter
 - [x] `T11` Registry/loader/default config/validation
 - [x] `T12` Options connect-account UI
-- [ ] `T13` Onboarding/popup/sidepanel/error UX
+- [x] `T13` Onboarding/popup/sidepanel/error UX
 - [ ] `T14` Unit + integration tests
 - [ ] `T15` Manual QA checklist
 - [ ] `T16` Docs and tester guidance
@@ -88,6 +88,10 @@
 - `T12` PASS
   - Scope: Codex options connect-account UI, artifact import flow, account actions, and experimental boundary UX
   - Verification: `pnpm vitest run src/options/__tests__/App.test.tsx && pnpm typecheck`
+  - Commit: `3919940` - `feat: add codex account management options UI`
+- `T13` PASS
+  - Scope: codex-aware onboarding copy, popup quick-action gating, sidepanel guidance banners, and shared UX-state mapping
+  - Verification: `pnpm vitest run src/options/__tests__/App.test.tsx src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

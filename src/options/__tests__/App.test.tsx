@@ -498,6 +498,8 @@ describe('Options App', () => {
     expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+    expect(screen.getByText(/codex stays locked until an official auth artifact is imported/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/account missing/i)).not.toHaveLength(0);
     await user.click(screen.getByRole('button', { name: /save provider/i }));
     expect(
       await screen.findByText(/provider settings saved\. no imported account is available yet/i),
@@ -506,6 +508,7 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await user.click(screen.getByRole('button', { name: /continue/i }));
     expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByText(/codex is not ready yet\. current state: account missing\./i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
   });
 
