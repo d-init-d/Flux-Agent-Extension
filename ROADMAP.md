@@ -37,8 +37,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | T7 - ChatGPT account auth module | DONE | Import-based Codex auth parsing, persistence, and structural validation landed |
 | T8 - Manifest and auth callback wiring | DONE | No manifest change required for the current import-based flow; decision captured in `docs/task-08-manifest-auth-wiring.md` |
 | T9 - Background account/session manager | DONE | Background session state machine, memory-only caching, and fail-safe refresh deferral landed |
-| T10 - ChatGPT/Codex provider adapter | IN PROGRESS | Consume account-backed tokens instead of static API keys |
-| T11 - Registry/loader/default config updates | TODO | Expose provider as first-class project surface |
+| T10 - ChatGPT/Codex provider adapter | DONE | Codex provider adapter now consumes account-backed runtime tokens and streams Responses-style output |
+| T11 - Registry/loader/default config updates | IN PROGRESS | Expose provider as first-class project surface |
 | T12 - Options account-connect UI | TODO | Replace API-key UX with Connect Account flow |
 | T13 - Onboarding/popup/sidepanel UX | TODO | Reflect login state, entitlement, and failure modes |
 | T14 - Unit and integration tests | TODO | Cover auth, storage, runtime, and provider behavior |

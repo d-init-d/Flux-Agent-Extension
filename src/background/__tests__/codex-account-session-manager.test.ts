@@ -146,6 +146,55 @@ describe('CodexAccountSessionManager', () => {
     vi.useRealTimers();
   });
 
+  it('returns runtime session material for active account-backed chat requests', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    const now = Date.UTC(2026, 2, 17, 11, 30, 0);
+    const idToken = createJwt({
+      email: 'runtime@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'pro',
+        chatgpt_user_id: 'user_runtime',
+      },
+    });
+
+    await vault.saveAccount('codex', {
+      accountId: 'acct_runtime',
+      label: 'Runtime Codex Account',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            access_token: 'access-runtime',
+            id_token: idToken,
+            refresh_token: 'refresh-runtime',
+            account_id: 'acct_runtime',
+          },
+        }),
+      },
+    });
+
+    vi.useFakeTimers();
+    vi.setSystemTime(now + 60_000);
+
+    const manager = new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'));
+    const runtimeSession = await manager.getRuntimeSessionMaterial('acct_runtime');
+
+    expect(runtimeSession).toEqual(
+      expect.objectContaining({
+        accountId: 'acct_runtime',
+        accessToken: 'access-runtime',
+        authMode: 'chatgpt',
+      }),
+    );
+
+    vi.useRealTimers();
+  });
+
   it('marks the account stale when live refresh would be required', async () => {
     const vault = new CredentialVault();
     await vault.init('test-passphrase');

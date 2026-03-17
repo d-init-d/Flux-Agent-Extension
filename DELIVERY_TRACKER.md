@@ -31,7 +31,7 @@
 - [x] `T7` ChatGPT account auth module
 - [x] `T8` Manifest/auth callback wiring
 - [x] `T9` Background account/session manager
-- [ ] `T10` ChatGPT/Codex provider adapter
+- [x] `T10` ChatGPT/Codex provider adapter
 - [ ] `T11` Registry/loader/default config/validation
 - [ ] `T12` Options connect-account UI
 - [ ] `T13` Onboarding/popup/sidepanel/error UX
@@ -76,6 +76,10 @@
 - `T9` PASS
   - Scope: codex background session manager, memory-only runtime cache, session-state metadata, and fail-safe refresh deferral
   - Verification: `pnpm vitest run src/background/__tests__/codex-account-session-manager.test.ts src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts && pnpm typecheck`
+  - Commit: `bb68790` - `feat: add codex account session manager`
+- `T10` PASS
+  - Scope: codex provider adapter, runtime token injection, provider-loader wiring, and adapter-specific tests
+  - Verification: `pnpm vitest run src/core/ai-client/__tests__/providers/codex.test.ts src/background/__tests__/codex-account-session-manager.test.ts && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

@@ -40,6 +40,15 @@ export interface CodexAccountSessionSnapshot {
   message: string;
 }
 
+export interface CodexRuntimeSessionMaterial {
+  accountId: string;
+  accessToken: string;
+  authMode?: 'chatgpt';
+  refreshAfter?: number;
+  checkedAt: number;
+  message: string;
+}
+
 interface EnsureCodexAccountSessionOptions {
   accountId: string;
   purpose: CodexSessionPurpose;
@@ -107,6 +116,31 @@ export class CodexAccountSessionManager {
 
   clearSession(accountId: string): void {
     this.cachedSessions.delete(this.getAccountKey(accountId));
+  }
+
+  async getRuntimeSessionMaterial(accountId: string): Promise<CodexRuntimeSessionMaterial> {
+    const snapshot = await this.ensureSession({
+      accountId,
+      purpose: 'validate',
+    });
+
+    const cachedSession = this.cachedSessions.get(this.getAccountKey(accountId));
+    if (!snapshot.sessionAvailable || !cachedSession?.accessToken) {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        `${snapshot.message} Re-import the official Codex auth artifact before starting a chat session.`,
+        false,
+      );
+    }
+
+    return {
+      accountId: cachedSession.accountId,
+      accessToken: cachedSession.accessToken,
+      authMode: cachedSession.authMode,
+      refreshAfter: cachedSession.refreshAfter,
+      checkedAt: snapshot.checkedAt,
+      message: snapshot.message,
+    };
   }
 
   private async resolveSession(

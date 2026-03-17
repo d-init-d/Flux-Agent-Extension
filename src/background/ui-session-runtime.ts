@@ -2413,10 +2413,12 @@ export class UISessionRuntime {
     }
 
     const providerConfig = this.resolveProviderConfig(session.config.provider, runtimeState);
+    const providerCredential = await this.resolveProviderCredential(session.config.provider, runtimeState);
     await this.ensureDefaultProviderRegistered(session.config.provider);
     await this.aiClientManager.switchProvider(session.config.provider, {
       provider: session.config.provider,
       model: session.config.model,
+      apiKey: providerCredential,
       baseUrl: providerConfig.customEndpoint?.trim() || undefined,
       maxTokens: providerConfig.maxTokens,
       temperature: providerConfig.temperature,
@@ -4166,6 +4168,20 @@ ${script}
         `Vault is ${runtimeState.vault.lockState}. Unlock it before using ${providerDefinition.label}.`,
         true,
       );
+    }
+
+    if (provider === 'codex') {
+      const activeAccountId = runtimeState.vault.activeAccounts.codex;
+      if (!activeAccountId) {
+        throw new ExtensionError(
+          ErrorCode.AI_INVALID_KEY,
+          'No active Codex account is selected. Import an official auth artifact and activate the account before chatting.',
+          false,
+        );
+      }
+
+      const runtimeSession = await this.codexAccountSessionManager.getRuntimeSessionMaterial(activeAccountId);
+      return runtimeSession.accessToken;
     }
 
     const credential = await this.credentialVault.getCredential(provider);

@@ -30,7 +30,8 @@ export async function createProvider(type: LazyLoadableProviderType): Promise<IA
       return new CopilotProvider();
     }
     case 'codex': {
-      throw new Error('Codex provider runtime is not implemented yet');
+      const { CodexProvider } = await import('./providers/codex');
+      return new CodexProvider();
     }
     case 'groq':
     case 'deepseek':
