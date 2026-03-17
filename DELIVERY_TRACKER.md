@@ -1,6 +1,6 @@
 # Delivery Tracker
 
-> Last updated: 2026-03-13
+> Last updated: 2026-03-17
 > Source of truth: `ROADMAP.md`, `BLUEPRINT.md`
 > Execution mode: `one-task-at-a-time -> verify -> PASS -> commit -> push`
 
@@ -14,6 +14,37 @@
 - [x] `press`, `hotkey`, and `evaluate` are part of the shipped action surface
 - [x] `evaluate` is gated behind `Advanced mode` plus custom-script permission and is tagged high risk in logs and recording exports
 - [ ] Final docs parity sweep and remaining warning cleanup
+
+## Active Initiative - ChatGPT Plus / OpenCode-Style Provider
+
+- Branch: `feat/chatgptplus-provider`
+- Protocol: `research/implement one task -> verify -> PASS -> commit -> push -> update roadmap`
+
+### Task Status
+
+- [x] `T1` OpenCode account discovery
+- [ ] `T2` Feasibility and risk assessment
+- [ ] `T3` Architecture decision record
+- [ ] `T4` Provider/account/token/quota type expansion
+- [ ] `T5` Auth message surface expansion
+- [ ] `T6` Secure account store
+- [ ] `T7` ChatGPT account auth module
+- [ ] `T8` Manifest/auth callback wiring
+- [ ] `T9` Background account/session manager
+- [ ] `T10` ChatGPT/Codex provider adapter
+- [ ] `T11` Registry/loader/default config/validation
+- [ ] `T12` Options connect-account UI
+- [ ] `T13` Onboarding/popup/sidepanel/error UX
+- [ ] `T14` Unit + integration tests
+- [ ] `T15` Manual QA checklist
+- [ ] `T16` Docs and tester guidance
+
+### PASS Log
+
+- `T1` PASS
+  - Artifact: `docs/task-01-opencode-account-discovery.md`
+  - Verification: `pnpm typecheck`
+  - Commit: `d1501d4` - `docs: capture OpenCode account auth discovery`
 
 ## Workflow Protocol
 

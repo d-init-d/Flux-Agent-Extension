@@ -1,7 +1,7 @@
 ﻿# AI Browser Controller - Detailed Roadmap
 
 > **Version:** 1.0.0
-> **Last Updated:** 2026-03-10
+> **Last Updated:** 2026-03-17
 > **Timeline:** 20 weeks (5 phases)
 > **Target Release:** v1.0.0 Chrome Web Store
 
@@ -17,6 +17,33 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
                                                                â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤  PHASE 4: Advanced
                                                                               â”œâ”€â”€â”€â”€â”€â”€â”¤  PHASE 5: Ship
 ```
+
+---
+
+## Active Initiative: ChatGPT Plus / OpenCode-Style Provider
+
+**Goal:** Add an account-backed provider that can use a ChatGPT Plus account with Codex access, following the operational model used by OpenCode rather than an API-key-only flow.
+
+**Execution Rule:** one task at a time -> verify -> PASS -> commit -> push -> update roadmap/tracker -> move next.
+
+| Task | Status | Notes |
+| --- | --- | --- |
+| T1 - OpenCode account discovery | DONE | Discovery doc completed in `docs/task-01-opencode-account-discovery.md` |
+| T2 - Feasibility and risk assessment | IN PROGRESS | Determine official vs session-based auth options, ToS/security/MFA/CAPTCHA risks |
+| T3 - Architecture decision record | TODO | Lock auth strategy, trust boundaries, and provider family naming |
+| T4 - Provider/account/token/quota types | TODO | Add account-backed storage and runtime types |
+| T5 - UI <-> background auth message surface | TODO | Add login/status/logout/quota/refresh message contracts |
+| T6 - Secure account store | TODO | Generalize vault into encrypted account storage |
+| T7 - ChatGPT account auth module | TODO | Implement login bootstrap, callback handling, exchange, refresh, revoke |
+| T8 - Manifest and auth callback wiring | TODO | Add permissions or identity surfaces if required |
+| T9 - Background account/session manager | TODO | Handle caching, refresh, retries, and re-auth flows |
+| T10 - ChatGPT/Codex provider adapter | TODO | Consume account-backed tokens instead of static API keys |
+| T11 - Registry/loader/default config updates | TODO | Expose provider as first-class project surface |
+| T12 - Options account-connect UI | TODO | Replace API-key UX with Connect Account flow |
+| T13 - Onboarding/popup/sidepanel UX | TODO | Reflect login state, entitlement, and failure modes |
+| T14 - Unit and integration tests | TODO | Cover auth, storage, runtime, and provider behavior |
+| T15 - Manual QA checklist | TODO | Validate with a real ChatGPT Plus account |
+| T16 - Docs and tester guidance | TODO | Update README, TESTING, SECURITY, and operator docs |
 
 ---
 
