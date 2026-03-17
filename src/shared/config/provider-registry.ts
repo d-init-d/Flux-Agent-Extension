@@ -21,6 +21,12 @@ export interface ProviderDefinition {
   accent: string;
 }
 
+function resolveProviderDefinition(
+  provider: ProviderDefinition | AIProviderType,
+): ProviderDefinition {
+  return typeof provider === 'string' ? PROVIDER_LOOKUP[provider] : provider;
+}
+
 export const PROVIDER_REGISTRY: readonly ProviderDefinition[] = [
   {
     type: 'claude',
@@ -295,6 +301,29 @@ export const COMPAT_PROVIDER_TYPES = PROVIDER_REGISTRY.filter(
 export const DEFAULT_PROVIDER_MODELS = Object.fromEntries(
   PROVIDER_REGISTRY.map((provider) => [provider.type, provider.defaultModel]),
 ) as Record<AIProviderType, string>;
+
+export function providerUsesApiKey(provider: ProviderDefinition | AIProviderType): boolean {
+  return resolveProviderDefinition(provider).authMethod === 'api-key';
+}
+
+export function providerUsesOAuthToken(provider: ProviderDefinition | AIProviderType): boolean {
+  return resolveProviderDefinition(provider).authMethod === 'oauth-github';
+}
+
+export function providerUsesAccountImport(provider: ProviderDefinition | AIProviderType): boolean {
+  return resolveProviderDefinition(provider).authMethod === 'account-import';
+}
+
+export function providerRequiresConnectionValidation(
+  provider: ProviderDefinition | AIProviderType,
+): boolean {
+  const definition = resolveProviderDefinition(provider);
+  return (
+    providerUsesApiKey(definition) ||
+    providerUsesOAuthToken(definition) ||
+    providerUsesAccountImport(definition)
+  );
+}
 
 export function createDefaultProviderConfigs(): Record<AIProviderType, ProviderConfig> {
   return Object.fromEntries(

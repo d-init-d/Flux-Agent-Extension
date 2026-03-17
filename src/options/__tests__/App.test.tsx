@@ -225,6 +225,128 @@ describe('Options App', () => {
     expect(screen.getByLabelText('API key')).toHaveValue('');
   });
 
+  it('shows a clear account-backed empty state for codex when no account is imported', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+
+    expect(await screen.findByText(/account-backed authentication/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /no imported account is available yet\. once an official auth artifact is imported/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Account missing')).not.toHaveLength(0);
+  });
+
+  it('blocks codex validation with a clear message when no account is imported', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(
+      await screen.findByText(
+        /no imported account is available yet\. import an official auth artifact/i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('routes codex connection tests through the account-backed validation flow', async () => {
+    const user = userEvent.setup();
+    const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+
+    await seedStorage({
+      vault: {
+        version: 1,
+        initialized: true,
+        lockState: 'unlocked',
+        unlockedAt: observedAt,
+        hasLegacySecrets: false,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****4321',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_codex_primary',
+              label: 'Codex Primary',
+              maskedIdentifier: 'user@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_codex_primary',
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(
+      await screen.findByText(/validated artifact shape for codex primary/i),
+    ).toBeInTheDocument();
+
+    const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
+      const message = call[0] as { type?: string };
+      return message.type;
+    });
+
+    expect(messageTypes).toContain('ACCOUNT_AUTH_STATUS_GET');
+    expect(messageTypes).toContain('ACCOUNT_AUTH_VALIDATE');
+    expect(messageTypes).not.toContain('API_KEY_VALIDATE');
+  });
+
+  it('keeps onboarding completion locked for codex until an imported account is validated', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+    expect(
+      await screen.findByText(/provider settings saved\. no imported account is available yet/i),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+  });
+
   it('clears raw API key input after a blocked test connection attempt', async () => {
     const user = userEvent.setup();
 

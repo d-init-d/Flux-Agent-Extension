@@ -115,7 +115,7 @@ function buildCredentialRecord(
         ? 'oauth-token'
         : authKind === 'account-artifact' || authKind === 'session-token'
           ? 'account-backed'
-        : 'api-key',
+          : 'api-key',
     authKind,
     maskedValue,
     updatedAt: Date.now(),
@@ -134,7 +134,9 @@ function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountReco
           ...account.metadata,
           quota: account.metadata.quota ? { ...account.metadata.quota } : undefined,
           rateLimit: account.metadata.rateLimit ? { ...account.metadata.rateLimit } : undefined,
-          entitlement: account.metadata.entitlement ? { ...account.metadata.entitlement } : undefined,
+          entitlement: account.metadata.entitlement
+            ? { ...account.metadata.entitlement }
+            : undefined,
           session: account.metadata.session ? { ...account.metadata.session } : undefined,
         }
       : undefined,
@@ -143,7 +145,9 @@ function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountReco
 
 async function upsertImportedCodexAccount(
   state: Awaited<ReturnType<typeof getSettingsState>>,
-  request: RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START'] | RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'],
+  request:
+    | RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START']
+    | RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'],
   options?: { validatedAt?: number },
 ): Promise<{
   vault: VaultState;
@@ -200,7 +204,11 @@ async function upsertImportedCodexAccount(
     credentials: {
       ...state.vault.credentials,
       codex: {
-        ...buildCredentialRecord('codex', imported.derived.credentialMaskedValue, imported.authKind),
+        ...buildCredentialRecord(
+          'codex',
+          imported.derived.credentialMaskedValue,
+          imported.authKind,
+        ),
         updatedAt: now,
         validatedAt: options?.validatedAt,
         stale: false,
@@ -240,7 +248,9 @@ async function upsertImportedCodexAccount(
   };
 }
 
-function createUnsupportedAccountProviderResponse<T>(provider: AIProviderType): ExtensionResponse<T> {
+function createUnsupportedAccountProviderResponse<T>(
+  provider: AIProviderType,
+): ExtensionResponse<T> {
   return {
     success: false,
     error: {
@@ -411,7 +421,9 @@ export function installOptionsRuntimeMock(): void {
     const payload = event.payload as RequestPayloadMap[MessageType];
     const state = await getSettingsState();
 
-    const success = <T extends MessageType>(data: ResponsePayloadMap[T]): ExtensionResponse<ResponsePayloadMap[T]> => ({
+    const success = <T extends MessageType>(
+      data: ResponsePayloadMap[T],
+    ): ExtensionResponse<ResponsePayloadMap[T]> => ({
       success: true,
       data,
     });
@@ -500,6 +512,63 @@ export function installOptionsRuntimeMock(): void {
       }
       case 'API_KEY_VALIDATE': {
         const request = payload as RequestPayloadMap['API_KEY_VALIDATE'];
+        if (supportsAccountBackedAuth(request.provider)) {
+          const accounts = [...(state.vault.accounts[request.provider] ?? [])].map(
+            cloneAccountRecord,
+          );
+          const targetAccount =
+            accounts.find(
+              (account) => account.accountId === state.vault.activeAccounts[request.provider],
+            ) ?? accounts[0];
+          const storedRecord = state.vault.credentials[request.provider];
+
+          if (state.vault.lockState !== 'unlocked') {
+            throw new Error(
+              'Unlock the vault before validating an imported account-backed provider.',
+            );
+          }
+
+          if (!targetAccount) {
+            return success({
+              valid: false,
+              record: storedRecord,
+              vault: state.vault,
+            });
+          }
+
+          const now = Date.now();
+          targetAccount.validatedAt = now;
+          targetAccount.stale = false;
+          targetAccount.updatedAt = now;
+          const nextVault = {
+            ...state.vault,
+            credentials: {
+              ...state.vault.credentials,
+              [request.provider]: storedRecord
+                ? {
+                    ...storedRecord,
+                    validatedAt: now,
+                    stale: false,
+                  }
+                : undefined,
+            },
+            accounts: {
+              ...state.vault.accounts,
+              [request.provider]: accounts,
+            },
+          };
+          if (!nextVault.credentials[request.provider]) {
+            delete nextVault.credentials[request.provider];
+          }
+          await saveVault(nextVault);
+
+          return success({
+            valid: true,
+            record: nextVault.credentials[request.provider],
+            vault: nextVault,
+          });
+        }
+
         const providerConfig = request.config ?? state.providers[request.provider];
         const storedRecord = state.vault.credentials[request.provider];
         const valid = await validateProvider(
@@ -641,7 +710,9 @@ export function installOptionsRuntimeMock(): void {
           });
         }
 
-        const accounts = [...(state.vault.accounts[request.provider] ?? [])].map(cloneAccountRecord);
+        const accounts = [...(state.vault.accounts[request.provider] ?? [])].map(
+          cloneAccountRecord,
+        );
         const target = request.accountId
           ? accounts.find((account) => account.accountId === request.accountId)
           : undefined;
@@ -734,7 +805,9 @@ export function installOptionsRuntimeMock(): void {
         }
 
         const accounts = [...(state.vault.accounts[request.provider] ?? [])];
-        const targetIndex = accounts.findIndex((account) => account.accountId === request.accountId);
+        const targetIndex = accounts.findIndex(
+          (account) => account.accountId === request.accountId,
+        );
         if (targetIndex < 0) {
           return success({
             provider: request.provider,

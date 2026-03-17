@@ -1,9 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { LAZY_LOADABLE_PROVIDER_TYPES } from '@core/ai-client/provider-loader';
 import { SUPPORTED_ACTION_TYPES } from '@core/ai-client/prompts/system';
 import { ACTION_TYPES } from '@core/command-parser/schemas/action-schemas';
-import { PROVIDER_REGISTRY, SHIPPED_ACTION_TYPES, createDefaultProviderConfigs } from '@shared/config';
+import {
+  PROVIDER_REGISTRY,
+  SHIPPED_ACTION_TYPES,
+  createDefaultProviderConfigs,
+  providerRequiresConnectionValidation,
+  providerUsesAccountImport,
+} from '@shared/config';
 import { describe, expect, it } from 'vitest';
 
 describe('shared surface consistency', () => {
@@ -19,6 +26,14 @@ describe('shared surface consistency', () => {
     expect(configuredProviders).toEqual(providerTypes);
   });
 
+  it('keeps the lazy provider loader aligned with the registry runtime surface', () => {
+    const loadableProviderTypes = PROVIDER_REGISTRY.filter((provider) => provider.type !== 'custom')
+      .map((provider) => provider.type)
+      .sort();
+
+    expect([...LAZY_LOADABLE_PROVIDER_TYPES].sort()).toEqual(loadableProviderTypes);
+  });
+
   it('keeps account-backed provider metadata aligned for codex', () => {
     const codex = PROVIDER_REGISTRY.find((provider) => provider.type === 'codex');
 
@@ -30,6 +45,8 @@ describe('shared surface consistency', () => {
       requiresCredential: true,
       supportsEndpoint: false,
     });
+    expect(providerUsesAccountImport('codex')).toBe(true);
+    expect(providerRequiresConnectionValidation('codex')).toBe(true);
   });
 
   it('keeps the README permission list aligned with the manifest', () => {

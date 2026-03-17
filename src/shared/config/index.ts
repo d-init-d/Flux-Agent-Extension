@@ -5,6 +5,10 @@ export {
   PROVIDER_LOOKUP,
   PROVIDER_REGISTRY,
   createDefaultProviderConfigs,
+  providerRequiresConnectionValidation,
+  providerUsesAccountImport,
+  providerUsesApiKey,
+  providerUsesOAuthToken,
 } from './provider-registry';
 export type { ProviderAuthMethod, ProviderDefinition, ProviderTier } from './provider-registry';
 export { SHIPPED_ACTION_TYPES } from './action-capabilities';

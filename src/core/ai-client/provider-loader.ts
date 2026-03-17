@@ -1,7 +1,12 @@
+import { PROVIDER_REGISTRY } from '@shared/config';
 import type { AIProviderType } from '@shared/types';
 import type { IAIProvider } from './interfaces';
 
 export type LazyLoadableProviderType = Exclude<AIProviderType, 'custom'>;
+
+export const LAZY_LOADABLE_PROVIDER_TYPES = PROVIDER_REGISTRY.filter(
+  (provider) => provider.type !== 'custom',
+).map((provider) => provider.type) as readonly LazyLoadableProviderType[];
 
 export async function createProvider(type: LazyLoadableProviderType): Promise<IAIProvider> {
   switch (type) {

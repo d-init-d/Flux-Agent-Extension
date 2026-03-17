@@ -15,6 +15,10 @@ import {
   createDefaultProviderConfigs as createRegistryDefaultProviderConfigs,
   PROVIDER_LOOKUP,
   PROVIDER_REGISTRY,
+  providerRequiresConnectionValidation,
+  providerUsesAccountImport,
+  providerUsesApiKey,
+  providerUsesOAuthToken,
 } from '@shared/config';
 import type { ProviderDefinition } from '@shared/config';
 import { runDeviceFlow } from '@core/auth/github-device-flow';
@@ -28,6 +32,7 @@ import type {
   AIProviderType,
   ExtensionSettings,
   OnboardingState,
+  ProviderAccountRecord,
   ProviderConfig,
   SettingsGetResponse,
   VaultState,
@@ -306,7 +311,13 @@ function isAllowedEndpoint(providerType: AIProviderType, endpoint: string): bool
   }
 }
 
-const SECRET_ERROR_PATTERNS = [/(?:^|\b)sk-[A-Za-z0-9_-]{8,}/, /(?:^|\b)ghu_[A-Za-z0-9_]{8,}/, /(?:^|\b)gho_[A-Za-z0-9_]{8,}/, /(?:^|\b)github_pat_[A-Za-z0-9_]{12,}/, /(?:^|\b)AIza[0-9A-Za-z\-_]{12,}/];
+const SECRET_ERROR_PATTERNS = [
+  /(?:^|\b)sk-[A-Za-z0-9_-]{8,}/,
+  /(?:^|\b)ghu_[A-Za-z0-9_]{8,}/,
+  /(?:^|\b)gho_[A-Za-z0-9_]{8,}/,
+  /(?:^|\b)github_pat_[A-Za-z0-9_]{12,}/,
+  /(?:^|\b)AIza[0-9A-Za-z\-_]{12,}/,
+];
 
 function containsSensitiveToken(value: string): boolean {
   return SECRET_ERROR_PATTERNS.some((pattern) => pattern.test(value));
@@ -333,6 +344,23 @@ function isCustomScriptingEnabled(
   settings: Pick<ExtensionSettings, 'debugMode' | 'allowCustomScripts'>,
 ): boolean {
   return settings.debugMode && settings.allowCustomScripts;
+}
+
+function getProviderAccounts(
+  vault: Pick<VaultState, 'accounts'>,
+  provider: AIProviderType,
+): ProviderAccountRecord[] {
+  return vault.accounts[provider] ?? [];
+}
+
+function getActiveProviderAccount(
+  vault: Pick<VaultState, 'accounts' | 'activeAccounts'>,
+  provider: AIProviderType,
+): ProviderAccountRecord | undefined {
+  const accounts = getProviderAccounts(vault, provider);
+  const activeAccountId = vault.activeAccounts[provider];
+
+  return accounts.find((account) => account.accountId === activeAccountId) ?? accounts[0];
 }
 
 export function App() {
@@ -532,7 +560,7 @@ export function App() {
     const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
     const selectedConfig = providerConfigs[selectedProvider];
 
-    if (selectedDefinition.authMethod === 'api-key' || selectedDefinition.authMethod === 'oauth-github') {
+    if (providerRequiresConnectionValidation(selectedDefinition)) {
       return (
         onboardingState.configuredProvider === selectedProvider &&
         onboardingState.validatedProvider === selectedProvider
@@ -679,11 +707,7 @@ export function App() {
         action === 'init'
           ? await sendExtensionRequest('VAULT_INIT', { passphrase: vaultPassphrase }, 'options')
           : action === 'unlock'
-            ? await sendExtensionRequest(
-                'VAULT_UNLOCK',
-                { passphrase: vaultPassphrase },
-                'options',
-              )
+            ? await sendExtensionRequest('VAULT_UNLOCK', { passphrase: vaultPassphrase }, 'options')
             : await sendExtensionRequest('VAULT_LOCK', undefined, 'options');
 
       syncVaultState(response.vault);
@@ -734,7 +758,9 @@ export function App() {
       syncVaultState(response.vault);
       await reloadState(true);
       setVaultNoticeState('success');
-      setVaultNotice(`${PROVIDER_LOOKUP[selectedProvider].label} credential removed from the vault.`);
+      setVaultNotice(
+        `${PROVIDER_LOOKUP[selectedProvider].label} credential removed from the vault.`,
+      );
     } catch (error) {
       setVaultNoticeState('error');
       setVaultNotice(getErrorMessage(error, 'Failed to remove the stored credential.'));
@@ -829,7 +855,11 @@ export function App() {
         }
       }
 
-      if (selectedDefinition.authMethod === 'api-key' && rawApiKey && vaultState.lockState !== 'unlocked') {
+      if (
+        providerUsesApiKey(selectedDefinition) &&
+        rawApiKey &&
+        vaultState.lockState !== 'unlocked'
+      ) {
         setSaveState('error');
         setSaveMessage('Unlock the vault before saving a new provider credential.');
         return;
@@ -845,7 +875,7 @@ export function App() {
         'options',
       );
 
-      if (selectedDefinition.authMethod === 'api-key' && rawApiKey) {
+      if (providerUsesApiKey(selectedDefinition) && rawApiKey) {
         const credentialResponse = await sendExtensionRequest(
           'API_KEY_SET',
           {
@@ -861,15 +891,23 @@ export function App() {
 
       const snapshot = await reloadState(true);
       const savedRecord = snapshot.vault.credentials[selectedProvider];
+      const importedAccounts = getProviderAccounts(snapshot.vault, selectedProvider);
+      const activeImportedAccount = getActiveProviderAccount(snapshot.vault, selectedProvider);
       setSaveState('success');
       setSaveMessage(
-        selectedDefinition.authMethod === 'api-key' && rawApiKey
+        providerUsesApiKey(selectedDefinition) && rawApiKey
           ? 'Provider settings saved and the credential was stored in the vault.'
-          : selectedDefinition.authMethod === 'api-key' && !savedRecord
+          : providerUsesApiKey(selectedDefinition) && !savedRecord
             ? 'Provider settings saved. Add a vault credential before using this provider.'
-            : selectedDefinition.authMethod === 'oauth-github' && !savedRecord
+            : providerUsesOAuthToken(selectedDefinition) && !savedRecord
               ? 'Provider settings saved. Connect GitHub Copilot in the vault before using this provider.'
-              : 'Provider settings saved.',
+              : providerUsesAccountImport(selectedDefinition) && importedAccounts.length === 0
+                ? 'Provider settings saved. No imported account is available yet. Use the account import flow before testing or using this provider.'
+                : providerUsesAccountImport(selectedDefinition) && activeImportedAccount
+                  ? `Provider settings saved. ${activeImportedAccount.label} is ready for account-backed validation.`
+                  : providerUsesAccountImport(selectedDefinition)
+                    ? 'Provider settings saved. Validate an imported account before using this provider.'
+                    : 'Provider settings saved.',
       );
     } catch (error) {
       setSaveState('error');
@@ -904,7 +942,9 @@ export function App() {
       setCustomScriptsConfirmed(false);
       setPermissionMessage('Advanced mode is off. High-risk scripting controls stay disabled.');
     } else {
-      setPermissionMessage('Advanced mode enabled. You can now review high-risk scripting controls.');
+      setPermissionMessage(
+        'Advanced mode enabled. You can now review high-risk scripting controls.',
+      );
     }
 
     setPermissionSaveState('idle');
@@ -991,11 +1031,7 @@ export function App() {
         allowCustomScripts: isCustomScriptingEnabled(settings),
         debugMode: isAdvancedModeEnabled(settings),
       };
-      await sendExtensionRequest(
-        'SETTINGS_UPDATE',
-        { settings: permissionSettings },
-        'options',
-      );
+      await sendExtensionRequest('SETTINGS_UPDATE', { settings: permissionSettings }, 'options');
 
       setMode(settings.theme);
       try {
@@ -1058,14 +1094,87 @@ export function App() {
     const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
     const savedMetadata = apiKeyMetadata[selectedProvider];
 
-    if (selectedDefinition.authMethod === 'api-key' && !rawApiKey && !savedMetadata) {
+    if (providerUsesAccountImport(selectedDefinition)) {
+      setIsTesting(true);
+      setValidationState('idle');
+      setValidationMessage('');
+
+      try {
+        const authStatus = await sendExtensionRequest(
+          'ACCOUNT_AUTH_STATUS_GET',
+          { provider: selectedProvider },
+          'options',
+        );
+
+        syncVaultState(authStatus.vault);
+
+        if (authStatus.status === 'vault-locked') {
+          setValidationState('error');
+          setValidationMessage(
+            'Unlock the vault before validating an imported account-backed provider.',
+          );
+          return;
+        }
+
+        const targetAccount =
+          authStatus.accounts.find((account) => account.accountId === authStatus.activeAccountId) ??
+          authStatus.accounts[0];
+
+        if (!targetAccount) {
+          setValidationState('error');
+          setValidationMessage(
+            'No imported account is available yet. Import an official auth artifact before testing this provider.',
+          );
+          return;
+        }
+
+        const response = await sendExtensionRequest(
+          'ACCOUNT_AUTH_VALIDATE',
+          {
+            provider: selectedProvider,
+            accountId: targetAccount.accountId,
+          },
+          'options',
+        );
+
+        syncVaultState(response.vault);
+        setValidationState(response.valid ? 'success' : 'error');
+        setValidationMessage(
+          response.valid
+            ? (response.message ??
+                `${selectedDefinition.label} account ${targetAccount.label} validated successfully.`)
+            : `${selectedDefinition.label} could not validate the imported account.`,
+        );
+
+        if (response.valid) {
+          const currentOnboarding = onboardingStateRef.current;
+          await persistOnboardingState({
+            ...currentOnboarding,
+            providerReady: true,
+            validatedProvider: selectedProvider,
+          });
+        }
+      } catch (error) {
+        setValidationState('error');
+        setValidationMessage(getErrorMessage(error, 'Connection test failed unexpectedly.'));
+      } finally {
+        setIsTesting(false);
+        clearApiKeyInputValue();
+      }
+
+      return;
+    }
+
+    if (providerUsesApiKey(selectedDefinition) && !rawApiKey && !savedMetadata) {
       setValidationState('error');
-      setValidationMessage('Enter an API key or unlock a stored vault credential before testing this provider.');
+      setValidationMessage(
+        'Enter an API key or unlock a stored vault credential before testing this provider.',
+      );
       clearApiKeyInputValue();
       return;
     }
 
-    if (selectedDefinition.authMethod === 'oauth-github' && !savedMetadata) {
+    if (providerUsesOAuthToken(selectedDefinition) && !savedMetadata) {
       setValidationState('error');
       setValidationMessage('Connect GitHub Copilot before testing this provider.');
       clearApiKeyInputValue();
@@ -1073,12 +1182,14 @@ export function App() {
     }
 
     if (
-      (selectedDefinition.authMethod === 'api-key' || selectedDefinition.authMethod === 'oauth-github') &&
+      (providerUsesApiKey(selectedDefinition) || providerUsesOAuthToken(selectedDefinition)) &&
       !rawApiKey &&
       vaultState.lockState !== 'unlocked'
     ) {
       setValidationState('error');
-      setValidationMessage('Unlock the vault or enter a fresh credential before testing this provider.');
+      setValidationMessage(
+        'Unlock the vault or enter a fresh credential before testing this provider.',
+      );
       clearApiKeyInputValue();
       return;
     }
@@ -1106,12 +1217,11 @@ export function App() {
         {
           provider: selectedProvider,
           apiKey: rawApiKey || undefined,
-          authKind:
-            selectedDefinition.authMethod === 'oauth-github'
-              ? 'oauth-token'
-              : selectedDefinition.authMethod === 'api-key'
-                ? 'api-key'
-                : undefined,
+          authKind: providerUsesOAuthToken(selectedDefinition)
+            ? 'oauth-token'
+            : providerUsesApiKey(selectedDefinition)
+              ? 'api-key'
+              : undefined,
           config: selectedConfig,
         },
         'options',
@@ -1144,6 +1254,8 @@ export function App() {
 
   const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
   const selectedConfig = providerConfigs[selectedProvider];
+  const providerAccounts = getProviderAccounts(vaultState, selectedProvider);
+  const activeProviderAccount = getActiveProviderAccount(vaultState, selectedProvider);
   const selectedCredentialRecord = vaultState.credentials[selectedProvider];
   const advancedModeEnabled = isAdvancedModeEnabled(settings);
   const customScriptingEnabled = isCustomScriptingEnabled(settings);
@@ -1166,40 +1278,74 @@ export function App() {
         : 'Credentials are available for this browser session only.';
   const credentialStatusLabel = !selectedDefinition.requiresCredential
     ? 'Not required'
-    : vaultState.lockState === 'uninitialized'
-      ? 'Vault not initialized'
-      : vaultState.lockState === 'locked'
-        ? savedMetadata
-          ? 'Vault locked'
-          : selectedDefinition.authMethod === 'oauth-github'
-            ? 'OAuth required'
-            : 'Credential missing'
-        : !savedMetadata
-          ? selectedDefinition.authMethod === 'oauth-github'
-            ? 'OAuth required'
-            : 'Credential missing'
-          : selectedCredentialRecord?.stale
-            ? 'Credential stale'
-            : selectedCredentialRecord?.validatedAt
-              ? selectedDefinition.authMethod === 'oauth-github'
-                ? 'OAuth connected'
-                : 'Validated'
-              : selectedDefinition.authMethod === 'oauth-github'
-                ? 'OAuth connected'
-                : 'Credential saved';
-  const credentialHelperMessage = !savedMetadata
-    ? selectedDefinition.authMethod === 'oauth-github'
-      ? 'Connect GitHub Copilot and store the token in the vault before running this provider.'
-      : selectedDefinition.requiresCredential
-        ? 'Save a vault-backed credential or enter a fresh one when testing.'
-        : 'No credential is required for this provider.'
-    : selectedCredentialRecord?.stale
-      ? 'The provider configuration changed after the last validation. Re-test before relying on this credential.'
-      : vaultState.lockState === 'locked'
-        ? 'Unlock the vault to validate, rotate, or remove this credential.'
-        : selectedCredentialRecord?.validatedAt
-          ? 'Credential validated against the current provider settings.'
-          : 'Credential is stored in the vault. Run a connection test to validate it.';
+    : providerUsesAccountImport(selectedDefinition)
+      ? vaultState.lockState === 'uninitialized'
+        ? 'Vault not initialized'
+        : vaultState.lockState === 'locked'
+          ? providerAccounts.length > 0
+            ? 'Vault locked'
+            : 'Account missing'
+          : !activeProviderAccount
+            ? providerAccounts.length > 0
+              ? 'Account available'
+              : 'Account missing'
+            : activeProviderAccount.status === 'revoked'
+              ? 'Account revoked'
+              : activeProviderAccount.stale
+                ? 'Account stale'
+                : activeProviderAccount.validatedAt
+                  ? 'Account validated'
+                  : activeProviderAccount.status === 'active'
+                    ? 'Account imported'
+                    : 'Account available'
+      : vaultState.lockState === 'uninitialized'
+        ? 'Vault not initialized'
+        : vaultState.lockState === 'locked'
+          ? savedMetadata
+            ? 'Vault locked'
+            : providerUsesOAuthToken(selectedDefinition)
+              ? 'OAuth required'
+              : 'Credential missing'
+          : !savedMetadata
+            ? providerUsesOAuthToken(selectedDefinition)
+              ? 'OAuth required'
+              : 'Credential missing'
+            : selectedCredentialRecord?.stale
+              ? 'Credential stale'
+              : selectedCredentialRecord?.validatedAt
+                ? providerUsesOAuthToken(selectedDefinition)
+                  ? 'OAuth connected'
+                  : 'Validated'
+                : providerUsesOAuthToken(selectedDefinition)
+                  ? 'OAuth connected'
+                  : 'Credential saved';
+  const credentialHelperMessage = providerUsesAccountImport(selectedDefinition)
+    ? providerAccounts.length === 0
+      ? 'No imported account is available yet. Use the account import flow before testing or using this provider.'
+      : activeProviderAccount?.status === 'revoked'
+        ? 'The active imported account was revoked. Re-import or activate another account before using this provider.'
+        : activeProviderAccount?.stale
+          ? 'The imported account changed after the last validation. Re-test before relying on this provider.'
+          : vaultState.lockState === 'locked'
+            ? 'Unlock the vault to validate or inspect the imported account state.'
+            : activeProviderAccount?.validatedAt
+              ? `Imported account ${activeProviderAccount.label} validated against the current runtime.`
+              : activeProviderAccount
+                ? `Imported account ${activeProviderAccount.label} is stored. Run a connection test to confirm the current account session.`
+                : 'Select and validate an imported account before using this provider.'
+    : !savedMetadata
+      ? providerUsesOAuthToken(selectedDefinition)
+        ? 'Connect GitHub Copilot and store the token in the vault before running this provider.'
+        : selectedDefinition.requiresCredential
+          ? 'Save a vault-backed credential or enter a fresh one when testing.'
+          : 'No credential is required for this provider.'
+      : selectedCredentialRecord?.stale
+        ? 'The provider configuration changed after the last validation. Re-test before relying on this credential.'
+        : vaultState.lockState === 'locked'
+          ? 'Unlock the vault to validate, rotate, or remove this credential.'
+          : selectedCredentialRecord?.validatedAt
+            ? 'Credential validated against the current provider settings.'
+            : 'Credential is stored in the vault. Run a connection test to validate it.';
   const vaultTone =
     vaultNoticeState === 'success'
       ? 'border-success-500/30 bg-success-50 text-success-700'
@@ -1313,7 +1459,9 @@ export function App() {
 
           {vaultState.lockState !== 'unlocked' ? (
             <Input
-              label={vaultState.lockState === 'uninitialized' ? 'Vault passphrase' : 'Unlock passphrase'}
+              label={
+                vaultState.lockState === 'uninitialized' ? 'Vault passphrase' : 'Unlock passphrase'
+              }
               type="password"
               value={vaultPassphrase}
               onChange={(event) => setVaultPassphrase(event.target.value)}
@@ -1377,7 +1525,9 @@ export function App() {
               </Button>
             )}
 
-            {selectedDefinition.requiresCredential && savedMetadata ? (
+            {selectedDefinition.requiresCredential &&
+            savedMetadata &&
+            !providerUsesAccountImport(selectedDefinition) ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -1404,7 +1554,7 @@ export function App() {
           </div>
         </div>
 
-        {selectedDefinition.authMethod === 'api-key' ? (
+        {providerUsesApiKey(selectedDefinition) ? (
           <div className="space-y-3">
             <Input
               ref={apiKeyInputRef}
@@ -1432,10 +1582,12 @@ export function App() {
               </div>
             ) : null}
           </div>
-        ) : selectedDefinition.authMethod === 'oauth-github' ? (
+        ) : providerUsesOAuthToken(selectedDefinition) ? (
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4">
-              <p className="text-sm font-medium text-content-primary">GitHub Copilot authentication</p>
+              <p className="text-sm font-medium text-content-primary">
+                GitHub Copilot authentication
+              </p>
               <p className="mt-1 text-xs leading-5 text-content-secondary">
                 Sign in with a GitHub account that has an active Copilot subscription. The OAuth
                 token is stored in the unlocked vault instead of plain extension storage.
@@ -1522,6 +1674,60 @@ export function App() {
               </div>
             ) : null}
           </div>
+        ) : providerUsesAccountImport(selectedDefinition) ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4">
+              <p className="text-sm font-medium text-content-primary">
+                Account-backed authentication
+              </p>
+              <p className="mt-1 text-xs leading-5 text-content-secondary">
+                Codex uses an imported official auth artifact instead of a manual API key. Imported
+                accounts appear here and are validated through the background account runtime.
+              </p>
+
+              {activeProviderAccount ? (
+                <div className="mt-3 rounded-xl border border-border bg-surface-primary px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                    Active imported account
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-content-primary">
+                    {activeProviderAccount.label}
+                  </p>
+                  <p className="mt-1 text-xs text-content-secondary">
+                    {activeProviderAccount.maskedIdentifier ?? activeProviderAccount.accountId}
+                  </p>
+                  <p className="mt-2 text-xs text-content-tertiary">
+                    Status: {credentialStatusLabel}. {credentialHelperMessage}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-xl border border-dashed border-border bg-surface-primary px-4 py-3 text-xs leading-5 text-content-secondary">
+                  No imported account is available yet. Once an official auth artifact is imported,
+                  this surface will validate the active account without asking for an API key.
+                </div>
+              )}
+
+              {savedMetadata ? (
+                <div className="mt-3 rounded-xl border border-border bg-surface-primary px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
+                    <KeyRound className="h-4 w-4 text-primary-600" />
+                    Stored auth artifact
+                  </div>
+                  <p className="mt-2 text-sm text-content-secondary">
+                    {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
+                  </p>
+                  <p className="mt-1 text-xs text-content-tertiary">{credentialHelperMessage}</p>
+                </div>
+              ) : null}
+
+              {providerAccounts.length > 1 ? (
+                <p className="mt-3 text-xs text-content-tertiary">
+                  {providerAccounts.length} imported accounts are available. The active one is used
+                  for validation until the dedicated account-management UI lands.
+                </p>
+              ) : null}
+            </div>
+          </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-border bg-surface-elevated px-4 py-4 text-sm leading-6 text-content-secondary">
             {selectedProvider === 'ollama'
@@ -1531,7 +1737,6 @@ export function App() {
         )}
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
-
           {validationMessage ||
             saveMessage ||
             'Save changes, then test the selected provider configuration.'}
@@ -1580,7 +1785,7 @@ export function App() {
         onComplete={() => {
           void handleOnboardingComplete();
         }}
-        providerRequiresApiKey={selectedDefinition.authMethod === 'api-key'}
+        providerRequiresApiKey={providerUsesApiKey(selectedDefinition)}
         canComplete={isProviderReadyForOnboarding()}
         isBusy={isSaving || isTesting || isCompletingOnboarding}
         isCompleting={isCompletingOnboarding}
@@ -1604,8 +1809,8 @@ export function App() {
                   Configure providers and capability boundaries in one place.
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-content-secondary sm:text-base">
-                  The options workspace now drives provider setup, the encrypted vault, and
-                  runtime permission boundaries through the same background APIs used during live
+                  The options workspace now drives provider setup, the encrypted vault, and runtime
+                  permission boundaries through the same background APIs used during live
                   automation.
                 </p>
               </div>
@@ -1677,7 +1882,11 @@ export function App() {
                       Sensitive toggles
                     </p>
                     <p className="mt-2 text-lg font-semibold text-content-primary">
-                      {customScriptingEnabled ? '1 enabled' : advancedModeEnabled ? '0 enabled' : 'Advanced mode off'}
+                      {customScriptingEnabled
+                        ? '1 enabled'
+                        : advancedModeEnabled
+                          ? '0 enabled'
+                          : 'Advanced mode off'}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3 sm:col-span-2 xl:col-span-1">
@@ -1694,7 +1903,10 @@ export function App() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p id="advanced-mode-title" className="text-sm font-semibold text-content-primary">
+                        <p
+                          id="advanced-mode-title"
+                          className="text-sm font-semibold text-content-primary"
+                        >
                           Enable Advanced mode
                         </p>
                         <Badge variant={advancedModeEnabled ? 'info' : 'default'}>Advanced</Badge>
@@ -1911,14 +2123,23 @@ export function App() {
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <ServerCog className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>
-                    Active provider: <span className="font-medium text-content-primary">{selectedDefinition.label}</span> on model{' '}
-                    <span className="font-medium text-content-primary">{selectedConfig.model}</span>.
+                    Active provider:{' '}
+                    <span className="font-medium text-content-primary">
+                      {selectedDefinition.label}
+                    </span>{' '}
+                    on model{' '}
+                    <span className="font-medium text-content-primary">{selectedConfig.model}</span>
+                    .
                   </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <KeyRound className="mt-0.5 h-4 w-4 text-primary-600" />
                   <p>
-                    Credential state: <span className="font-medium text-content-primary">{credentialStatusLabel}</span>. {credentialHelperMessage}
+                    Credential state:{' '}
+                    <span className="font-medium text-content-primary">
+                      {credentialStatusLabel}
+                    </span>
+                    . {credentialHelperMessage}
                   </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-surface-primary px-4 py-3">
@@ -1941,7 +2162,9 @@ export function App() {
             <Card className="border border-border bg-surface-elevated shadow-lg shadow-slate-950/5">
               <CardHeader>
                 <CardTitle as="h2">Runtime posture</CardTitle>
-                <CardDescription>How this configuration affects live automation right now.</CardDescription>
+                <CardDescription>
+                  How this configuration affects live automation right now.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">

@@ -10,7 +10,11 @@ import type { ParserConfig } from '@core/command-parser';
 import { ActionOrchestrator } from '@core/orchestrator';
 import { DebuggerAdapter, type PrintToPDFParams } from '@core/browser-controller/debugger-adapter';
 import { TabManager } from '@core/browser-controller/tab-manager';
-import { DEFAULT_PROVIDER_MODELS, PROVIDER_LOOKUP, createDefaultProviderConfigs } from '@shared/config';
+import {
+  DEFAULT_PROVIDER_MODELS,
+  PROVIDER_LOOKUP,
+  createDefaultProviderConfigs,
+} from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
 import { createDefaultOnboardingState, normalizeOnboardingState } from '@shared/storage/onboarding';
@@ -107,7 +111,10 @@ function isEvaluateEnabled(settings: ExtensionSettings): boolean {
   return settings.debugMode && settings.allowCustomScripts;
 }
 
-function getActionRiskMetadata(action: Action): { riskLevel: 'standard' | 'high'; riskReason?: string } {
+function getActionRiskMetadata(action: Action): {
+  riskLevel: 'standard' | 'high';
+  riskReason?: string;
+} {
   if (action.type === 'evaluate') {
     return {
       riskLevel: 'high',
@@ -957,7 +964,6 @@ export class UISessionRuntime {
     return { success: true };
   }
 
-
   private async handleSettingsGet(): RuntimeHandlerResponse<'SETTINGS_GET'> {
     const runtimeState = await this.loadRuntimeState();
 
@@ -1118,6 +1124,55 @@ export class UISessionRuntime {
   private async handleApiKeyValidate(
     payload: RequestPayloadMap['API_KEY_VALIDATE'],
   ): RuntimeHandlerResponse<'API_KEY_VALIDATE'> {
+    if (this.supportsAccountBackedAuth(payload.provider)) {
+      const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+      if (snapshot.vault.lockState !== 'unlocked') {
+        throw new ExtensionError(
+          ErrorCode.AI_INVALID_KEY,
+          'Unlock the vault before validating an imported account-backed provider.',
+          true,
+        );
+      }
+
+      const targetAccount =
+        snapshot.accounts.find((account) => account.accountId === snapshot.activeAccountId) ??
+        snapshot.accounts[0];
+
+      if (!targetAccount) {
+        return {
+          success: true,
+          data: {
+            valid: false,
+            record: snapshot.credential,
+            vault: snapshot.vault,
+          },
+        };
+      }
+
+      const validation = await this.handleAccountAuthValidate({
+        provider: payload.provider,
+        accountId: targetAccount.accountId,
+      });
+      if (!validation.success || !validation.data) {
+        return {
+          success: false,
+          error: validation.error ?? {
+            code: 'ACCOUNT_AUTH_VALIDATE_FAILED',
+            message: 'Account-backed validation failed unexpectedly.',
+          },
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          valid: validation.data.valid,
+          record: validation.data.vault.credentials[payload.provider],
+          vault: validation.data.vault,
+        },
+      };
+    }
+
     const runtimeState = await this.loadRuntimeState();
     const providerConfig = payload.config
       ? {
@@ -1130,7 +1185,8 @@ export class UISessionRuntime {
       providerConfig,
       payload.apiKey,
     );
-    let record: ProviderCredentialRecord | undefined = runtimeState.vault.credentials[payload.provider];
+    let record: ProviderCredentialRecord | undefined =
+      runtimeState.vault.credentials[payload.provider];
 
     if (valid && !payload.apiKey) {
       record = (await this.credentialVault.markValidated(payload.provider)) ?? record;
@@ -1264,7 +1320,10 @@ export class UISessionRuntime {
       );
     }
 
-    const existingAccount = await this.credentialVault.getAccount(payload.provider, targetAccountId);
+    const existingAccount = await this.credentialVault.getAccount(
+      payload.provider,
+      targetAccountId,
+    );
     if (!existingAccount && !imported) {
       throw new ExtensionError(
         ErrorCode.ACTION_INVALID,
@@ -1274,7 +1333,10 @@ export class UISessionRuntime {
     }
 
     if (!imported) {
-      const storedArtifact = await this.credentialVault.getAccountArtifact(payload.provider, targetAccountId);
+      const storedArtifact = await this.credentialVault.getAccountArtifact(
+        payload.provider,
+        targetAccountId,
+      );
       if (!storedArtifact) {
         throw new ExtensionError(
           ErrorCode.AI_INVALID_KEY,
@@ -1303,7 +1365,11 @@ export class UISessionRuntime {
       label: existingAccount?.label ?? imported.derived.label,
       maskedIdentifier: imported.derived.maskedIdentifier,
       credentialMaskedValue: imported.derived.credentialMaskedValue,
-      status: existingAccount?.isActive ? 'active' : existingAccount?.status === 'revoked' ? 'needs-auth' : 'available',
+      status: existingAccount?.isActive
+        ? 'active'
+        : existingAccount?.status === 'revoked'
+          ? 'needs-auth'
+          : 'available',
       isActive: existingAccount?.isActive ?? false,
       validatedAt: checkedAt,
       stale: false,
@@ -1388,7 +1454,10 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_ACTIVATE', payload.provider);
     }
-    const activated = await this.credentialVault.activateAccount(payload.provider, payload.accountId);
+    const activated = await this.credentialVault.activateAccount(
+      payload.provider,
+      payload.accountId,
+    );
     const vault = await this.credentialVault.getState();
 
     return {
@@ -2215,7 +2284,9 @@ export class UISessionRuntime {
     return PROVIDER_LOOKUP[provider].authFamily === 'account-backed';
   }
 
-  private assertAccountArtifactTransport(transport: RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START']['transport']): void {
+  private assertAccountArtifactTransport(
+    transport: RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START']['transport'],
+  ): void {
     if (transport !== 'artifact-import') {
       throw new ExtensionError(
         ErrorCode.ACTION_INVALID,
@@ -2252,7 +2323,9 @@ export class UISessionRuntime {
             ...account.metadata,
             quota: account.metadata.quota ? { ...account.metadata.quota } : undefined,
             rateLimit: account.metadata.rateLimit ? { ...account.metadata.rateLimit } : undefined,
-            entitlement: account.metadata.entitlement ? { ...account.metadata.entitlement } : undefined,
+            entitlement: account.metadata.entitlement
+              ? { ...account.metadata.entitlement }
+              : undefined,
             session: account.metadata.session ? { ...account.metadata.session } : undefined,
           }
         : undefined,
@@ -2271,7 +2344,10 @@ export class UISessionRuntime {
         message,
         details: {
           type,
-          ...((details && typeof details === 'object' ? details : { details }) as Record<string, unknown>),
+          ...((details && typeof details === 'object' ? details : { details }) as Record<
+            string,
+            unknown
+          >),
         },
       },
     };
@@ -2413,7 +2489,10 @@ export class UISessionRuntime {
     }
 
     const providerConfig = this.resolveProviderConfig(session.config.provider, runtimeState);
-    const providerCredential = await this.resolveProviderCredential(session.config.provider, runtimeState);
+    const providerCredential = await this.resolveProviderCredential(
+      session.config.provider,
+      runtimeState,
+    );
     await this.ensureDefaultProviderRegistered(session.config.provider);
     await this.aiClientManager.switchProvider(session.config.provider, {
       provider: session.config.provider,
@@ -3129,7 +3208,7 @@ export class UISessionRuntime {
       {
         action,
         context: {
-          variables: sessionId ? this.sessionManager.getSession(sessionId)?.variables ?? {} : {},
+          variables: sessionId ? (this.sessionManager.getSession(sessionId)?.variables ?? {}) : {},
         },
       },
       target,
@@ -3432,7 +3511,11 @@ export class UISessionRuntime {
 
   private async dispatchKeyPressSequence(tabId: number, keys: string[]): Promise<void> {
     if (keys.length === 0) {
-      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Keyboard action requires at least one key', true);
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Keyboard action requires at least one key',
+        true,
+      );
     }
 
     const normalizedKeys = keys.map((key) => this.normalizeKeyboardKey(key));
@@ -4140,7 +4223,9 @@ ${script}
   private providerConfigsEqual(left: ProviderConfig, right: ProviderConfig): boolean {
     const normalizeHeaders = (headers: ProviderConfig['customHeaders']): string =>
       JSON.stringify(
-        Object.entries(headers ?? {}).sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey)),
+        Object.entries(headers ?? {}).sort(([leftKey], [rightKey]) =>
+          leftKey.localeCompare(rightKey),
+        ),
       );
 
     return (
@@ -4180,7 +4265,8 @@ ${script}
         );
       }
 
-      const runtimeSession = await this.codexAccountSessionManager.getRuntimeSessionMaterial(activeAccountId);
+      const runtimeSession =
+        await this.codexAccountSessionManager.getRuntimeSessionMaterial(activeAccountId);
       return runtimeSession.accessToken;
     }
 

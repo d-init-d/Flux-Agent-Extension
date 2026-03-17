@@ -32,7 +32,7 @@
 - [x] `T8` Manifest/auth callback wiring
 - [x] `T9` Background account/session manager
 - [x] `T10` ChatGPT/Codex provider adapter
-- [ ] `T11` Registry/loader/default config/validation
+- [x] `T11` Registry/loader/default config/validation
 - [ ] `T12` Options connect-account UI
 - [ ] `T13` Onboarding/popup/sidepanel/error UX
 - [ ] `T14` Unit + integration tests
@@ -80,6 +80,10 @@
 - `T10` PASS
   - Scope: codex provider adapter, runtime token injection, provider-loader wiring, and adapter-specific tests
   - Verification: `pnpm vitest run src/core/ai-client/__tests__/providers/codex.test.ts src/background/__tests__/codex-account-session-manager.test.ts && pnpm typecheck`
+  - Commit: `0783b1b` - `feat: add codex account-backed provider adapter`
+- `T11` PASS
+  - Scope: first-class codex provider validation path, options/runtime registry helpers, onboarding gating, and consistency tests
+  - Verification: `pnpm vitest run src/options/__tests__/App.test.tsx src/shared/config/__tests__/surface-consistency.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol
