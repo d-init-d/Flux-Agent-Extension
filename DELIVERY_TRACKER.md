@@ -27,7 +27,7 @@
 - [x] `T3` Architecture decision record
 - [x] `T4` Provider/account/token/quota type expansion
 - [x] `T5` Auth message surface expansion
-- [ ] `T6` Secure account store
+- [x] `T6` Secure account store
 - [ ] `T7` ChatGPT account auth module
 - [ ] `T8` Manifest/auth callback wiring
 - [ ] `T9` Background account/session manager
@@ -60,6 +60,10 @@
 - `T5` PASS
   - Scope: account-backed auth message contracts, runtime router plumbing, mock/runtime baseline tests
   - Verification: `pnpm vitest run src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
+  - Commit: `751820c` - `feat: add codex account auth message contracts`
+- `T6` PASS
+  - Scope: encrypted codex account artifact storage, account CRUD, activation, revocation, removal, and quota metadata plumbing
+  - Verification: `pnpm vitest run src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

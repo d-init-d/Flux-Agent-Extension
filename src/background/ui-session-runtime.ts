@@ -1240,14 +1240,16 @@ export class UISessionRuntime {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_GET', payload.provider);
     }
 
-    const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+    const [vault, account] = await Promise.all([
+      this.credentialVault.getState(),
+      this.credentialVault.getAccount(payload.provider, payload.accountId),
+    ]);
     return {
       success: true,
       data: {
         provider: payload.provider,
-        account:
-          snapshot.accounts.find((account) => account.accountId === payload.accountId) ?? null,
-        activeAccountId: snapshot.activeAccountId,
+        account: account ? this.cloneAccountRecord(account) : null,
+        activeAccountId: vault.activeAccounts[payload.provider],
       },
     };
   }
@@ -1258,15 +1260,17 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_ACTIVATE', payload.provider);
     }
+    const activated = await this.credentialVault.activateAccount(payload.provider, payload.accountId);
+    const vault = await this.credentialVault.getState();
 
-    return this.createNotImplementedResponse(
-      'ACCOUNT_ACTIVATE',
-      `Account activation is not implemented for ${payload.provider} yet. Active-account selection lands in Task 9.`,
-      {
+    return {
+      success: true,
+      data: {
         provider: payload.provider,
-        accountId: payload.accountId,
+        accountId: activated.accountId,
+        activeAccountId: vault.activeAccounts[payload.provider],
       },
-    );
+    };
   }
 
   private async handleAccountRevoke(
@@ -1275,15 +1279,18 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_REVOKE', payload.provider);
     }
+    const revoked = await this.credentialVault.revokeAccount(payload.provider, payload.accountId, {
+      revokeCredential: payload.revokeCredential,
+    });
 
-    return this.createNotImplementedResponse(
-      'ACCOUNT_REVOKE',
-      `Account revocation is not implemented for ${payload.provider} yet. Secure cleanup lands in Tasks 6-7.`,
-      {
+    return {
+      success: true,
+      data: {
         provider: payload.provider,
         accountId: payload.accountId,
+        revoked: Boolean(revoked),
       },
-    );
+    };
   }
 
   private async handleAccountRemove(
@@ -1292,15 +1299,16 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_REMOVE', payload.provider);
     }
+    const removed = await this.credentialVault.removeAccount(payload.provider, payload.accountId);
 
-    return this.createNotImplementedResponse(
-      'ACCOUNT_REMOVE',
-      `Account removal is not implemented for ${payload.provider} yet. Vault deletion lands in Task 6.`,
-      {
+    return {
+      success: true,
+      data: {
         provider: payload.provider,
         accountId: payload.accountId,
+        removed,
       },
-    );
+    };
   }
 
   private async handleAccountQuotaStatusGet(
@@ -1313,10 +1321,10 @@ export class UISessionRuntime {
       );
     }
 
-    const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
-    const accountId = payload.accountId ?? snapshot.activeAccountId;
-    const account = accountId
-      ? snapshot.accounts.find((candidate) => candidate.accountId === accountId)
+    const vault = await this.credentialVault.getState();
+    const accountId = payload.accountId ?? vault.activeAccounts[payload.provider];
+    const quota = accountId
+      ? await this.credentialVault.getQuotaMetadata(payload.provider, accountId)
       : undefined;
 
     return {
@@ -1324,7 +1332,7 @@ export class UISessionRuntime {
       data: {
         provider: payload.provider,
         accountId,
-        quota: account?.metadata?.quota,
+        quota,
       },
     };
   }
@@ -1338,15 +1346,21 @@ export class UISessionRuntime {
         payload.provider,
       );
     }
+    const vault = await this.credentialVault.getState();
+    const accountId = payload.accountId ?? vault.activeAccounts[payload.provider];
+    const quota = accountId
+      ? await this.credentialVault.getQuotaMetadata(payload.provider, accountId)
+      : undefined;
 
-    return this.createNotImplementedResponse(
-      'ACCOUNT_QUOTA_REFRESH',
-      `Quota refresh is not implemented for ${payload.provider} yet. Runtime refresh logic lands in Task 9.`,
-      {
+    return {
+      success: true,
+      data: {
         provider: payload.provider,
-        accountId: payload.accountId,
+        accountId,
+        quota,
+        refreshedAt: Date.now(),
       },
-    );
+    };
   }
 
   private async handleContextGet(
@@ -2073,13 +2087,15 @@ export class UISessionRuntime {
     accounts: ProviderAccountRecord[];
     activeAccountId?: string;
   }> {
-    const vault = await this.credentialVault.getState();
-    const accounts = (vault.accounts[provider] ?? []).map((account) => this.cloneAccountRecord(account));
+    const [vault, accounts] = await Promise.all([
+      this.credentialVault.getState(),
+      this.credentialVault.listAccounts(provider),
+    ]);
 
     return {
       vault,
       credential: vault.credentials[provider],
-      accounts,
+      accounts: accounts.map((account) => this.cloneAccountRecord(account)),
       activeAccountId: vault.activeAccounts[provider],
     };
   }

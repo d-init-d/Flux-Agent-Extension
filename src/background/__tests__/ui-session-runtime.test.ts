@@ -3744,7 +3744,74 @@ describe('UI session runtime', () => {
     });
   });
 
-  it('fails clearly for deferred codex account-backed mutations', async () => {
+  it('executes baseline codex account-store mutations while keeping auth exchange deferred', async () => {
+    const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****1234',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_primary',
+              label: 'Primary Codex Account',
+              maskedIdentifier: 'primary@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              metadata: {
+                quota: {
+                  scope: 'account',
+                  unit: 'requests',
+                  period: 'day',
+                  used: 12,
+                  limit: 100,
+                  remaining: 88,
+                  observedAt,
+                },
+              },
+            },
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_backup',
+              label: 'Backup Codex Account',
+              maskedIdentifier: 'backup@example.com',
+              status: 'available',
+              isActive: false,
+              updatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_primary',
+        },
+      },
+    });
+    await chrome.storage.session.set({
+      __flux_vault_session__: {
+        passphrase: 'test-passphrase',
+        unlockedAt: observedAt,
+      },
+    });
+
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
         actionId: action.id,
@@ -3776,29 +3843,71 @@ describe('UI session runtime', () => {
     const activateResponse = await runtime.handleMessage(
       createExtensionMessage('ACCOUNT_ACTIVATE', {
         provider: 'codex',
-        accountId: 'acct_primary',
+        accountId: 'acct_backup',
       }),
     );
-    expect(activateResponse.success).toBe(false);
-    expect(activateResponse.error).toEqual(
-      expect.objectContaining({
-        code: 'NOT_IMPLEMENTED',
-        message: expect.stringContaining('Task 9'),
-      }),
-    );
+    expect(activateResponse.success).toBe(true);
+    expect(activateResponse.data).toEqual({
+      provider: 'codex',
+      accountId: 'acct_backup',
+      activeAccountId: 'acct_backup',
+    });
 
     const quotaRefreshResponse = await runtime.handleMessage(
       createExtensionMessage('ACCOUNT_QUOTA_REFRESH', {
         provider: 'codex',
+        accountId: 'acct_backup',
+      }),
+    );
+    expect(quotaRefreshResponse.success).toBe(true);
+    expect(quotaRefreshResponse.data).toEqual({
+      provider: 'codex',
+      accountId: 'acct_backup',
+      quota: undefined,
+      refreshedAt: expect.any(Number),
+    });
+
+    const revokeResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_REVOKE', {
+        provider: 'codex',
+        accountId: 'acct_backup',
+      }),
+    );
+    expect(revokeResponse.success).toBe(true);
+    expect(revokeResponse.data).toEqual({
+      provider: 'codex',
+      accountId: 'acct_backup',
+      revoked: true,
+    });
+
+    const removeResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_REMOVE', {
+        provider: 'codex',
         accountId: 'acct_primary',
       }),
     );
-    expect(quotaRefreshResponse.success).toBe(false);
-    expect(quotaRefreshResponse.error).toEqual(
-      expect.objectContaining({
-        code: 'NOT_IMPLEMENTED',
-        message: expect.stringContaining('Task 9'),
-      }),
+    expect(removeResponse.success).toBe(true);
+    expect(removeResponse.data).toEqual({
+      provider: 'codex',
+      accountId: 'acct_primary',
+      removed: true,
+    });
+
+    const accountListResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_LIST', { provider: 'codex' }),
     );
+    expect(accountListResponse.success).toBe(true);
+    expect(accountListResponse.data).toEqual({
+      provider: 'codex',
+      accounts: [
+        expect.objectContaining({
+          accountId: 'acct_backup',
+          status: 'revoked',
+          isActive: false,
+          stale: true,
+        }),
+      ],
+      activeAccountId: undefined,
+    });
   });
 });

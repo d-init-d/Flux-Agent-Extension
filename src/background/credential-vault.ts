@@ -19,6 +19,7 @@ const LEGACY_SESSION_SECRET_KEY = 'providerSessionApiKeys';
 const VAULT_SESSION_KEY = '__flux_vault_session__';
 const VAULT_SENTINEL_KEY = 'vault::sentinel';
 const CREDENTIAL_KEY_PREFIX = 'credential::';
+const ACCOUNT_ARTIFACT_KEY_PREFIX = 'account-artifact::';
 const GENERIC_MASK = '************';
 
 type StoredCredentialSecret = {
@@ -32,6 +33,38 @@ type VaultSessionState = {
   passphrase: string;
   unlockedAt: number;
 };
+
+type StoredAccountArtifact = {
+  provider: 'codex';
+  accountId: string;
+  authKind: Extract<ProviderAuthKind, 'account-artifact' | 'session-token'>;
+  value: string;
+  updatedAt: number;
+  filename?: string;
+  format?: 'json' | 'text' | 'unknown';
+};
+
+type AccountArtifactInput = {
+  authKind?: Extract<ProviderAuthKind, 'account-artifact' | 'session-token'>;
+  value: string;
+  filename?: string;
+  format?: 'json' | 'text' | 'unknown';
+};
+
+type SaveAccountInput = {
+  accountId: string;
+  label: string;
+  maskedIdentifier?: string;
+  status?: ProviderAccountRecord['status'];
+  isActive?: boolean;
+  validatedAt?: number;
+  lastUsedAt?: number;
+  stale?: boolean;
+  metadata?: ProviderAccountRecord['metadata'];
+  artifact?: AccountArtifactInput;
+};
+
+type ProviderQuotaMetadata = NonNullable<ProviderAccountRecord['metadata']>['quota'];
 
 const DEFAULT_VAULT_METADATA: VaultMetadata = {
   version: 1,
@@ -175,6 +208,34 @@ function normalizeVaultMetadata(value: unknown): VaultMetadata {
     activeAccounts,
     migratedFromLegacyAt:
       typeof candidate.migratedFromLegacyAt === 'number' ? candidate.migratedFromLegacyAt : undefined,
+  };
+}
+
+function cloneAccountMetadata(
+  metadata: ProviderAccountRecord['metadata'],
+): ProviderAccountRecord['metadata'] {
+  if (!metadata) {
+    return undefined;
+  }
+
+  return {
+    ...metadata,
+    quota: metadata.quota ? { ...metadata.quota } : undefined,
+    rateLimit: metadata.rateLimit ? { ...metadata.rateLimit } : undefined,
+    entitlement: metadata.entitlement
+      ? {
+          ...metadata.entitlement,
+          features: metadata.entitlement.features ? [...metadata.entitlement.features] : undefined,
+        }
+      : undefined,
+    session: metadata.session ? { ...metadata.session } : undefined,
+  };
+}
+
+function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountRecord {
+  return {
+    ...account,
+    metadata: cloneAccountMetadata(account.metadata),
   };
 }
 
@@ -415,6 +476,323 @@ export class CredentialVault {
     return stored?.secret ?? null;
   }
 
+  async listAccounts(provider: AIProviderType): Promise<ProviderAccountRecord[]> {
+    const metadata = await this.getMetadata();
+    return (metadata.accounts[provider] ?? []).map((account) => cloneAccountRecord(account));
+  }
+
+  async getAccount(
+    provider: AIProviderType,
+    accountId: string,
+  ): Promise<ProviderAccountRecord | null> {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      return null;
+    }
+
+    const metadata = await this.getMetadata();
+    const account = (metadata.accounts[provider] ?? []).find(
+      (candidate) => candidate.accountId === normalizedAccountId,
+    );
+
+    return account ? cloneAccountRecord(account) : null;
+  }
+
+  async saveAccount(
+    provider: AIProviderType,
+    input: SaveAccountInput,
+  ): Promise<ProviderAccountRecord> {
+    if (provider !== 'codex') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Provider ${provider} does not support account-backed storage yet`,
+        true,
+      );
+    }
+
+    const accountId = input.accountId.trim();
+    const label = input.label.trim();
+    if (!accountId || !label) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Account id and label are required',
+        true,
+      );
+    }
+
+    const metadata = await this.getMetadata();
+    const now = Date.now();
+    const providerAccounts = [...(metadata.accounts[provider] ?? [])];
+    const existingIndex = providerAccounts.findIndex((account) => account.accountId === accountId);
+    const existingAccount = existingIndex >= 0 ? providerAccounts[existingIndex] : undefined;
+
+    let credentialKey = existingAccount?.credentialKey;
+    if (provider === 'codex' && input.artifact?.value.trim()) {
+      const secureStorage = await this.requireUnlockedStorage();
+      credentialKey = this.getAccountArtifactStorageKey(provider, accountId);
+      await secureStorage.setEncrypted(credentialKey, {
+        provider,
+        accountId,
+        authKind: input.artifact.authKind ?? 'account-artifact',
+        value: input.artifact.value.trim(),
+        filename: input.artifact.filename?.trim() || undefined,
+        format: input.artifact.format ?? 'unknown',
+        updatedAt: now,
+      } satisfies StoredAccountArtifact);
+    }
+
+    const nextAccount: ProviderAccountRecord = {
+      version: 1,
+      provider,
+      providerFamily: 'chatgpt-account',
+      authFamily: 'account-backed',
+      accountId,
+      label,
+      maskedIdentifier: input.maskedIdentifier?.trim() || existingAccount?.maskedIdentifier,
+      credentialKey,
+      status: input.status ?? existingAccount?.status ?? 'available',
+      isActive: input.isActive ?? existingAccount?.isActive ?? false,
+      updatedAt: now,
+      validatedAt: input.validatedAt ?? existingAccount?.validatedAt,
+      lastUsedAt: input.lastUsedAt ?? existingAccount?.lastUsedAt,
+      stale: input.stale ?? existingAccount?.stale,
+      metadata:
+        input.metadata !== undefined
+          ? cloneAccountMetadata(input.metadata)
+          : cloneAccountMetadata(existingAccount?.metadata),
+    };
+
+    if (existingIndex >= 0) {
+      providerAccounts[existingIndex] = nextAccount;
+    } else {
+      providerAccounts.push(nextAccount);
+    }
+
+    if (nextAccount.isActive) {
+      metadata.activeAccounts[provider] = accountId;
+      for (let index = 0; index < providerAccounts.length; index += 1) {
+        const current = providerAccounts[index];
+        providerAccounts[index] = {
+          ...current,
+          isActive: current.accountId === accountId,
+          status:
+            current.accountId === accountId
+              ? 'active'
+              : current.status === 'active'
+                ? 'available'
+                : current.status,
+        };
+      }
+    } else if (metadata.activeAccounts[provider] === accountId) {
+      metadata.activeAccounts[provider] = accountId;
+    }
+
+    metadata.accounts[provider] = providerAccounts;
+    if (!metadata.initialized) {
+      metadata.initialized = true;
+    }
+    await this.saveMetadata(metadata);
+
+    const savedAccount = providerAccounts.find((account) => account.accountId === accountId);
+    if (!savedAccount) {
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save account metadata', true);
+    }
+
+    return cloneAccountRecord(savedAccount);
+  }
+
+  async activateAccount(
+    provider: AIProviderType,
+    accountId: string,
+  ): Promise<ProviderAccountRecord> {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Account id is required', true);
+    }
+
+    const metadata = await this.getMetadata();
+    const providerAccounts = [...(metadata.accounts[provider] ?? [])];
+    const target = providerAccounts.find((account) => account.accountId === normalizedAccountId);
+    if (!target) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Account "${normalizedAccountId}" was not found`,
+        true,
+      );
+    }
+    if (target.status === 'revoked') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Account "${normalizedAccountId}" is revoked and cannot be activated`,
+        true,
+      );
+    }
+
+    const now = Date.now();
+    metadata.accounts[provider] = providerAccounts.map((account) => ({
+      ...account,
+      isActive: account.accountId === normalizedAccountId,
+      status:
+        account.accountId === normalizedAccountId
+          ? 'active'
+          : account.status === 'active'
+            ? 'available'
+            : account.status,
+      lastUsedAt: account.accountId === normalizedAccountId ? now : account.lastUsedAt,
+      stale: account.accountId === normalizedAccountId ? false : account.stale,
+      updatedAt: account.accountId === normalizedAccountId ? now : account.updatedAt,
+    }));
+    metadata.activeAccounts[provider] = normalizedAccountId;
+    await this.saveMetadata(metadata);
+
+    const activated = metadata.accounts[provider]?.find(
+      (account) => account.accountId === normalizedAccountId,
+    );
+    if (!activated) {
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to activate account', true);
+    }
+
+    return cloneAccountRecord(activated);
+  }
+
+  async removeAccount(provider: AIProviderType, accountId: string): Promise<boolean> {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      return false;
+    }
+
+    const metadata = await this.getMetadata();
+    const providerAccounts = metadata.accounts[provider] ?? [];
+    const account = providerAccounts.find((candidate) => candidate.accountId === normalizedAccountId);
+    if (!account) {
+      return false;
+    }
+
+    if (account.credentialKey) {
+      const secureStorage = await this.requireUnlockedStorage();
+      await secureStorage.removeEncrypted(account.credentialKey);
+    }
+
+    const nextAccounts = providerAccounts.filter(
+      (candidate) => candidate.accountId !== normalizedAccountId,
+    );
+    if (nextAccounts.length > 0) {
+      metadata.accounts[provider] = nextAccounts;
+    } else {
+      delete metadata.accounts[provider];
+    }
+
+    if (metadata.activeAccounts[provider] === normalizedAccountId) {
+      delete metadata.activeAccounts[provider];
+      const fallbackAccount = nextAccounts[0];
+      if (fallbackAccount) {
+        fallbackAccount.isActive = true;
+        fallbackAccount.status = fallbackAccount.status === 'revoked' ? 'needs-auth' : 'active';
+        fallbackAccount.updatedAt = Date.now();
+        metadata.activeAccounts[provider] = fallbackAccount.accountId;
+      }
+    }
+
+    await this.saveMetadata(metadata);
+    return true;
+  }
+
+  async revokeAccount(
+    provider: AIProviderType,
+    accountId: string,
+    options?: { revokeCredential?: boolean },
+  ): Promise<ProviderAccountRecord | null> {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      return null;
+    }
+
+    const metadata = await this.getMetadata();
+    const providerAccounts = [...(metadata.accounts[provider] ?? [])];
+    const targetIndex = providerAccounts.findIndex(
+      (candidate) => candidate.accountId === normalizedAccountId,
+    );
+    if (targetIndex < 0) {
+      return null;
+    }
+
+    const current = providerAccounts[targetIndex];
+    const now = Date.now();
+    let credentialKey = current.credentialKey;
+    if (options?.revokeCredential && credentialKey) {
+      const secureStorage = await this.requireUnlockedStorage();
+      await secureStorage.removeEncrypted(credentialKey);
+      credentialKey = undefined;
+    }
+
+    const revokedAccount: ProviderAccountRecord = {
+      ...current,
+      credentialKey,
+      status: 'revoked',
+      isActive: false,
+      stale: true,
+      validatedAt: undefined,
+      updatedAt: now,
+      metadata: {
+        ...cloneAccountMetadata(current.metadata),
+        lastErrorCode: options?.revokeCredential ? 'ACCOUNT_REVOKED_CREDENTIAL_REMOVED' : 'ACCOUNT_REVOKED',
+        lastErrorAt: now,
+      },
+    };
+    providerAccounts[targetIndex] = revokedAccount;
+    metadata.accounts[provider] = providerAccounts;
+
+    if (metadata.activeAccounts[provider] === normalizedAccountId) {
+      delete metadata.activeAccounts[provider];
+    }
+
+    await this.saveMetadata(metadata);
+    return cloneAccountRecord(revokedAccount);
+  }
+
+  async getQuotaMetadata(
+    provider: AIProviderType,
+    accountId: string,
+  ): Promise<ProviderQuotaMetadata | undefined> {
+    const account = await this.getAccount(provider, accountId);
+    return account?.metadata?.quota ? { ...account.metadata.quota } : undefined;
+  }
+
+  async setQuotaMetadata(
+    provider: AIProviderType,
+    accountId: string,
+    quota: ProviderQuotaMetadata,
+  ): Promise<ProviderAccountRecord | null> {
+    const normalizedAccountId = accountId.trim();
+    if (!normalizedAccountId) {
+      return null;
+    }
+
+    const metadata = await this.getMetadata();
+    const providerAccounts = [...(metadata.accounts[provider] ?? [])];
+    const targetIndex = providerAccounts.findIndex(
+      (candidate) => candidate.accountId === normalizedAccountId,
+    );
+    if (targetIndex < 0) {
+      return null;
+    }
+
+    const current = providerAccounts[targetIndex];
+    const nextAccount: ProviderAccountRecord = {
+      ...current,
+      updatedAt: Date.now(),
+      metadata: {
+        ...cloneAccountMetadata(current.metadata),
+        quota: quota ? { ...quota } : undefined,
+      },
+    };
+    providerAccounts[targetIndex] = nextAccount;
+    metadata.accounts[provider] = providerAccounts;
+    await this.saveMetadata(metadata);
+
+    return cloneAccountRecord(nextAccount);
+  }
+
   async markValidated(provider: AIProviderType): Promise<ProviderCredentialRecord | undefined> {
     const metadata = await this.getMetadata();
     const current = metadata.credentials[provider];
@@ -563,6 +941,10 @@ export class CredentialVault {
 
   private getCredentialStorageKey(provider: AIProviderType): string {
     return `${CREDENTIAL_KEY_PREFIX}${provider}`;
+  }
+
+  private getAccountArtifactStorageKey(provider: AIProviderType, accountId: string): string {
+    return `${ACCOUNT_ARTIFACT_KEY_PREFIX}${provider}::${accountId}`;
   }
 
   private async migrateLegacySecrets(

@@ -537,10 +537,42 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        return createNotImplementedResponse(
-          `Account activation is not implemented for ${request.provider} yet.`,
-          { provider: request.provider, accountId: request.accountId },
-        );
+        const accounts = [...(state.vault.accounts[request.provider] ?? [])];
+        const target = accounts.find((account) => account.accountId === request.accountId);
+        if (!target) {
+          throw new Error(`Account ${request.accountId} was not found`);
+        }
+
+        const now = Date.now();
+        const nextVault = {
+          ...state.vault,
+          accounts: {
+            ...state.vault.accounts,
+            [request.provider]: accounts.map((account) => ({
+              ...cloneAccountRecord(account),
+              isActive: account.accountId === request.accountId,
+              status:
+                account.accountId === request.accountId
+                  ? 'active'
+                  : account.status === 'active'
+                    ? 'available'
+                    : account.status,
+              lastUsedAt: account.accountId === request.accountId ? now : account.lastUsedAt,
+              updatedAt: account.accountId === request.accountId ? now : account.updatedAt,
+              stale: account.accountId === request.accountId ? false : account.stale,
+            })),
+          },
+          activeAccounts: {
+            ...state.vault.activeAccounts,
+            [request.provider]: request.accountId,
+          },
+        };
+        await saveVault(nextVault);
+        return success({
+          provider: request.provider,
+          accountId: request.accountId,
+          activeAccountId: request.accountId,
+        });
       }
       case 'ACCOUNT_REVOKE': {
         const request = payload as RequestPayloadMap['ACCOUNT_REVOKE'];
@@ -548,10 +580,52 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        return createNotImplementedResponse(
-          `Account revocation is not implemented for ${request.provider} yet.`,
-          { provider: request.provider, accountId: request.accountId },
-        );
+        const accounts = [...(state.vault.accounts[request.provider] ?? [])];
+        const targetIndex = accounts.findIndex((account) => account.accountId === request.accountId);
+        if (targetIndex < 0) {
+          return success({
+            provider: request.provider,
+            accountId: request.accountId,
+            revoked: false,
+          });
+        }
+
+        const now = Date.now();
+        const current = accounts[targetIndex];
+        accounts[targetIndex] = {
+          ...cloneAccountRecord(current),
+          credentialKey: request.revokeCredential ? undefined : current.credentialKey,
+          status: 'revoked',
+          isActive: false,
+          stale: true,
+          validatedAt: undefined,
+          updatedAt: now,
+          metadata: {
+            ...current.metadata,
+            lastErrorCode: request.revokeCredential
+              ? 'ACCOUNT_REVOKED_CREDENTIAL_REMOVED'
+              : 'ACCOUNT_REVOKED',
+            lastErrorAt: now,
+          },
+        };
+        const nextActiveAccounts = { ...state.vault.activeAccounts };
+        if (nextActiveAccounts[request.provider] === request.accountId) {
+          delete nextActiveAccounts[request.provider];
+        }
+        const nextVault = {
+          ...state.vault,
+          accounts: {
+            ...state.vault.accounts,
+            [request.provider]: accounts,
+          },
+          activeAccounts: nextActiveAccounts,
+        };
+        await saveVault(nextVault);
+        return success({
+          provider: request.provider,
+          accountId: request.accountId,
+          revoked: true,
+        });
       }
       case 'ACCOUNT_REMOVE': {
         const request = payload as RequestPayloadMap['ACCOUNT_REMOVE'];
@@ -559,10 +633,40 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        return createNotImplementedResponse(
-          `Account removal is not implemented for ${request.provider} yet.`,
-          { provider: request.provider, accountId: request.accountId },
+        const accounts = (state.vault.accounts[request.provider] ?? []).filter(
+          (account) => account.accountId !== request.accountId,
         );
+        const removed = accounts.length !== (state.vault.accounts[request.provider] ?? []).length;
+        const nextActiveAccounts = { ...state.vault.activeAccounts };
+        if (nextActiveAccounts[request.provider] === request.accountId) {
+          delete nextActiveAccounts[request.provider];
+          if (accounts[0]) {
+            accounts[0] = {
+              ...cloneAccountRecord(accounts[0]),
+              isActive: true,
+              status: accounts[0].status === 'revoked' ? 'needs-auth' : 'active',
+              updatedAt: Date.now(),
+            };
+            nextActiveAccounts[request.provider] = accounts[0].accountId;
+          }
+        }
+        const nextAccounts = { ...state.vault.accounts };
+        if (accounts.length > 0) {
+          nextAccounts[request.provider] = accounts.map(cloneAccountRecord);
+        } else {
+          delete nextAccounts[request.provider];
+        }
+        const nextVault = {
+          ...state.vault,
+          accounts: nextAccounts,
+          activeAccounts: nextActiveAccounts,
+        };
+        await saveVault(nextVault);
+        return success({
+          provider: request.provider,
+          accountId: request.accountId,
+          removed,
+        });
       }
       case 'ACCOUNT_QUOTA_REFRESH': {
         const request = payload as RequestPayloadMap['ACCOUNT_QUOTA_REFRESH'];
@@ -570,10 +674,18 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        return createNotImplementedResponse(
-          `Quota refresh is not implemented for ${request.provider} yet.`,
-          { provider: request.provider, accountId: request.accountId },
-        );
+        const accountId = request.accountId ?? state.vault.activeAccounts[request.provider];
+        const account = accountId
+          ? (state.vault.accounts[request.provider] ?? []).find(
+              (candidate) => candidate.accountId === accountId,
+            )
+          : undefined;
+        return success({
+          provider: request.provider,
+          accountId,
+          quota: account?.metadata?.quota,
+          refreshedAt: Date.now(),
+        });
       }
       case 'VAULT_INIT':
       case 'VAULT_UNLOCK': {
