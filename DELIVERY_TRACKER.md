@@ -104,7 +104,7 @@
 - `T16` PASS
   - Scope: README, TESTING, SECURITY, and tester-facing docs now match the implemented Codex account-backed flow
   - Verification: `pnpm typecheck`
-  - Commit: pending
+  - Commit: `55d4b2f` - `docs: align codex account-backed guidance`
 
 ## Workflow Protocol
 
