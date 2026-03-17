@@ -24,7 +24,7 @@
 
 - [x] `T1` OpenCode account discovery
 - [x] `T2` Feasibility and risk assessment
-- [ ] `T3` Architecture decision record
+- [x] `T3` Architecture decision record
 - [ ] `T4` Provider/account/token/quota type expansion
 - [ ] `T5` Auth message surface expansion
 - [ ] `T6` Secure account store
@@ -47,6 +47,10 @@
   - Commit: `d1501d4` - `docs: capture OpenCode account auth discovery`
 - `T2` PASS
   - Artifact: `docs/task-02-chatgpt-plus-feasibility.md`
+  - Verification: `pnpm typecheck`
+  - Commit: `dbcdad4` - `docs: record chatgpt account auth feasibility`
+- `T3` PASS
+  - Artifact: `docs/task-03-auth-strategy-adr.md`
   - Verification: `pnpm typecheck`
   - Commit: pending
 
