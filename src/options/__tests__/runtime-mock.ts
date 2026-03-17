@@ -50,7 +50,33 @@ function createDefaultVaultState(): VaultState {
     unlockedAt: Date.now(),
     hasLegacySecrets: false,
     credentials: {},
+    accounts: {},
+    activeAccounts: {},
   };
+}
+
+function getDefaultAuthKind(provider: AIProviderType): ProviderCredentialRecord['authKind'] {
+  if (provider === 'copilot') {
+    return 'oauth-token';
+  }
+
+  if (provider === 'codex') {
+    return 'account-artifact';
+  }
+
+  return 'api-key';
+}
+
+function getMaskedCredentialValue(provider: AIProviderType, secret: string): string {
+  if (provider === 'copilot') {
+    return `ghu_****${secret.slice(-4)}`;
+  }
+
+  if (provider === 'codex') {
+    return secret.length > 8 ? `acct_****${secret.slice(-4)}` : GENERIC_MASK;
+  }
+
+  return GENERIC_MASK;
 }
 
 function isAllowedEndpoint(providerType: AIProviderType, endpoint: string): boolean {
@@ -76,11 +102,19 @@ function isAllowedEndpoint(providerType: AIProviderType, endpoint: string): bool
 function buildCredentialRecord(
   provider: AIProviderType,
   maskedValue = GENERIC_MASK,
+  authKind: ProviderCredentialRecord['authKind'] = getDefaultAuthKind(provider),
 ): ProviderCredentialRecord {
   return {
     version: 1,
     provider,
-    authKind: provider === 'copilot' ? 'oauth-token' : 'api-key',
+    providerFamily: provider === 'codex' ? 'chatgpt-account' : 'default',
+    authFamily:
+      authKind === 'oauth-token'
+        ? 'oauth-token'
+        : authKind === 'account-artifact' || authKind === 'session-token'
+          ? 'account-backed'
+        : 'api-key',
+    authKind,
     maskedValue,
     updatedAt: Date.now(),
   };
@@ -220,6 +254,10 @@ async function validateProvider(
     return false;
   }
 
+  if (provider === 'codex') {
+    return true;
+  }
+
   const client = await providerLoader.createProvider(provider as Exclude<AIProviderType, 'custom'>);
   await client.initialize({
     provider,
@@ -298,7 +336,8 @@ export function installOptionsRuntimeMock(): void {
         const request = payload as RequestPayloadMap['API_KEY_SET'];
         const record = buildCredentialRecord(
           request.provider,
-          request.maskedValue ?? (request.provider === 'copilot' ? `ghu_****${request.apiKey.slice(-4)}` : GENERIC_MASK),
+          request.maskedValue ?? getMaskedCredentialValue(request.provider, request.apiKey),
+          request.authKind ?? getDefaultAuthKind(request.provider),
         );
         const nextVault = {
           ...state.vault,

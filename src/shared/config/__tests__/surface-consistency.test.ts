@@ -19,6 +19,19 @@ describe('shared surface consistency', () => {
     expect(configuredProviders).toEqual(providerTypes);
   });
 
+  it('keeps account-backed provider metadata aligned for codex', () => {
+    const codex = PROVIDER_REGISTRY.find((provider) => provider.type === 'codex');
+
+    expect(codex).toMatchObject({
+      family: 'chatgpt-account',
+      authFamily: 'account-backed',
+      authMethod: 'account-import',
+      experimental: true,
+      requiresCredential: true,
+      supportsEndpoint: false,
+    });
+  });
+
   it('keeps the README permission list aligned with the manifest', () => {
     const repoRoot = resolve(__dirname, '../../../../');
     const manifest = JSON.parse(readFileSync(resolve(repoRoot, 'src/manifest.json'), 'utf-8')) as {

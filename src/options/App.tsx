@@ -249,6 +249,8 @@ function createDefaultVaultState(): VaultState {
     lockState: 'uninitialized',
     hasLegacySecrets: false,
     credentials: {},
+    accounts: {},
+    activeAccounts: {},
   };
 }
 

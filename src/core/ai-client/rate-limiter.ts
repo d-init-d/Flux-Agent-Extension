@@ -108,6 +108,10 @@ export function getDefaultRateLimits(provider: AIProviderType): RateLimiterConfi
       // GitHub Copilot rate limits are dynamic; conservative default
       return { maxRequestsPerMinute: 30, maxTokensPerMinute: 60_000 };
 
+    case 'codex':
+      // Experimental account-backed provider; keep conservative until live headers exist
+      return { maxRequestsPerMinute: 20, maxTokensPerMinute: 40_000 };
+
     case 'custom':
       // Unknown provider — very conservative
       return { maxRequestsPerMinute: 30, maxTokensPerMinute: 30_000 };

@@ -1027,7 +1027,13 @@ export class UISessionRuntime {
   private async handleApiKeySet(
     payload: RequestPayloadMap['API_KEY_SET'],
   ): RuntimeHandlerResponse<'API_KEY_SET'> {
-    const authKind = payload.authKind ?? (payload.provider === 'copilot' ? 'oauth-token' : 'api-key');
+    const authKind =
+      payload.authKind ??
+      (payload.provider === 'copilot'
+        ? 'oauth-token'
+        : payload.provider === 'codex'
+          ? 'account-artifact'
+          : 'api-key');
     let record = await this.credentialVault.setCredential(
       payload.provider,
       payload.apiKey,

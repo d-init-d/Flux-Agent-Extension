@@ -179,6 +179,7 @@ const MODEL_MAX_TOKENS: Record<string, number> = {
   'o1-preview': 128_000,
   'o1-mini': 128_000,
   'o3-mini': 200_000,
+  'codex-mini-latest': 200_000,
 
   // Google Gemini
   'gemini-1.5-pro': 2_000_000,
@@ -208,6 +209,7 @@ const PROVIDER_DEFAULTS: Record<AIProviderType, number> = {
   mistral: 128_000,
   perplexity: 128_000,
   copilot: 128_000,
+  codex: 200_000,
   custom: 4_096,
 };
 

@@ -1,6 +1,8 @@
 /**
  * Supported AI providers
  */
+export type AIProviderFamily = 'default' | 'chatgpt-account';
+
 export type AIProviderType =
   | 'claude' // Anthropic Claude
   | 'openai' // OpenAI GPT
@@ -17,6 +19,7 @@ export type AIProviderType =
   | 'mistral' // Mistral AI
   | 'perplexity' // Perplexity AI
   | 'copilot' // GitHub Copilot (OAuth)
+  | 'codex' // ChatGPT Plus / Codex account-backed provider
   | 'custom'; // Custom API endpoint
 
 /**

@@ -25,7 +25,7 @@
 - [x] `T1` OpenCode account discovery
 - [x] `T2` Feasibility and risk assessment
 - [x] `T3` Architecture decision record
-- [ ] `T4` Provider/account/token/quota type expansion
+- [x] `T4` Provider/account/token/quota type expansion
 - [ ] `T5` Auth message surface expansion
 - [ ] `T6` Secure account store
 - [ ] `T7` ChatGPT account auth module
@@ -52,6 +52,10 @@
 - `T3` PASS
   - Artifact: `docs/task-03-auth-strategy-adr.md`
   - Verification: `pnpm typecheck`
+  - Commit: `c4d92b5` - `docs: accept codex account auth strategy`
+- `T4` PASS
+  - Scope: shared account-backed provider types, vault schema groundwork, provider registry, compile-safe runtime defaults
+  - Verification: `pnpm vitest run src/shared/config/__tests__/surface-consistency.test.ts src/options/__tests__/App.test.tsx && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol
