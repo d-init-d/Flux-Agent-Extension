@@ -5,6 +5,7 @@ import type {
   AIProviderType,
   ExtensionMessage,
   ExtensionResponse,
+  ProviderAccountRecord,
   ExtensionSettings,
   ProviderConfig,
   ProviderCredentialRecord,
@@ -120,6 +121,47 @@ function buildCredentialRecord(
   };
 }
 
+function supportsAccountBackedAuth(provider: AIProviderType): boolean {
+  return PROVIDER_LOOKUP[provider].authFamily === 'account-backed';
+}
+
+function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountRecord {
+  return {
+    ...account,
+    metadata: account.metadata
+      ? {
+          ...account.metadata,
+          quota: account.metadata.quota ? { ...account.metadata.quota } : undefined,
+          rateLimit: account.metadata.rateLimit ? { ...account.metadata.rateLimit } : undefined,
+          entitlement: account.metadata.entitlement ? { ...account.metadata.entitlement } : undefined,
+          session: account.metadata.session ? { ...account.metadata.session } : undefined,
+        }
+      : undefined,
+  };
+}
+
+function createNotImplementedResponse<T>(message: string, details?: unknown): ExtensionResponse<T> {
+  return {
+    success: false,
+    error: {
+      code: 'NOT_IMPLEMENTED',
+      message,
+      details,
+    },
+  };
+}
+
+function createUnsupportedAccountProviderResponse<T>(provider: AIProviderType): ExtensionResponse<T> {
+  return {
+    success: false,
+    error: {
+      code: 'UNSUPPORTED_PROVIDER_AUTH_FAMILY',
+      message: `Provider ${provider} does not use account-backed auth messaging.`,
+      details: { provider },
+    },
+  };
+}
+
 function mapVaultToProviderMetadata(vault: VaultState) {
   return Object.fromEntries(
     Object.entries(vault.credentials).map(([provider, record]) => [
@@ -156,6 +198,8 @@ async function getSettingsState() {
     vault.unlockedAt = storedVault.unlockedAt ?? Date.now();
     vault.hasLegacySecrets = Boolean(legacySessionKeys || legacyLocalKeys);
     vault.credentials = storedVault.credentials ?? {};
+    vault.accounts = storedVault.accounts ?? {};
+    vault.activeAccounts = storedVault.activeAccounts ?? {};
   }
 
   const providerKeyMetadata = stored.providerKeyMetadata as
@@ -392,6 +436,144 @@ export function installOptionsRuntimeMock(): void {
           record: nextVault.credentials[request.provider],
           vault: nextVault,
         });
+      }
+      case 'ACCOUNT_AUTH_STATUS_GET': {
+        const request = payload as RequestPayloadMap['ACCOUNT_AUTH_STATUS_GET'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        const accounts = (state.vault.accounts[request.provider] ?? []).map(cloneAccountRecord);
+        const credential = state.vault.credentials[request.provider];
+        const activeAccountId = state.vault.activeAccounts[request.provider];
+
+        return success({
+          provider: request.provider,
+          authFamily: 'account-backed',
+          status:
+            state.vault.lockState !== 'unlocked'
+              ? 'vault-locked'
+              : accounts.length > 0 || credential
+                ? 'ready'
+                : 'needs-auth',
+          availableTransports: ['artifact-import'],
+          credential,
+          accounts,
+          activeAccountId,
+          vault: state.vault,
+        });
+      }
+      case 'ACCOUNT_LIST': {
+        const request = payload as RequestPayloadMap['ACCOUNT_LIST'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return success({
+          provider: request.provider,
+          accounts: (state.vault.accounts[request.provider] ?? []).map(cloneAccountRecord),
+          activeAccountId: state.vault.activeAccounts[request.provider],
+        });
+      }
+      case 'ACCOUNT_GET': {
+        const request = payload as RequestPayloadMap['ACCOUNT_GET'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return success({
+          provider: request.provider,
+          account:
+            (state.vault.accounts[request.provider] ?? [])
+              .map(cloneAccountRecord)
+              .find((account) => account.accountId === request.accountId) ?? null,
+          activeAccountId: state.vault.activeAccounts[request.provider],
+        });
+      }
+      case 'ACCOUNT_QUOTA_STATUS_GET': {
+        const request = payload as RequestPayloadMap['ACCOUNT_QUOTA_STATUS_GET'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        const accountId = request.accountId ?? state.vault.activeAccounts[request.provider];
+        const account = accountId
+          ? (state.vault.accounts[request.provider] ?? []).find(
+              (candidate) => candidate.accountId === accountId,
+            )
+          : undefined;
+
+        return success({
+          provider: request.provider,
+          accountId,
+          quota: account?.metadata?.quota,
+        });
+      }
+      case 'ACCOUNT_AUTH_CONNECT_START': {
+        const request = payload as RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return createNotImplementedResponse(
+          `Account-backed auth connect is not implemented for ${request.provider} yet.`,
+          { provider: request.provider, transport: request.transport },
+        );
+      }
+      case 'ACCOUNT_AUTH_VALIDATE': {
+        const request = payload as RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return createNotImplementedResponse(
+          `Account-backed auth validation is not implemented for ${request.provider} yet.`,
+          { provider: request.provider, accountId: request.accountId },
+        );
+      }
+      case 'ACCOUNT_ACTIVATE': {
+        const request = payload as RequestPayloadMap['ACCOUNT_ACTIVATE'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return createNotImplementedResponse(
+          `Account activation is not implemented for ${request.provider} yet.`,
+          { provider: request.provider, accountId: request.accountId },
+        );
+      }
+      case 'ACCOUNT_REVOKE': {
+        const request = payload as RequestPayloadMap['ACCOUNT_REVOKE'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return createNotImplementedResponse(
+          `Account revocation is not implemented for ${request.provider} yet.`,
+          { provider: request.provider, accountId: request.accountId },
+        );
+      }
+      case 'ACCOUNT_REMOVE': {
+        const request = payload as RequestPayloadMap['ACCOUNT_REMOVE'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return createNotImplementedResponse(
+          `Account removal is not implemented for ${request.provider} yet.`,
+          { provider: request.provider, accountId: request.accountId },
+        );
+      }
+      case 'ACCOUNT_QUOTA_REFRESH': {
+        const request = payload as RequestPayloadMap['ACCOUNT_QUOTA_REFRESH'];
+        if (!supportsAccountBackedAuth(request.provider)) {
+          return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        return createNotImplementedResponse(
+          `Quota refresh is not implemented for ${request.provider} yet.`,
+          { provider: request.provider, accountId: request.accountId },
+        );
       }
       case 'VAULT_INIT':
       case 'VAULT_UNLOCK': {

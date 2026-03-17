@@ -57,6 +57,7 @@ import type {
   SetRecordingStatePayload,
   TabState,
   FillAction,
+  ProviderAccountRecord,
   ProviderCredentialRecord,
   VaultState,
 } from '@shared/types';
@@ -412,6 +413,36 @@ export class UISessionRuntime {
         return this.handleApiKeyDelete(message.payload as RequestPayloadMap['API_KEY_DELETE']);
       case 'API_KEY_VALIDATE':
         return this.handleApiKeyValidate(message.payload as RequestPayloadMap['API_KEY_VALIDATE']);
+      case 'ACCOUNT_AUTH_STATUS_GET':
+        return this.handleAccountAuthStatusGet(
+          message.payload as RequestPayloadMap['ACCOUNT_AUTH_STATUS_GET'],
+        );
+      case 'ACCOUNT_AUTH_CONNECT_START':
+        return this.handleAccountAuthConnectStart(
+          message.payload as RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START'],
+        );
+      case 'ACCOUNT_AUTH_VALIDATE':
+        return this.handleAccountAuthValidate(
+          message.payload as RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'],
+        );
+      case 'ACCOUNT_LIST':
+        return this.handleAccountList(message.payload as RequestPayloadMap['ACCOUNT_LIST']);
+      case 'ACCOUNT_GET':
+        return this.handleAccountGet(message.payload as RequestPayloadMap['ACCOUNT_GET']);
+      case 'ACCOUNT_ACTIVATE':
+        return this.handleAccountActivate(message.payload as RequestPayloadMap['ACCOUNT_ACTIVATE']);
+      case 'ACCOUNT_REVOKE':
+        return this.handleAccountRevoke(message.payload as RequestPayloadMap['ACCOUNT_REVOKE']);
+      case 'ACCOUNT_REMOVE':
+        return this.handleAccountRemove(message.payload as RequestPayloadMap['ACCOUNT_REMOVE']);
+      case 'ACCOUNT_QUOTA_STATUS_GET':
+        return this.handleAccountQuotaStatusGet(
+          message.payload as RequestPayloadMap['ACCOUNT_QUOTA_STATUS_GET'],
+        );
+      case 'ACCOUNT_QUOTA_REFRESH':
+        return this.handleAccountQuotaRefresh(
+          message.payload as RequestPayloadMap['ACCOUNT_QUOTA_REFRESH'],
+        );
       case 'VAULT_INIT':
         return this.handleVaultInit(message.payload as RequestPayloadMap['VAULT_INIT']);
       case 'VAULT_UNLOCK':
@@ -1106,6 +1137,216 @@ export class UISessionRuntime {
         vault: await this.credentialVault.getState(),
       },
     };
+  }
+
+  private async handleAccountAuthStatusGet(
+    payload: RequestPayloadMap['ACCOUNT_AUTH_STATUS_GET'],
+  ): RuntimeHandlerResponse<'ACCOUNT_AUTH_STATUS_GET'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse(
+        'ACCOUNT_AUTH_STATUS_GET',
+        payload.provider,
+      );
+    }
+
+    const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+    const status =
+      snapshot.vault.lockState !== 'unlocked'
+        ? 'vault-locked'
+        : snapshot.accounts.length > 0
+          ? 'ready'
+          : snapshot.credential
+            ? 'ready'
+            : 'needs-auth';
+
+    return {
+      success: true,
+      data: {
+        provider: payload.provider,
+        authFamily: 'account-backed',
+        status,
+        availableTransports: ['artifact-import'],
+        credential: snapshot.credential,
+        accounts: snapshot.accounts,
+        activeAccountId: snapshot.activeAccountId,
+        vault: snapshot.vault,
+      },
+    };
+  }
+
+  private async handleAccountAuthConnectStart(
+    payload: RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START'],
+  ): RuntimeHandlerResponse<'ACCOUNT_AUTH_CONNECT_START'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse(
+        'ACCOUNT_AUTH_CONNECT_START',
+        payload.provider,
+      );
+    }
+
+    return this.createNotImplementedResponse(
+      'ACCOUNT_AUTH_CONNECT_START',
+      `Account-backed auth connect is not implemented for ${payload.provider} yet. Artifact import plumbing lands in Tasks 6-7.`,
+      {
+        provider: payload.provider,
+        transport: payload.transport,
+      },
+    );
+  }
+
+  private async handleAccountAuthValidate(
+    payload: RequestPayloadMap['ACCOUNT_AUTH_VALIDATE'],
+  ): RuntimeHandlerResponse<'ACCOUNT_AUTH_VALIDATE'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse(
+        'ACCOUNT_AUTH_VALIDATE',
+        payload.provider,
+      );
+    }
+
+    return this.createNotImplementedResponse(
+      'ACCOUNT_AUTH_VALIDATE',
+      `Account-backed auth validation is not implemented for ${payload.provider} yet. Validation logic lands in Tasks 7 and 9.`,
+      {
+        provider: payload.provider,
+        accountId: payload.accountId,
+        transport: payload.transport,
+      },
+    );
+  }
+
+  private async handleAccountList(
+    payload: RequestPayloadMap['ACCOUNT_LIST'],
+  ): RuntimeHandlerResponse<'ACCOUNT_LIST'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse('ACCOUNT_LIST', payload.provider);
+    }
+
+    const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+    return {
+      success: true,
+      data: {
+        provider: payload.provider,
+        accounts: snapshot.accounts,
+        activeAccountId: snapshot.activeAccountId,
+      },
+    };
+  }
+
+  private async handleAccountGet(
+    payload: RequestPayloadMap['ACCOUNT_GET'],
+  ): RuntimeHandlerResponse<'ACCOUNT_GET'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse('ACCOUNT_GET', payload.provider);
+    }
+
+    const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+    return {
+      success: true,
+      data: {
+        provider: payload.provider,
+        account:
+          snapshot.accounts.find((account) => account.accountId === payload.accountId) ?? null,
+        activeAccountId: snapshot.activeAccountId,
+      },
+    };
+  }
+
+  private async handleAccountActivate(
+    payload: RequestPayloadMap['ACCOUNT_ACTIVATE'],
+  ): RuntimeHandlerResponse<'ACCOUNT_ACTIVATE'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse('ACCOUNT_ACTIVATE', payload.provider);
+    }
+
+    return this.createNotImplementedResponse(
+      'ACCOUNT_ACTIVATE',
+      `Account activation is not implemented for ${payload.provider} yet. Active-account selection lands in Task 9.`,
+      {
+        provider: payload.provider,
+        accountId: payload.accountId,
+      },
+    );
+  }
+
+  private async handleAccountRevoke(
+    payload: RequestPayloadMap['ACCOUNT_REVOKE'],
+  ): RuntimeHandlerResponse<'ACCOUNT_REVOKE'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse('ACCOUNT_REVOKE', payload.provider);
+    }
+
+    return this.createNotImplementedResponse(
+      'ACCOUNT_REVOKE',
+      `Account revocation is not implemented for ${payload.provider} yet. Secure cleanup lands in Tasks 6-7.`,
+      {
+        provider: payload.provider,
+        accountId: payload.accountId,
+      },
+    );
+  }
+
+  private async handleAccountRemove(
+    payload: RequestPayloadMap['ACCOUNT_REMOVE'],
+  ): RuntimeHandlerResponse<'ACCOUNT_REMOVE'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse('ACCOUNT_REMOVE', payload.provider);
+    }
+
+    return this.createNotImplementedResponse(
+      'ACCOUNT_REMOVE',
+      `Account removal is not implemented for ${payload.provider} yet. Vault deletion lands in Task 6.`,
+      {
+        provider: payload.provider,
+        accountId: payload.accountId,
+      },
+    );
+  }
+
+  private async handleAccountQuotaStatusGet(
+    payload: RequestPayloadMap['ACCOUNT_QUOTA_STATUS_GET'],
+  ): RuntimeHandlerResponse<'ACCOUNT_QUOTA_STATUS_GET'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse(
+        'ACCOUNT_QUOTA_STATUS_GET',
+        payload.provider,
+      );
+    }
+
+    const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+    const accountId = payload.accountId ?? snapshot.activeAccountId;
+    const account = accountId
+      ? snapshot.accounts.find((candidate) => candidate.accountId === accountId)
+      : undefined;
+
+    return {
+      success: true,
+      data: {
+        provider: payload.provider,
+        accountId,
+        quota: account?.metadata?.quota,
+      },
+    };
+  }
+
+  private async handleAccountQuotaRefresh(
+    payload: RequestPayloadMap['ACCOUNT_QUOTA_REFRESH'],
+  ): RuntimeHandlerResponse<'ACCOUNT_QUOTA_REFRESH'> {
+    if (!this.supportsAccountBackedAuth(payload.provider)) {
+      return this.createUnsupportedAccountProviderResponse(
+        'ACCOUNT_QUOTA_REFRESH',
+        payload.provider,
+      );
+    }
+
+    return this.createNotImplementedResponse(
+      'ACCOUNT_QUOTA_REFRESH',
+      `Quota refresh is not implemented for ${payload.provider} yet. Runtime refresh logic lands in Task 9.`,
+      {
+        provider: payload.provider,
+        accountId: payload.accountId,
+      },
+    );
   }
 
   private async handleContextGet(
@@ -1819,6 +2060,77 @@ export class UISessionRuntime {
       activeProvider,
       onboarding: normalizeOnboardingState(stored.onboarding),
       vault,
+    };
+  }
+
+  private supportsAccountBackedAuth(provider: SessionConfig['provider']): boolean {
+    return PROVIDER_LOOKUP[provider].authFamily === 'account-backed';
+  }
+
+  private async getAccountSurfaceSnapshot(provider: SessionConfig['provider']): Promise<{
+    vault: VaultState;
+    credential?: ProviderCredentialRecord;
+    accounts: ProviderAccountRecord[];
+    activeAccountId?: string;
+  }> {
+    const vault = await this.credentialVault.getState();
+    const accounts = (vault.accounts[provider] ?? []).map((account) => this.cloneAccountRecord(account));
+
+    return {
+      vault,
+      credential: vault.credentials[provider],
+      accounts,
+      activeAccountId: vault.activeAccounts[provider],
+    };
+  }
+
+  private cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountRecord {
+    return {
+      ...account,
+      metadata: account.metadata
+        ? {
+            ...account.metadata,
+            quota: account.metadata.quota ? { ...account.metadata.quota } : undefined,
+            rateLimit: account.metadata.rateLimit ? { ...account.metadata.rateLimit } : undefined,
+            entitlement: account.metadata.entitlement ? { ...account.metadata.entitlement } : undefined,
+            session: account.metadata.session ? { ...account.metadata.session } : undefined,
+          }
+        : undefined,
+    };
+  }
+
+  private createNotImplementedResponse<T extends keyof ResponsePayloadMap>(
+    type: T,
+    message: string,
+    details?: unknown,
+  ): ExtensionResponse<ResponsePayloadMap[T]> {
+    return {
+      success: false,
+      error: {
+        code: 'NOT_IMPLEMENTED',
+        message,
+        details: {
+          type,
+          ...((details && typeof details === 'object' ? details : { details }) as Record<string, unknown>),
+        },
+      },
+    };
+  }
+
+  private createUnsupportedAccountProviderResponse<T extends keyof ResponsePayloadMap>(
+    type: T,
+    provider: SessionConfig['provider'],
+  ): ExtensionResponse<ResponsePayloadMap[T]> {
+    return {
+      success: false,
+      error: {
+        code: 'UNSUPPORTED_PROVIDER_AUTH_FAMILY',
+        message: `Provider ${provider} does not use account-backed auth messaging.`,
+        details: {
+          type,
+          provider,
+        },
+      },
     };
   }
 

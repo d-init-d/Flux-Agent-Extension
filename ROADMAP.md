@@ -32,8 +32,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | T2 - Feasibility and risk assessment | DONE | Feasibility doc completed in `docs/task-02-chatgpt-plus-feasibility.md` |
 | T3 - Architecture decision record | DONE | ADR completed in `docs/task-03-auth-strategy-adr.md` |
 | T4 - Provider/account/token/quota types | DONE | Groundwork landed across shared types, vault schema, provider registry, and compile-safe runtime wiring |
-| T5 - UI <-> background auth message surface | IN PROGRESS | Add login/status/logout/quota/refresh message contracts |
-| T6 - Secure account store | TODO | Generalize vault into encrypted account storage |
+| T5 - UI <-> background auth message surface | DONE | Account-backed message contracts and compile-safe runtime plumbing landed |
+| T6 - Secure account store | IN PROGRESS | Generalize vault into encrypted account storage |
 | T7 - ChatGPT account auth module | TODO | Implement login bootstrap, callback handling, exchange, refresh, revoke |
 | T8 - Manifest and auth callback wiring | TODO | Add permissions or identity surfaces if required |
 | T9 - Background account/session manager | TODO | Handle caching, refresh, retries, and re-auth flows |

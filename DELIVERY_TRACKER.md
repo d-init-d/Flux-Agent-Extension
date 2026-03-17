@@ -26,7 +26,7 @@
 - [x] `T2` Feasibility and risk assessment
 - [x] `T3` Architecture decision record
 - [x] `T4` Provider/account/token/quota type expansion
-- [ ] `T5` Auth message surface expansion
+- [x] `T5` Auth message surface expansion
 - [ ] `T6` Secure account store
 - [ ] `T7` ChatGPT account auth module
 - [ ] `T8` Manifest/auth callback wiring
@@ -56,6 +56,10 @@
 - `T4` PASS
   - Scope: shared account-backed provider types, vault schema groundwork, provider registry, compile-safe runtime defaults
   - Verification: `pnpm vitest run src/shared/config/__tests__/surface-consistency.test.ts src/options/__tests__/App.test.tsx && pnpm typecheck`
+  - Commit: `2f86aee` - `feat: add codex account type groundwork`
+- `T5` PASS
+  - Scope: account-backed auth message contracts, runtime router plumbing, mock/runtime baseline tests
+  - Verification: `pnpm vitest run src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/runtime-mock-account-contract.test.ts && pnpm typecheck`
   - Commit: pending
 
 ## Workflow Protocol

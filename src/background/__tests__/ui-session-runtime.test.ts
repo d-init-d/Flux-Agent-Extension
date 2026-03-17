@@ -3618,4 +3618,187 @@ describe('UI session runtime', () => {
     expect(puppeteerScript).toContain('frame-doc-7');
     expect(puppeteerScript).toContain('recording.actions[index]');
   });
+
+  it('returns account-backed auth snapshots for codex message contracts', async () => {
+    const observedAt = Date.UTC(2026, 2, 17, 8, 30, 0);
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****7890',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_primary',
+              label: 'Primary Codex Account',
+              maskedIdentifier: 'user@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              validatedAt: observedAt,
+              metadata: {
+                quota: {
+                  scope: 'account',
+                  unit: 'requests',
+                  period: 'day',
+                  used: 12,
+                  limit: 100,
+                  remaining: 88,
+                  observedAt,
+                },
+              },
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_primary',
+        },
+      },
+    });
+    await chrome.storage.session.set({
+      __flux_vault_session__: {
+        passphrase: 'test-passphrase',
+        unlockedAt: observedAt,
+      },
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const authStatus = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_STATUS_GET', { provider: 'codex' }),
+    );
+    expect(authStatus.success).toBe(true);
+    expect(authStatus.data).toEqual(
+      expect.objectContaining({
+        provider: 'codex',
+        authFamily: 'account-backed',
+        status: 'ready',
+        availableTransports: ['artifact-import'],
+        activeAccountId: 'acct_primary',
+        credential: expect.objectContaining({ authKind: 'account-artifact' }),
+        accounts: [
+          expect.objectContaining({
+            accountId: 'acct_primary',
+            label: 'Primary Codex Account',
+          }),
+        ],
+      }),
+    );
+
+    const accountList = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_LIST', { provider: 'codex' }),
+    );
+    expect(accountList.success).toBe(true);
+    expect(accountList.data).toEqual({
+      provider: 'codex',
+      accounts: [expect.objectContaining({ accountId: 'acct_primary' })],
+      activeAccountId: 'acct_primary',
+    });
+
+    const accountGet = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_GET', {
+        provider: 'codex',
+        accountId: 'acct_primary',
+      }),
+    );
+    expect(accountGet.success).toBe(true);
+    expect(accountGet.data?.account).toEqual(
+      expect.objectContaining({
+        accountId: 'acct_primary',
+        metadata: expect.objectContaining({
+          quota: expect.objectContaining({ remaining: 88 }),
+        }),
+      }),
+    );
+
+    const quotaStatus = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_QUOTA_STATUS_GET', { provider: 'codex' }),
+    );
+    expect(quotaStatus.success).toBe(true);
+    expect(quotaStatus.data).toEqual({
+      provider: 'codex',
+      accountId: 'acct_primary',
+      quota: expect.objectContaining({ limit: 100, remaining: 88 }),
+    });
+  });
+
+  it('fails clearly for deferred codex account-backed mutations', async () => {
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const connectResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_CONNECT_START', {
+        provider: 'codex',
+        transport: 'artifact-import',
+        artifact: {
+          format: 'json',
+          value: '{"refresh_token":"opaque"}',
+        },
+      }),
+    );
+    expect(connectResponse.success).toBe(false);
+    expect(connectResponse.error).toEqual(
+      expect.objectContaining({
+        code: 'NOT_IMPLEMENTED',
+        message: expect.stringContaining('Tasks 6-7'),
+      }),
+    );
+
+    const activateResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_ACTIVATE', {
+        provider: 'codex',
+        accountId: 'acct_primary',
+      }),
+    );
+    expect(activateResponse.success).toBe(false);
+    expect(activateResponse.error).toEqual(
+      expect.objectContaining({
+        code: 'NOT_IMPLEMENTED',
+        message: expect.stringContaining('Task 9'),
+      }),
+    );
+
+    const quotaRefreshResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_QUOTA_REFRESH', {
+        provider: 'codex',
+        accountId: 'acct_primary',
+      }),
+    );
+    expect(quotaRefreshResponse.success).toBe(false);
+    expect(quotaRefreshResponse.error).toEqual(
+      expect.objectContaining({
+        code: 'NOT_IMPLEMENTED',
+        message: expect.stringContaining('Task 9'),
+      }),
+    );
+  });
 });
