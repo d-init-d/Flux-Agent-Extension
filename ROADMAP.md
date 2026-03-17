@@ -29,8 +29,8 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | Task | Status | Notes |
 | --- | --- | --- |
 | T1 - OpenCode account discovery | DONE | Discovery doc completed in `docs/task-01-opencode-account-discovery.md` |
-| T2 - Feasibility and risk assessment | IN PROGRESS | Determine official vs session-based auth options, ToS/security/MFA/CAPTCHA risks |
-| T3 - Architecture decision record | TODO | Lock auth strategy, trust boundaries, and provider family naming |
+| T2 - Feasibility and risk assessment | DONE | Feasibility doc completed in `docs/task-02-chatgpt-plus-feasibility.md` |
+| T3 - Architecture decision record | IN PROGRESS | Lock auth strategy, trust boundaries, and provider family naming |
 | T4 - Provider/account/token/quota types | TODO | Add account-backed storage and runtime types |
 | T5 - UI <-> background auth message surface | TODO | Add login/status/logout/quota/refresh message contracts |
 | T6 - Secure account store | TODO | Generalize vault into encrypted account storage |
