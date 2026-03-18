@@ -2,7 +2,23 @@ import type { AIProviderFamily, AIProviderType } from '../types/ai';
 import type { ProviderAuthFamily, ProviderConfig } from '../types/storage';
 
 export type ProviderTier = 'core' | 'compat';
-export type ProviderAuthMethod = 'api-key' | 'oauth-github' | 'account-import' | 'none';
+export type ProviderAuthMethod =
+  | 'api-key'
+  | 'oauth-github'
+  | 'account-import'
+  | 'browser-login'
+  | 'none';
+export type ProviderSurfaceExposure = 'primary' | 'legacy-internal';
+
+export interface ProviderAuthChoiceDefinition {
+  id: string;
+  label: string;
+  authFamily: ProviderAuthFamily;
+  authMethod: ProviderAuthMethod;
+  description?: string;
+  legacyOnly?: boolean;
+  internalOnly?: boolean;
+}
 
 export interface ProviderDefinition {
   type: AIProviderType;
@@ -17,6 +33,8 @@ export interface ProviderDefinition {
   endpointPlaceholder: string;
   authFamily: ProviderAuthFamily;
   authMethod: ProviderAuthMethod;
+  authChoices?: readonly ProviderAuthChoiceDefinition[];
+  surfaceExposure?: ProviderSurfaceExposure;
   experimental?: boolean;
   accent: string;
 }
@@ -56,6 +74,22 @@ export const PROVIDER_REGISTRY: readonly ProviderDefinition[] = [
     endpointPlaceholder: 'https://api.openai.com',
     authFamily: 'api-key',
     authMethod: 'api-key',
+    authChoices: [
+      {
+        id: 'browser-account',
+        label: 'ChatGPT Pro/Plus (browser)',
+        authFamily: 'account-backed',
+        authMethod: 'browser-login',
+        description: 'Future browser-helper login lane for ChatGPT Pro/Plus accounts.',
+      },
+      {
+        id: 'api-key',
+        label: 'Manually enter API Key',
+        authFamily: 'api-key',
+        authMethod: 'api-key',
+        description: 'Legacy-safe OpenAI API key flow used by the current runtime.',
+      },
+    ],
     accent: 'from-emerald-500/20 via-cyan-400/10 to-transparent',
   },
   {
@@ -281,6 +315,7 @@ export const PROVIDER_REGISTRY: readonly ProviderDefinition[] = [
     endpointPlaceholder: '',
     authFamily: 'account-backed',
     authMethod: 'account-import',
+    surfaceExposure: 'legacy-internal',
     experimental: true,
     accent: 'from-emerald-600/20 via-teal-400/10 to-transparent',
   },
@@ -319,6 +354,41 @@ export const DEFAULT_PROVIDER_MODELS = Object.fromEntries(
 
 export function providerUsesApiKey(provider: ProviderDefinition | AIProviderType): boolean {
   return resolveProviderDefinition(provider).authMethod === 'api-key';
+}
+
+export function getProviderAuthChoices(
+  provider: ProviderDefinition | AIProviderType,
+): readonly ProviderAuthChoiceDefinition[] {
+  const definition = resolveProviderDefinition(provider);
+  return (
+    definition.authChoices ?? [
+      {
+        id: definition.authMethod,
+        label: definition.label,
+        authFamily: definition.authFamily,
+        authMethod: definition.authMethod,
+      },
+    ]
+  );
+}
+
+export function getPrimaryProviderAuthChoice(
+  provider: ProviderDefinition | AIProviderType,
+): ProviderAuthChoiceDefinition {
+  const definition = resolveProviderDefinition(provider);
+  return (
+    getProviderAuthChoices(definition).find(
+      (choice) =>
+        choice.authFamily === definition.authFamily &&
+        choice.authMethod === definition.authMethod,
+    ) ?? getProviderAuthChoices(definition)[0]
+  );
+}
+
+export function providerSupportsMultipleAuthChoices(
+  provider: ProviderDefinition | AIProviderType,
+): boolean {
+  return getProviderAuthChoices(provider).length > 1;
 }
 
 export function providerUsesOAuthToken(provider: ProviderDefinition | AIProviderType): boolean {

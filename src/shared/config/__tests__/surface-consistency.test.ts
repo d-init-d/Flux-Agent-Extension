@@ -8,7 +8,10 @@ import {
   PROVIDER_REGISTRY,
   SHIPPED_ACTION_TYPES,
   createDefaultProviderConfigs,
+  getPrimaryProviderAuthChoice,
+  getProviderAuthChoices,
   providerRequiresConnectionValidation,
+  providerSupportsMultipleAuthChoices,
   providerUsesAccountImport,
 } from '@shared/config';
 import { describe, expect, it } from 'vitest';
@@ -41,6 +44,7 @@ describe('shared surface consistency', () => {
       family: 'chatgpt-account',
       authFamily: 'account-backed',
       authMethod: 'account-import',
+      surfaceExposure: 'legacy-internal',
       experimental: true,
       requiresCredential: true,
       supportsEndpoint: false,
@@ -62,6 +66,57 @@ describe('shared surface consistency', () => {
       endpointPlaceholder: 'http://127.0.0.1:8317 or https://your-domain/v1',
     });
     expect(providerRequiresConnectionValidation('cliproxyapi')).toBe(true);
+  });
+
+  it('keeps the OpenAI auth surface ordered while preserving the legacy-safe primary lane', () => {
+    const openai = PROVIDER_REGISTRY.find((provider) => provider.type === 'openai');
+
+    expect(openai).toMatchObject({
+      authFamily: 'api-key',
+      authMethod: 'api-key',
+    });
+    expect(providerSupportsMultipleAuthChoices('openai')).toBe(true);
+    expect(getProviderAuthChoices('openai')).toEqual([
+      {
+        id: 'browser-account',
+        label: 'ChatGPT Pro/Plus (browser)',
+        authFamily: 'account-backed',
+        authMethod: 'browser-login',
+        description: 'Future browser-helper login lane for ChatGPT Pro/Plus accounts.',
+      },
+      {
+        id: 'api-key',
+        label: 'Manually enter API Key',
+        authFamily: 'api-key',
+        authMethod: 'api-key',
+        description: 'Legacy-safe OpenAI API key flow used by the current runtime.',
+      },
+    ]);
+    expect(getPrimaryProviderAuthChoice('openai')).toEqual({
+      id: 'api-key',
+      label: 'Manually enter API Key',
+      authFamily: 'api-key',
+      authMethod: 'api-key',
+      description: 'Legacy-safe OpenAI API key flow used by the current runtime.',
+    });
+  });
+
+  it('keeps single-auth providers readable through the shared auth-choice helper', () => {
+    expect(providerSupportsMultipleAuthChoices('claude')).toBe(false);
+    expect(getProviderAuthChoices('claude')).toEqual([
+      {
+        id: 'api-key',
+        label: 'Claude',
+        authFamily: 'api-key',
+        authMethod: 'api-key',
+      },
+    ]);
+    expect(getPrimaryProviderAuthChoice('claude')).toEqual({
+      id: 'api-key',
+      label: 'Claude',
+      authFamily: 'api-key',
+      authMethod: 'api-key',
+    });
   });
 
   it('keeps the README permission list aligned with the manifest', () => {

@@ -5,12 +5,21 @@ export {
   PROVIDER_LOOKUP,
   PROVIDER_REGISTRY,
   createDefaultProviderConfigs,
+  getPrimaryProviderAuthChoice,
+  getProviderAuthChoices,
   providerRequiresConnectionValidation,
+  providerSupportsMultipleAuthChoices,
   providerUsesAccountImport,
   providerUsesApiKey,
   providerUsesOAuthToken,
 } from './provider-registry';
-export type { ProviderAuthMethod, ProviderDefinition, ProviderTier } from './provider-registry';
+export type {
+  ProviderAuthChoiceDefinition,
+  ProviderAuthMethod,
+  ProviderDefinition,
+  ProviderSurfaceExposure,
+  ProviderTier,
+} from './provider-registry';
 export {
   evaluateProviderEndpointPolicy,
   getProviderEndpointHelperText,
