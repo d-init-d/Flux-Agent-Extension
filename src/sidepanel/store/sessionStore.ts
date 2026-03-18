@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { PROVIDER_LOOKUP } from '@shared/config';
-import type { AIProviderType, Session } from '@shared/types';
+import type { AIProviderType, Session, SettingsGetResponse } from '@shared/types';
+import { resolveActiveProviderSurfaceState } from '@shared/ui/provider-surface';
 import { sendExtensionRequest } from '../lib/extension-client';
 
 interface SessionDefaults {
@@ -15,16 +16,12 @@ const DEFAULT_SESSION_CONFIG: SessionDefaults = {
 
 async function resolveDefaultSessionConfig(): Promise<SessionDefaults> {
   try {
-    const response = await sendExtensionRequest('SETTINGS_GET', undefined);
-    const provider = response.activeProvider;
-    const configuredModel = response.providers?.[provider]?.model;
+    const response = (await sendExtensionRequest('SETTINGS_GET', undefined)) as SettingsGetResponse;
+    const surface = resolveActiveProviderSurfaceState(response);
 
     return {
-      provider,
-      model:
-        typeof configuredModel === 'string' && configuredModel.trim().length > 0
-          ? configuredModel
-          : PROVIDER_LOOKUP[provider].defaultModel,
+      provider: surface.surfacedProvider,
+      model: surface.defaultModel,
     };
   } catch {
     return DEFAULT_SESSION_CONFIG;

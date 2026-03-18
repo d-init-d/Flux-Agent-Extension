@@ -239,6 +239,36 @@ describe('sessionStore', () => {
         },
       });
     });
+
+    it('uses the OpenAI browser-account default model when that auth lane is selected', async () => {
+      const newSession = createSession('s-openai-browser', {
+        config: {
+          id: 's-openai-browser',
+          provider: 'openai',
+          model: 'codex-mini-latest',
+        },
+      });
+
+      sendExtensionRequest
+        .mockResolvedValueOnce({
+          activeProvider: 'openai',
+          providers: {
+            openai: {
+              authChoiceId: 'browser-account',
+            },
+          },
+        })
+        .mockResolvedValueOnce({ session: newSession });
+
+      await useSessionStore.getState().createSession();
+
+      expect(sendExtensionRequest).toHaveBeenNthCalledWith(2, 'SESSION_CREATE', {
+        config: {
+          provider: 'openai',
+          model: 'codex-mini-latest',
+        },
+      });
+    });
   });
 
   describe('switchSession', () => {

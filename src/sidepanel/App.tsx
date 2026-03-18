@@ -10,9 +10,14 @@ import { useSession } from './hooks/useSession';
 import { sendExtensionRequest, subscribeToExtensionEvents } from './lib/extension-client';
 import { useWorkflowUIStore } from './store/workflowUIStore';
 import { Button } from '@/ui/components';
-import { PROVIDER_LOOKUP, providerUsesAccountImport } from '@/shared/config';
+import { createDefaultProviderConfigs } from '@/shared/config';
 import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
 import { resolveKeyBasedProviderUx } from '@/shared/ui/key-based-provider-ux';
+import {
+  resolveActiveProviderSurfaceState,
+  resolveProviderModelForSession,
+  resolveProviderSurfaceState,
+} from '@/shared/ui/provider-surface';
 import { ThemeToggle } from '@/ui/theme';
 import type {
   AccountAuthStatusGetResponse,
@@ -183,11 +188,85 @@ function mapKeyBasedProviderNotice(
   };
 }
 
+function createFallbackSettingsSnapshot(activeProvider: AIProviderType): SettingsGetResponse {
+  return {
+    settings: {
+      language: 'en',
+      theme: 'system',
+      defaultProvider: activeProvider,
+      streamResponses: true,
+      includeScreenshotsInContext: true,
+      maxContextLength: 12,
+      defaultTimeout: 30000,
+      autoRetryOnFailure: true,
+      maxRetries: 2,
+      screenshotOnError: true,
+      allowCustomScripts: false,
+      allowedDomains: [],
+      blockedDomains: [],
+      showFloatingBar: true,
+      highlightElements: true,
+      soundNotifications: false,
+      debugMode: false,
+      logNetworkRequests: false,
+    },
+    providers: createDefaultProviderConfigs(),
+    activeProvider,
+    onboarding: {
+      version: 1,
+      completed: true,
+      lastStep: 3,
+    },
+    vault: {
+      version: 1,
+      initialized: true,
+      lockState: 'unlocked',
+      hasLegacySecrets: false,
+      credentials: {},
+      accounts: {},
+      activeAccounts: {},
+    },
+  };
+}
+
+function normalizeSettingsSnapshot(
+  snapshot: unknown,
+  activeProvider: AIProviderType,
+): SettingsGetResponse {
+  if (
+    snapshot &&
+    typeof snapshot === 'object' &&
+    'providers' in snapshot &&
+    'activeProvider' in snapshot &&
+    'vault' in snapshot
+  ) {
+    return snapshot as SettingsGetResponse;
+  }
+
+  return createFallbackSettingsSnapshot(activeProvider);
+}
+
+function mapAccountBackedProviderNotice(
+  authStatus: AccountAuthStatusGetResponse,
+): SidepanelProviderNotice {
+  const ux = resolveAccountBackedProviderUx(authStatus);
+
+  return {
+    badgeLabel: ux.badgeLabel,
+    badgeVariant: ux.badgeVariant,
+    title: ux.title,
+    detail: ux.detail,
+    action: ux.action,
+    blocksSend: ux.blocksRuntime,
+  };
+}
+
 export function App() {
   useEscapeToStopShortcut();
   const [initialSessionCount, setInitialSessionCount] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [providerNotice, setProviderNotice] = useState<SidepanelProviderNotice | null>(null);
+  const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsGetResponse | null>(null);
   const [recordingRequest, setRecordingRequest] = useState<RecordingRequestAction | null>(null);
   const [recordingExportRequest, setRecordingExportRequest] =
     useState<SessionRecordingExportFormat | null>(null);
@@ -352,7 +431,14 @@ export function App() {
     [selectedWorkflowId, workflowItems],
   );
   const workflowRunDisabled = !activeSessionId;
-  const activeProviderLabel = activeSession ? PROVIDER_LOOKUP[activeSession.config.provider].label : 'Provider';
+  const activeProviderSurface = useMemo(
+    () =>
+      activeSession && settingsSnapshot
+        ? resolveProviderSurfaceState(activeSession.config.provider, settingsSnapshot)
+        : null,
+    [activeSession, settingsSnapshot],
+  );
+  const activeProviderLabel = activeProviderSurface?.surfacedProviderLabel ?? 'Provider';
   const saveModalActionCount =
     workflowSaveMode === 'edit' ? (selectedWorkflow?.actions.length ?? 0) : recordingActionCount;
   const saveModalSourceSessionName =
@@ -366,56 +452,78 @@ export function App() {
 
   useEffect(() => {
     const provider = activeSession?.config.provider;
-    if (!provider || (!providerUsesAccountImport(provider) && provider !== 'cliproxyapi')) {
+    if (!provider) {
       setProviderNotice(null);
+      setSettingsSnapshot(null);
       return;
     }
 
     let cancelled = false;
 
     const loadNotice = async () => {
-      if (providerUsesAccountImport(provider)) {
-        const authStatus = await sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', { provider });
-        const ux = resolveAccountBackedProviderUx(authStatus as AccountAuthStatusGetResponse);
+      const nextSettingsSnapshot = normalizeSettingsSnapshot(
+        await sendExtensionRequest('SETTINGS_GET', undefined),
+        provider,
+      );
+      const surface = resolveProviderSurfaceState(provider, nextSettingsSnapshot);
+
+      if (surface.uxKind === 'account-backed' && surface.accountStatusProvider) {
+        const authStatus = (await sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', {
+          provider: surface.accountStatusProvider,
+        })) as AccountAuthStatusGetResponse;
+
         return {
-          badgeLabel: ux.badgeLabel,
-          badgeVariant: ux.badgeVariant,
-          title: ux.title,
-          detail: ux.detail,
-          action: ux.action,
-          blocksSend: ux.blocksRuntime,
-        } satisfies SidepanelProviderNotice;
+          settingsSnapshot: nextSettingsSnapshot,
+          notice: mapAccountBackedProviderNotice(authStatus),
+        };
       }
 
-      const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined);
-      return mapKeyBasedProviderNotice(provider, settingsSnapshot as SettingsGetResponse);
+      if (surface.uxKind === 'key-based') {
+        return {
+          settingsSnapshot: nextSettingsSnapshot,
+          notice: mapKeyBasedProviderNotice(surface.surfacedProvider, nextSettingsSnapshot),
+        };
+      }
+
+      return {
+        settingsSnapshot: nextSettingsSnapshot,
+        notice: null,
+      };
     };
 
     void loadNotice()
-      .then((authStatus) => {
+      .then((result) => {
         if (cancelled) {
           return;
         }
 
-        setProviderNotice(authStatus);
+        setSettingsSnapshot(result.settingsSnapshot);
+        setProviderNotice(result.notice);
       })
       .catch(() => {
         if (!cancelled) {
+          setSettingsSnapshot(null);
           setProviderNotice({
             badgeLabel: 'Status unavailable',
             badgeVariant: 'warning',
             title:
               provider === 'cliproxyapi'
                 ? 'CLIProxyAPI readiness could not be refreshed'
-                : 'Codex account state could not be refreshed',
+                : provider === 'openai'
+                  ? 'OpenAI readiness could not be refreshed'
+                  : 'Codex account state could not be refreshed',
             detail:
               provider === 'cliproxyapi'
                 ? 'The side panel could not confirm the current CLIProxyAPI endpoint and validation state, so provider guidance may be stale.'
-                : 'The side panel could not confirm the current Codex account health, so provider guidance may be stale.',
+                : provider === 'openai'
+                  ? 'The side panel could not confirm the current OpenAI auth-lane readiness, so provider guidance may be stale.'
+                  : 'The side panel could not confirm the current Codex account health, so provider guidance may be stale.',
             action:
               provider === 'cliproxyapi'
                 ? 'Open options and re-check the saved endpoint plus connection test before retrying a live request.'
-                : 'Open options and re-check the imported account before retrying a live request.',
+                : provider === 'openai'
+                  ? 'Open options and re-check the selected OpenAI login method before retrying a live request.'
+                  : 'Open options and re-check the imported account before retrying a live request.',
             blocksSend: false,
           });
         }
@@ -570,6 +678,7 @@ export function App() {
     setSubmitError(null);
     let sessionId = activeSessionId;
     let nextProviderNotice = providerNotice;
+    let nextSettingsSnapshot = settingsSnapshot;
 
     try {
       let targetProvider = activeSession?.config.provider;
@@ -581,32 +690,27 @@ export function App() {
         targetProvider = createdSession.config.provider;
       }
 
-      if (targetProvider && (!providerUsesAccountImport(targetProvider) && targetProvider !== 'cliproxyapi')) {
-        nextProviderNotice = null;
-      } else if (targetProvider) {
-        if (providerUsesAccountImport(targetProvider)) {
-          const authStatus = await sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', {
-            provider: targetProvider,
-          });
-          const ux = resolveAccountBackedProviderUx(authStatus as AccountAuthStatusGetResponse);
-          nextProviderNotice = {
-            badgeLabel: ux.badgeLabel,
-            badgeVariant: ux.badgeVariant,
-            title: ux.title,
-            detail: ux.detail,
-            action: ux.action,
-            blocksSend: ux.blocksRuntime,
-          };
+      if (targetProvider) {
+        nextSettingsSnapshot = normalizeSettingsSnapshot(
+          await sendExtensionRequest('SETTINGS_GET', undefined),
+          targetProvider,
+        );
+        const surface = resolveProviderSurfaceState(targetProvider, nextSettingsSnapshot);
+        setSettingsSnapshot(nextSettingsSnapshot);
+
+        if (surface.uxKind === 'account-backed' && surface.accountStatusProvider) {
+          const authStatus = (await sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', {
+            provider: surface.accountStatusProvider,
+          })) as AccountAuthStatusGetResponse;
+          nextProviderNotice = mapAccountBackedProviderNotice(authStatus);
+        } else if (surface.uxKind === 'key-based') {
+          nextProviderNotice = mapKeyBasedProviderNotice(surface.surfacedProvider, nextSettingsSnapshot);
         } else {
-          const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined);
-          nextProviderNotice = mapKeyBasedProviderNotice(
-            targetProvider,
-            settingsSnapshot as SettingsGetResponse,
-          );
+          nextProviderNotice = null;
         }
 
         setProviderNotice(nextProviderNotice);
-        if (nextProviderNotice.blocksSend) {
+        if (nextProviderNotice?.blocksSend) {
           const message = `${nextProviderNotice.title}. ${nextProviderNotice.action}`;
           setSubmitError(message);
           if (sessionId) {
@@ -614,6 +718,9 @@ export function App() {
           }
           return;
         }
+      } else {
+        nextProviderNotice = null;
+        setProviderNotice(nextProviderNotice);
       }
 
       await sendMessage(sessionId, value, uploads);
@@ -693,10 +800,7 @@ export function App() {
         </div>
       </header>
 
-      {providerNotice &&
-      activeSession?.config.provider &&
-      (providerUsesAccountImport(activeSession.config.provider) ||
-        activeSession.config.provider === 'cliproxyapi') ? (
+      {providerNotice && activeProviderSurface && activeProviderSurface.uxKind !== 'none' ? (
         <section className="border-b border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary)/0.7)] px-4 py-3 sm:px-6">
           <div className="mx-auto w-full max-w-3xl">
             <div className="rounded-2xl border border-[rgb(var(--color-border-default)/0.8)] bg-[rgb(var(--color-bg-primary))] px-4 py-4 shadow-sm sm:px-5">

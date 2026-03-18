@@ -24,6 +24,10 @@ import { PROVIDER_LOOKUP, providerUsesAccountImport } from '@/shared/config';
 import { normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@/shared/storage/onboarding';
 import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
 import { resolveKeyBasedProviderUx } from '@/shared/ui/key-based-provider-ux';
+import {
+  resolveActiveProviderSurfaceState,
+  resolveProviderModelForSession,
+} from '@/shared/ui/provider-surface';
 import type { AccountAuthStatusGetResponse, AIProviderType, Session, SettingsGetResponse } from '@/shared/types';
 import { ThemeToggle } from '@/ui/theme';
 
@@ -217,11 +221,11 @@ function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 function createDefaultProviderStatus(snapshot: SettingsGetResponse): PopupProviderStatus {
-  const provider = snapshot.activeProvider;
-  const providerLabel = PROVIDER_LOOKUP[provider].label;
-  const hasCredential = Boolean(snapshot.vault.credentials[provider]);
+  const surface = resolveActiveProviderSurfaceState(snapshot);
+  const provider = surface.surfacedProvider;
+  const providerLabel = surface.surfacedProviderLabel;
 
-  if (provider === 'cliproxyapi') {
+  if (surface.uxKind === 'key-based') {
     const ux = resolveKeyBasedProviderUx(provider, {
       config: snapshot.providers[provider],
       credential: snapshot.vault.credentials[provider],
@@ -236,9 +240,11 @@ function createDefaultProviderStatus(snapshot: SettingsGetResponse): PopupProvid
       title: ux.title,
       detail: ux.detail,
       action: ux.action,
-      blocksQuickActions: ux.blocksRuntime,
-    };
+        blocksQuickActions: ux.blocksRuntime,
+      };
   }
+
+  const hasCredential = Boolean(snapshot.vault.credentials[provider]);
 
   if (snapshot.vault.lockState === 'locked' && hasCredential) {
     return {
@@ -387,16 +393,16 @@ export function App() {
 
     try {
       const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined, 'popup');
-      const provider = settingsSnapshot.activeProvider;
+      const surface = resolveActiveProviderSurfaceState(settingsSnapshot);
 
-      if (providerUsesAccountImport(provider)) {
+      if (surface.uxKind === 'account-backed' && surface.accountStatusProvider) {
         const authStatus = await sendExtensionRequest(
           'ACCOUNT_AUTH_STATUS_GET',
-          { provider },
+          { provider: surface.accountStatusProvider },
           'popup',
         );
 
-        setProviderStatus(mapAccountBackedStatusToPopupStatus(provider, authStatus));
+        setProviderStatus(mapAccountBackedStatusToPopupStatus(surface.surfacedProvider, authStatus));
       } else {
         setProviderStatus(createDefaultProviderStatus(settingsSnapshot));
       }
@@ -541,11 +547,7 @@ export function App() {
 
     const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined, 'popup');
     const provider = settingsSnapshot.activeProvider;
-    const configuredModel = settingsSnapshot.providers[provider]?.model;
-    const model =
-      typeof configuredModel === 'string' && configuredModel.trim().length > 0
-        ? configuredModel
-        : PROVIDER_LOOKUP[provider].defaultModel;
+    const model = resolveProviderModelForSession(provider, settingsSnapshot);
 
     const created = await sendExtensionRequest(
       'SESSION_CREATE',

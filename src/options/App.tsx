@@ -2205,7 +2205,7 @@ export function App() {
           <p className="mt-2 text-sm leading-6 text-content-secondary">
             {selectedProvider === 'openai'
               ? selectedUsesBrowserAccountLane
-                ? 'Browser-account uses account-backed model ids routed through the internal Codex path.'
+                ? 'Browser-account uses account-backed model ids routed through the trusted browser-account runtime lane.'
                 : 'API-key uses OpenAI platform model ids routed directly to the OpenAI API.'
               : 'Keep this as the starting point unless your account requires a different model id.'}
           </p>
@@ -2246,7 +2246,7 @@ export function App() {
                   <p className="text-sm font-medium text-content-primary">Suggested models</p>
                   <p className="mt-1 text-xs leading-5 text-content-secondary">
                     {selectedUsesBrowserAccountLane
-                      ? 'These account-backed suggestions route through the internal Codex adapter.'
+                      ? 'These account-backed suggestions route through the trusted browser-account runtime lane.'
                       : 'These platform suggestions route through the direct OpenAI API lane.'}
                   </p>
                 </div>

@@ -65,7 +65,21 @@ function mockPopupRuntime(options?: {
   sessions?: Array<Record<string, unknown>>;
   providerConfigs?: Partial<Record<AIProviderType, Record<string, unknown>>>;
 }): void {
-  const vault = options?.vault ?? createVaultState();
+  const vault = options?.vault ??
+    createVaultState({
+      credentials: {
+        openai: {
+          version: 1,
+          provider: 'openai',
+          providerFamily: 'default',
+          authFamily: 'api-key',
+          authKind: 'api-key',
+          maskedValue: 'sk-****popup',
+          updatedAt: Date.now(),
+          validatedAt: Date.now(),
+        },
+      },
+    });
   const providerConfigs = createDefaultProviderConfigs();
   for (const [provider, config] of Object.entries(options?.providerConfigs ?? {})) {
     Object.assign(providerConfigs[provider as AIProviderType], config);
@@ -250,6 +264,143 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     expect(
       within(providerCard).getByText(/import an official artifact in options, then run validation/i),
     ).toBeInTheDocument();
+  });
+
+  it('shows OpenAI browser-account helper-missing guidance and keeps quick actions locked', async () => {
+    const observedAt = Date.UTC(2026, 2, 19, 10, 15, 0);
+
+    mockPopupRuntime({
+      activeProvider: 'openai',
+      providerConfigs: {
+        openai: {
+          authChoiceId: 'browser-account',
+          model: 'codex-mini-latest',
+        },
+      },
+      accountAuthStatus: {
+        provider: 'openai',
+        authFamily: 'account-backed',
+        status: 'needs-auth',
+        availableTransports: ['browser-helper'],
+        browserLogin: {
+          authMethod: 'browser-account',
+          status: 'helper-missing',
+          updatedAt: observedAt,
+          lastAttemptAt: observedAt,
+          retryable: true,
+        },
+        accounts: [],
+        vault: createVaultState(),
+      },
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('OpenAI')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Helper unavailable')).toBeInTheDocument();
+    expect(within(providerCard).getByText('OpenAI browser helper is unavailable')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+    expect(screen.queryByText(/auth artifact payload/i)).not.toBeInTheDocument();
+
+    const accountStatusCalls = vi.mocked(chrome.runtime.sendMessage).mock.calls.filter(
+      ([message]) => ((message as unknown) as ExtensionMessage).type === 'ACCOUNT_AUTH_STATUS_GET',
+    );
+    expect(accountStatusCalls).toContainEqual([
+      expect.objectContaining({
+        type: 'ACCOUNT_AUTH_STATUS_GET',
+        payload: { provider: 'openai' },
+      }),
+    ]);
+  });
+
+  it('surfaces bridged legacy codex readiness as OpenAI browser-account', async () => {
+    const observedAt = Date.UTC(2026, 2, 19, 10, 30, 0);
+
+    mockPopupRuntime({
+      activeProvider: 'openai',
+      providerConfigs: {
+        openai: {
+          authChoiceId: 'browser-account',
+          model: 'codex-latest',
+        },
+      },
+      vault: createVaultState({
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****2468',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_legacy_popup_bridge',
+              label: 'Legacy Popup Bridge',
+              maskedIdentifier: 'legacy-popup@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              validatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_legacy_popup_bridge',
+        },
+      }),
+      accountAuthStatus: {
+        provider: 'openai',
+        authFamily: 'account-backed',
+        status: 'ready',
+        availableTransports: ['browser-helper'],
+        browserLogin: {
+          authMethod: 'browser-account',
+          status: 'success',
+          updatedAt: observedAt,
+          lastAttemptAt: observedAt,
+          lastCompletedAt: observedAt,
+          accountId: 'acct_legacy_popup_bridge',
+          accountLabel: 'Legacy Popup Bridge',
+          retryable: false,
+        },
+        activeAccountId: 'acct_legacy_popup_bridge',
+        accounts: [
+          {
+            version: 1,
+            provider: 'openai',
+            providerFamily: 'default',
+            authFamily: 'account-backed',
+            accountId: 'acct_legacy_popup_bridge',
+            label: 'Legacy Popup Bridge',
+            maskedIdentifier: 'legacy-popup@example.com',
+            status: 'active',
+            isActive: true,
+            updatedAt: observedAt,
+            validatedAt: observedAt,
+          },
+        ],
+        vault: createVaultState(),
+      },
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('OpenAI')).toBeInTheDocument();
+    expect(within(providerCard).getByText('OpenAI browser-account is ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeEnabled();
+    expect(screen.queryByText('ChatGPT Plus / Codex (Experimental)')).not.toBeInTheDocument();
+    expect(screen.queryByText('acct_****2468')).not.toBeInTheDocument();
   });
 
   it('surfaces a refresh-required codex account state in the popup footer', async () => {

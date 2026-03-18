@@ -173,7 +173,18 @@ describe('Side panel App (U-15 integration)', () => {
               initialized: true,
               lockState: 'unlocked',
               hasLegacySecrets: false,
-              credentials: {},
+              credentials: {
+                openai: {
+                  version: 1,
+                  provider: 'openai',
+                  providerFamily: 'default',
+                  authFamily: 'api-key',
+                  authKind: 'api-key',
+                  maskedValue: 'sk-****sidepanel',
+                  updatedAt: Date.now(),
+                  validatedAt: Date.now(),
+                },
+              },
               accounts: {},
               activeAccounts: {},
             },
@@ -298,6 +309,237 @@ describe('Side panel App (U-15 integration)', () => {
     expect(screen.getByText('Refresh required')).toBeInTheDocument();
     expect(screen.getByText(/re-import a fresh official artifact in options, then validate the account again/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open provider settings' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('shows OpenAI browser-account helper-missing guidance and blocks send', async () => {
+    const observedAt = Date.UTC(2026, 2, 19, 11, 0, 0);
+
+    sendExtensionRequest.mockImplementation(async (type: string, payload?: { provider?: string }) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-openai-browser', {
+                config: {
+                  id: 'session-openai-browser',
+                  provider: 'openai',
+                  model: 'codex-mini-latest',
+                  name: 'OpenAI browser lane',
+                },
+              }),
+            ],
+          };
+        case 'SETTINGS_GET': {
+          const providers = createDefaultProviderConfigs();
+          providers.openai.authChoiceId = 'browser-account';
+          providers.openai.model = 'codex-mini-latest';
+
+          return {
+            settings: {
+              language: 'en',
+              theme: 'system',
+              defaultProvider: 'openai',
+              streamResponses: true,
+              includeScreenshotsInContext: true,
+              maxContextLength: 12,
+              defaultTimeout: 30000,
+              autoRetryOnFailure: true,
+              maxRetries: 2,
+              screenshotOnError: true,
+              allowCustomScripts: false,
+              debugMode: false,
+              showFloatingBar: true,
+              highlightElements: true,
+              soundNotifications: false,
+            },
+            providers,
+            activeProvider: 'openai',
+            onboarding: {
+              version: 1,
+              completed: true,
+              lastStep: 3,
+              completedAt: Date.now(),
+              providerReady: false,
+              configuredProvider: 'openai',
+            },
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        }
+        case 'ACCOUNT_AUTH_STATUS_GET':
+          expect(payload).toEqual({ provider: 'openai' });
+          return {
+            provider: 'openai',
+            authFamily: 'account-backed',
+            status: 'needs-auth',
+            availableTransports: ['browser-helper'],
+            browserLogin: {
+              authMethod: 'browser-account',
+              status: 'helper-missing',
+              updatedAt: observedAt,
+              lastAttemptAt: observedAt,
+              retryable: true,
+            },
+            accounts: [],
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText('OpenAI browser helper is unavailable')).toBeInTheDocument();
+    expect(screen.getByText('Helper unavailable')).toBeInTheDocument();
+    expect(screen.getByText(/use the api-key lane or install the helper/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('surfaces a bridged legacy codex session as OpenAI browser-account', async () => {
+    const observedAt = Date.UTC(2026, 2, 19, 11, 30, 0);
+
+    sendExtensionRequest.mockImplementation(async (type: string, payload?: { provider?: string }) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-codex-bridge', {
+                config: {
+                  id: 'session-codex-bridge',
+                  provider: 'codex',
+                  model: 'codex-latest',
+                  name: 'Legacy bridge session',
+                },
+              }),
+            ],
+          };
+        case 'SETTINGS_GET': {
+          const providers = createDefaultProviderConfigs();
+          providers.openai.authChoiceId = 'browser-account';
+          providers.openai.model = 'codex-latest';
+
+          return {
+            settings: {
+              language: 'en',
+              theme: 'system',
+              defaultProvider: 'openai',
+              streamResponses: true,
+              includeScreenshotsInContext: true,
+              maxContextLength: 12,
+              defaultTimeout: 30000,
+              autoRetryOnFailure: true,
+              maxRetries: 2,
+              screenshotOnError: true,
+              allowCustomScripts: false,
+              debugMode: false,
+              showFloatingBar: true,
+              highlightElements: true,
+              soundNotifications: false,
+            },
+            providers,
+            activeProvider: 'openai',
+            onboarding: {
+              version: 1,
+              completed: true,
+              lastStep: 3,
+              completedAt: Date.now(),
+              providerReady: true,
+              configuredProvider: 'openai',
+              validatedProvider: 'openai',
+            },
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        }
+        case 'ACCOUNT_AUTH_STATUS_GET':
+          expect(payload).toEqual({ provider: 'openai' });
+          return {
+            provider: 'openai',
+            authFamily: 'account-backed',
+            status: 'ready',
+            availableTransports: ['browser-helper'],
+            browserLogin: {
+              authMethod: 'browser-account',
+              status: 'success',
+              updatedAt: observedAt,
+              lastAttemptAt: observedAt,
+              lastCompletedAt: observedAt,
+              accountId: 'acct_sidepanel_bridge',
+              accountLabel: 'Legacy Sidepanel Bridge',
+              retryable: false,
+            },
+            activeAccountId: 'acct_sidepanel_bridge',
+            accounts: [
+              {
+                version: 1,
+                provider: 'openai',
+                providerFamily: 'default',
+                authFamily: 'account-backed',
+                accountId: 'acct_sidepanel_bridge',
+                label: 'Legacy Sidepanel Bridge',
+                maskedIdentifier: 'legacy-sidepanel@example.com',
+                status: 'active',
+                isActive: true,
+                updatedAt: observedAt,
+                validatedAt: observedAt,
+              },
+            ],
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText('OpenAI browser-account is ready')).toBeInTheDocument();
+    expect(screen.getByText('OpenAI')).toBeInTheDocument();
+    expect(screen.queryByText('ChatGPT Plus / Codex (Experimental)')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
