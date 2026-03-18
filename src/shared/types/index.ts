@@ -109,6 +109,11 @@ export type {
 
 // Storage types
 export type {
+  BrowserLoginHelperSummary,
+  BrowserLoginPendingState,
+  BrowserLoginResultStatus,
+  BrowserLoginSurfaceStatus,
+  BrowserLoginUiContext,
   StorageSchema,
   ExtensionSettings,
   OnboardingState,
@@ -117,6 +122,8 @@ export type {
   ProviderAccountRecord,
   ProviderAccountStatus,
   ProviderAuthFamily,
+  ProviderBrowserLoginMetadata,
+  ProviderBrowserLoginState,
   ProviderCredentialRecord,
   ProviderEntitlementState,
   ProviderEntitlementStatus,
@@ -184,6 +191,7 @@ export type {
   AccountAuthTransport,
   AccountAuthSurfaceStatus,
   AccountAuthArtifactImportPayload,
+  AccountAuthBrowserLoginStartPayload,
   AccountAuthStatusGetRequest,
   AccountAuthStatusGetResponse,
   AccountAuthConnectStartRequest,

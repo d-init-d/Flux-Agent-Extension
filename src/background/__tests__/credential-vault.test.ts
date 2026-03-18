@@ -201,4 +201,185 @@ describe('CredentialVault account store', () => {
     expect(valid).toBe(false);
     expect(createProviderSpy).not.toHaveBeenCalled();
   });
+
+  it('keeps openai browser-login pending state session-only and stores sanitized durable state plus encrypted artifacts', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+
+    const issuedAt = Date.UTC(2026, 2, 18, 8, 0, 0);
+    const expiresAt = Date.UTC(2026, 2, 18, 8, 10, 0);
+    await vault.setBrowserLoginPending('openai', {
+      requestId: 'req_openai_browser_01',
+      state: 'raw-state-secret',
+      nonce: 'raw-nonce-secret',
+      issuedAt,
+      expiresAt,
+      uiContext: 'options',
+    });
+
+    const pendingState = await vault.getState();
+    expect(pendingState.browserLogins?.openai).toEqual({
+      authMethod: 'browser-account',
+      status: 'pending',
+      updatedAt: expect.any(Number),
+      lastAttemptAt: issuedAt,
+      pending: {
+        requestId: 'req_openai_browser_01',
+        issuedAt,
+        expiresAt,
+        uiContext: 'options',
+      },
+    });
+    expect((pendingState.browserLogins?.openai?.pending as Record<string, unknown>)?.state).toBeUndefined();
+    expect((pendingState.browserLogins?.openai?.pending as Record<string, unknown>)?.nonce).toBeUndefined();
+
+    const storedVaultWhilePending = (await chrome.storage.local.get('vault')).vault as {
+      browserLogins?: Record<string, unknown>;
+    };
+    expect(storedVaultWhilePending.browserLogins).toEqual({});
+
+    const storedPendingSession = await chrome.storage.session.get('__flux_browser_login_session__');
+    expect(storedPendingSession['__flux_browser_login_session__']).toBeUndefined();
+
+    await vault.saveAccount('openai', {
+      accountId: 'acct_openai_primary',
+      label: 'OpenAI Browser Account',
+      maskedIdentifier: 'op***@example.com',
+      credentialMaskedValue: 'chatgpt:op***@example.com',
+      status: 'available',
+      artifact: {
+        format: 'json',
+        filename: 'openai-browser-account.json',
+        value: JSON.stringify({
+          artifact_version: 1,
+          refresh_token: 'refresh-openai-long-lived',
+          account_id: 'acct_openai_primary',
+        }),
+      },
+    });
+
+    const completedAt = Date.UTC(2026, 2, 18, 8, 2, 0);
+    await vault.setBrowserLoginResult('openai', {
+      status: 'success',
+      updatedAt: completedAt,
+      lastAttemptAt: issuedAt,
+      lastCompletedAt: completedAt,
+      accountId: 'acct_openai_primary',
+      accountLabel: 'OpenAI Browser Account',
+      helper: {
+        id: 'openai-browser-helper',
+        version: '1.0.0',
+      },
+    });
+
+    const finalState = await vault.getState();
+    expect(finalState.credentials.openai).toEqual(
+      expect.objectContaining({
+        authFamily: 'account-backed',
+        authKind: 'account-artifact',
+        maskedValue: 'chatgpt:op***@example.com',
+      }),
+    );
+    expect(finalState.accounts.openai).toEqual([
+      expect.objectContaining({
+        provider: 'openai',
+        providerFamily: 'default',
+        authFamily: 'account-backed',
+        accountId: 'acct_openai_primary',
+        credentialKey: 'account-artifact::openai::acct_openai_primary',
+      }),
+    ]);
+    expect(finalState.browserLogins?.openai).toEqual({
+      authMethod: 'browser-account',
+      status: 'success',
+      updatedAt: completedAt,
+      lastAttemptAt: issuedAt,
+      lastCompletedAt: completedAt,
+      accountId: 'acct_openai_primary',
+      accountLabel: 'OpenAI Browser Account',
+      helper: {
+        id: 'openai-browser-helper',
+        version: '1.0.0',
+      },
+      retryable: false,
+    });
+
+    const storedVaultAfterSuccess = (await chrome.storage.local.get('vault')).vault as {
+      browserLogins: Record<string, Record<string, unknown>>;
+    };
+    expect(storedVaultAfterSuccess.browserLogins.openai).toEqual({
+      authMethod: 'browser-account',
+      status: 'success',
+      updatedAt: completedAt,
+      lastAttemptAt: issuedAt,
+      lastCompletedAt: completedAt,
+      accountId: 'acct_openai_primary',
+      accountLabel: 'OpenAI Browser Account',
+      helper: {
+        id: 'openai-browser-helper',
+        version: '1.0.0',
+      },
+      retryable: false,
+    });
+    expect((storedVaultAfterSuccess.browserLogins.openai as Record<string, unknown>).pending).toBeUndefined();
+
+    const encryptedArtifact = await chrome.storage.local.get(
+      '__encrypted__account-artifact::openai::acct_openai_primary',
+    );
+    expect(encryptedArtifact['__encrypted__account-artifact::openai::acct_openai_primary']).toEqual(
+      expect.any(String),
+    );
+    expect(await vault.getAccountArtifact('openai', 'acct_openai_primary')).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        accountId: 'acct_openai_primary',
+        format: 'json',
+        filename: 'openai-browser-account.json',
+      }),
+    );
+
+    const clearedPendingSession = await chrome.storage.session.get('__flux_browser_login_session__');
+    expect(clearedPendingSession['__flux_browser_login_session__']).toBeUndefined();
+  });
+
+  it('reconciles stale active account metadata before surfacing account-backed state', async () => {
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {},
+        accounts: {
+          openai: [
+            {
+              version: 1,
+              provider: 'openai',
+              providerFamily: 'default',
+              authFamily: 'account-backed',
+              accountId: 'acct_openai_stale',
+              label: 'OpenAI Browser Account',
+              status: 'available',
+              isActive: false,
+              updatedAt: Date.UTC(2026, 2, 18, 9, 0, 0),
+            },
+          ],
+        },
+        activeAccounts: {
+          openai: 'acct_openai_stale',
+        },
+        browserLogins: {},
+      },
+    });
+
+    const vault = new CredentialVault();
+    const state = await vault.getState();
+
+    expect(state.activeAccounts.openai).toBe('acct_openai_stale');
+    expect(state.accounts.openai).toEqual([
+      expect.objectContaining({
+        accountId: 'acct_openai_stale',
+        status: 'active',
+        isActive: true,
+      }),
+    ]);
+  });
 });

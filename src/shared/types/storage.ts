@@ -24,6 +24,47 @@ export type ProviderStateScope = 'provider' | 'account' | 'session';
 export type ProviderQuotaUnit = 'requests' | 'tokens' | 'credits' | 'unknown';
 export type ProviderQuotaPeriod = 'minute' | 'hour' | 'day' | 'month' | 'lifetime' | 'unknown';
 export type ProviderSessionStatus = 'active' | 'refresh-required' | 'expired' | 'revoked' | 'unknown';
+export type BrowserLoginUiContext = 'options' | 'onboarding' | 'unknown';
+export type BrowserLoginResultStatus =
+  | 'success'
+  | 'cancel'
+  | 'timeout'
+  | 'stale'
+  | 'mismatch'
+  | 'helper-missing'
+  | 'error';
+export type BrowserLoginSurfaceStatus = 'idle' | 'pending' | BrowserLoginResultStatus;
+
+export interface BrowserLoginHelperSummary {
+  id?: string;
+  version?: string;
+}
+
+export interface BrowserLoginPendingState {
+  requestId: string;
+  issuedAt: number;
+  expiresAt: number;
+  uiContext?: BrowserLoginUiContext;
+}
+
+export interface ProviderBrowserLoginMetadata {
+  authMethod: 'browser-account';
+  status: Exclude<BrowserLoginSurfaceStatus, 'pending'>;
+  updatedAt: number;
+  lastAttemptAt?: number;
+  lastCompletedAt?: number;
+  accountId?: string;
+  accountLabel?: string;
+  lastErrorCode?: string;
+  retryable?: boolean;
+  helper?: BrowserLoginHelperSummary;
+}
+
+export interface ProviderBrowserLoginState
+  extends Omit<ProviderBrowserLoginMetadata, 'status'> {
+  status: BrowserLoginSurfaceStatus;
+  pending?: BrowserLoginPendingState;
+}
 
 export interface ProviderCredentialRecord {
   version: number;
@@ -86,7 +127,7 @@ export interface ProviderAccountMetadata {
 export interface ProviderAccountRecord {
   version: number;
   provider: AIProviderType;
-  providerFamily: Extract<AIProviderFamily, 'chatgpt-account'>;
+  providerFamily: AIProviderFamily;
   authFamily: Extract<ProviderAuthFamily, 'account-backed'>;
   accountId: string;
   label: string;
@@ -107,6 +148,7 @@ export interface VaultMetadata {
   credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>>;
   accounts: Partial<Record<AIProviderType, ProviderAccountRecord[]>>;
   activeAccounts: Partial<Record<AIProviderType, string>>;
+  browserLogins?: Partial<Record<AIProviderType, ProviderBrowserLoginMetadata>>;
   migratedFromLegacyAt?: number;
 }
 
@@ -119,6 +161,7 @@ export interface VaultState {
   credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>>;
   accounts: Partial<Record<AIProviderType, ProviderAccountRecord[]>>;
   activeAccounts: Partial<Record<AIProviderType, string>>;
+  browserLogins?: Partial<Record<AIProviderType, ProviderBrowserLoginState>>;
 }
 
 /**

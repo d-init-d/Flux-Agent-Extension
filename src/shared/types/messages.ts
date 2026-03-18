@@ -8,9 +8,11 @@ import type {
   SessionRecordingExportFormat,
 } from './session';
 import type {
+  BrowserLoginUiContext,
   ExtensionSettings,
   OnboardingState,
   ProviderAccountRecord,
+  ProviderBrowserLoginState,
   ProviderConfig,
   ProviderCredentialRecord,
   ProviderQuotaState,
@@ -263,7 +265,7 @@ export interface ApiKeyValidateResponse {
   vault: VaultState;
 }
 
-export type AccountAuthTransport = 'artifact-import';
+export type AccountAuthTransport = 'artifact-import' | 'browser-helper';
 
 export type AccountAuthSurfaceStatus =
   | 'ready'
@@ -277,6 +279,10 @@ export interface AccountAuthArtifactImportPayload {
   filename?: string;
 }
 
+export interface AccountAuthBrowserLoginStartPayload {
+  uiContext?: BrowserLoginUiContext;
+}
+
 export interface AccountAuthStatusGetRequest {
   provider: AIProviderType;
 }
@@ -286,6 +292,7 @@ export interface AccountAuthStatusGetResponse {
   authFamily: 'account-backed';
   status: AccountAuthSurfaceStatus;
   availableTransports: AccountAuthTransport[];
+  browserLogin?: ProviderBrowserLoginState;
   credential?: ProviderCredentialRecord;
   accounts: ProviderAccountRecord[];
   activeAccountId?: string;
@@ -296,6 +303,7 @@ export interface AccountAuthConnectStartRequest {
   provider: AIProviderType;
   transport: AccountAuthTransport;
   artifact?: AccountAuthArtifactImportPayload;
+  browserLogin?: AccountAuthBrowserLoginStartPayload;
   label?: string;
 }
 
@@ -303,8 +311,9 @@ export interface AccountAuthConnectStartResponse {
   provider: AIProviderType;
   transport: AccountAuthTransport;
   accepted: boolean;
-  nextStep: 'validate' | 'manual-action';
+  nextStep: 'validate' | 'manual-action' | 'await-browser';
   message: string;
+  browserLogin?: ProviderBrowserLoginState;
 }
 
 export interface AccountAuthValidateRequest {
@@ -321,6 +330,7 @@ export interface AccountAuthValidateResponse {
   account?: ProviderAccountRecord;
   checkedAt: number;
   message?: string;
+  browserLogin?: ProviderBrowserLoginState;
   vault: VaultState;
 }
 

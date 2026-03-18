@@ -11,6 +11,8 @@ import type {
   ProviderAccountRecord,
   ProviderAuthFamily,
   ProviderAuthKind,
+  ProviderBrowserLoginMetadata,
+  ProviderBrowserLoginState,
   ProviderConfig,
   ProviderCredentialRecord,
   VaultMetadata,
@@ -39,7 +41,7 @@ type VaultSessionState = {
 };
 
 type StoredAccountArtifact = {
-  provider: 'codex';
+  provider: AIProviderType;
   accountId: string;
   authKind: Extract<ProviderAuthKind, 'account-artifact' | 'session-token'>;
   value: string;
@@ -82,8 +84,20 @@ type PatchAccountInput = {
 
 type ProviderQuotaMetadata = NonNullable<ProviderAccountRecord['metadata']>['quota'];
 
+type StoredBrowserLoginAttempt = {
+  provider: AIProviderType;
+  authMethod: 'browser-account';
+  requestId: string;
+  state: string;
+  nonce: string;
+  issuedAt: number;
+  expiresAt: number;
+  updatedAt: number;
+  uiContext?: 'options' | 'onboarding' | 'unknown';
+};
+
 export type AccountArtifactRecord = {
-  provider: 'codex';
+  provider: AIProviderType;
   accountId: string;
   authKind: Extract<ProviderAuthKind, 'account-artifact' | 'session-token'>;
   value: string;
@@ -98,10 +112,19 @@ const DEFAULT_VAULT_METADATA: VaultMetadata = {
   credentials: {},
   accounts: {},
   activeAccounts: {},
+  browserLogins: {},
 };
 
 function isProviderType(value: unknown): value is AIProviderType {
   return typeof value === 'string' && value in PROVIDER_LOOKUP;
+}
+
+function supportsAccountArtifactProvider(provider: AIProviderType): boolean {
+  return provider === 'codex' || provider === 'openai';
+}
+
+function resolveProviderFamily(provider: AIProviderType): NonNullable<ProviderAccountRecord['providerFamily']> {
+  return provider === 'codex' ? 'chatgpt-account' : 'default';
 }
 
 function normalizeCredentialRecord(value: unknown): ProviderCredentialRecord | null {
@@ -122,16 +145,63 @@ function normalizeCredentialRecord(value: unknown): ProviderCredentialRecord | n
     return null;
   }
 
+  const provider = candidate.provider;
+
   return {
     version: candidate.version,
-    provider: candidate.provider,
-    providerFamily: candidate.provider === 'codex' ? 'chatgpt-account' : 'default',
+    provider,
+    providerFamily: resolveProviderFamily(provider),
     authFamily,
     authKind: candidate.authKind,
     maskedValue: candidate.maskedValue,
     updatedAt: candidate.updatedAt,
     validatedAt: typeof candidate.validatedAt === 'number' ? candidate.validatedAt : undefined,
     stale: candidate.stale === true,
+  };
+}
+
+function normalizeBrowserLoginMetadata(value: unknown): ProviderBrowserLoginMetadata | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as Partial<ProviderBrowserLoginMetadata>;
+  if (
+    candidate.authMethod !== 'browser-account' ||
+    (candidate.status !== 'idle' &&
+      candidate.status !== 'success' &&
+      candidate.status !== 'cancel' &&
+      candidate.status !== 'timeout' &&
+      candidate.status !== 'stale' &&
+      candidate.status !== 'mismatch' &&
+      candidate.status !== 'helper-missing' &&
+      candidate.status !== 'error') ||
+    typeof candidate.updatedAt !== 'number'
+  ) {
+    return null;
+  }
+
+  return {
+    authMethod: 'browser-account',
+    status: candidate.status,
+    updatedAt: candidate.updatedAt,
+    lastAttemptAt: typeof candidate.lastAttemptAt === 'number' ? candidate.lastAttemptAt : undefined,
+    lastCompletedAt:
+      typeof candidate.lastCompletedAt === 'number' ? candidate.lastCompletedAt : undefined,
+    accountId: typeof candidate.accountId === 'string' ? candidate.accountId : undefined,
+    accountLabel: typeof candidate.accountLabel === 'string' ? candidate.accountLabel : undefined,
+    lastErrorCode:
+      typeof candidate.lastErrorCode === 'string' ? candidate.lastErrorCode : undefined,
+    retryable: candidate.retryable === true,
+    helper:
+      candidate.helper && typeof candidate.helper === 'object'
+        ? {
+            id:
+              typeof candidate.helper.id === 'string' ? candidate.helper.id : undefined,
+            version:
+              typeof candidate.helper.version === 'string' ? candidate.helper.version : undefined,
+          }
+        : undefined,
   };
 }
 
@@ -143,8 +213,9 @@ function normalizeAccountRecord(value: unknown): ProviderAccountRecord | null {
   const candidate = value as Partial<ProviderAccountRecord>;
   if (
     typeof candidate.version !== 'number' ||
-    candidate.provider !== 'codex' ||
-    candidate.providerFamily !== 'chatgpt-account' ||
+    !isProviderType(candidate.provider) ||
+    !supportsAccountArtifactProvider(candidate.provider) ||
+    candidate.providerFamily !== resolveProviderFamily(candidate.provider) ||
     candidate.authFamily !== 'account-backed' ||
     typeof candidate.accountId !== 'string' ||
     !candidate.accountId.trim() ||
@@ -156,10 +227,12 @@ function normalizeAccountRecord(value: unknown): ProviderAccountRecord | null {
     return null;
   }
 
+  const provider = candidate.provider as AIProviderType;
+
   return {
     version: candidate.version,
-    provider: candidate.provider,
-    providerFamily: candidate.providerFamily,
+    provider,
+    providerFamily: resolveProviderFamily(provider),
     authFamily: candidate.authFamily,
     accountId: candidate.accountId,
     label: candidate.label,
@@ -188,6 +261,7 @@ function normalizeVaultMetadata(value: unknown): VaultMetadata {
   const credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>> = {};
   const accounts: Partial<Record<AIProviderType, ProviderAccountRecord[]>> = {};
   const activeAccounts: Partial<Record<AIProviderType, string>> = {};
+  const browserLogins: Partial<Record<AIProviderType, ProviderBrowserLoginMetadata>> = {};
 
   if (candidate.credentials && typeof candidate.credentials === 'object') {
     for (const [provider, record] of Object.entries(candidate.credentials)) {
@@ -226,14 +300,55 @@ function normalizeVaultMetadata(value: unknown): VaultMetadata {
     }
   }
 
+  if (candidate.browserLogins && typeof candidate.browserLogins === 'object') {
+    for (const [provider, browserLogin] of Object.entries(candidate.browserLogins)) {
+      if (!isProviderType(provider)) {
+        continue;
+      }
+
+      const normalizedBrowserLogin = normalizeBrowserLoginMetadata(browserLogin);
+      if (normalizedBrowserLogin) {
+        browserLogins[provider] = normalizedBrowserLogin;
+      }
+    }
+  }
+
   return {
     version: typeof candidate.version === 'number' ? candidate.version : DEFAULT_VAULT_METADATA.version,
     initialized: candidate.initialized === true,
     credentials,
     accounts,
     activeAccounts,
+    browserLogins,
     migratedFromLegacyAt:
       typeof candidate.migratedFromLegacyAt === 'number' ? candidate.migratedFromLegacyAt : undefined,
+  };
+}
+
+function cloneBrowserLoginMetadata(
+  browserLogin: ProviderBrowserLoginMetadata | undefined,
+): ProviderBrowserLoginMetadata | undefined {
+  if (!browserLogin) {
+    return undefined;
+  }
+
+  return {
+    ...browserLogin,
+    helper: browserLogin.helper ? { ...browserLogin.helper } : undefined,
+  };
+}
+
+function cloneBrowserLoginState(
+  browserLogin: ProviderBrowserLoginState | undefined,
+): ProviderBrowserLoginState | undefined {
+  if (!browserLogin) {
+    return undefined;
+  }
+
+  return {
+    ...browserLogin,
+    helper: browserLogin.helper ? { ...browserLogin.helper } : undefined,
+    pending: browserLogin.pending ? { ...browserLogin.pending } : undefined,
   };
 }
 
@@ -265,6 +380,65 @@ function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountReco
   };
 }
 
+function reconcileAccountSurface(
+  accounts: Partial<Record<AIProviderType, ProviderAccountRecord[]>>,
+  activeAccounts: Partial<Record<AIProviderType, string>>,
+): {
+  accounts: Partial<Record<AIProviderType, ProviderAccountRecord[]>>;
+  activeAccounts: Partial<Record<AIProviderType, string>>;
+} {
+  const nextAccounts = Object.fromEntries(
+    Object.entries(accounts).map(([provider, records]) => [
+      provider,
+      records.map((record) => cloneAccountRecord(record)),
+    ]),
+  ) as Partial<Record<AIProviderType, ProviderAccountRecord[]>>;
+  const nextActiveAccounts: Partial<Record<AIProviderType, string>> = {};
+
+  for (const [provider, providerAccounts] of Object.entries(nextAccounts) as Array<
+    [AIProviderType, ProviderAccountRecord[]]
+  >) {
+    if (!providerAccounts.length) {
+      continue;
+    }
+
+    const requestedActiveId = activeAccounts[provider];
+    let target = requestedActiveId
+      ? providerAccounts.find(
+          (account) => account.accountId === requestedActiveId && account.status !== 'revoked',
+        )
+      : undefined;
+
+    if (!target) {
+      target =
+        providerAccounts.find((account) => account.isActive && account.status !== 'revoked') ??
+        providerAccounts.find((account) => account.status === 'active') ??
+        providerAccounts.find((account) => account.status !== 'revoked');
+    }
+
+    if (!target) {
+      continue;
+    }
+
+    nextActiveAccounts[provider] = target.accountId;
+    nextAccounts[provider] = providerAccounts.map((account) => ({
+      ...account,
+      isActive: account.accountId === target.accountId,
+      status:
+        account.accountId === target.accountId
+          ? 'active'
+          : account.status === 'active'
+            ? 'available'
+            : account.status,
+    }));
+  }
+
+  return {
+    accounts: nextAccounts,
+    activeAccounts: nextActiveAccounts,
+  };
+}
+
 function buildCredentialRecord(
   provider: AIProviderType,
   authKind: ProviderAuthKind,
@@ -275,7 +449,7 @@ function buildCredentialRecord(
   return {
     version: 1,
     provider,
-    providerFamily: provider === 'codex' ? 'chatgpt-account' : 'default',
+    providerFamily: resolveProviderFamily(provider),
     authFamily,
     authKind,
     maskedValue,
@@ -315,7 +489,7 @@ function getAuthFamilyForKind(
       return 'oauth-token';
     case 'account-artifact':
     case 'session-token':
-      return provider === 'codex' ? 'account-backed' : 'none';
+      return supportsAccountArtifactProvider(provider) ? 'account-backed' : 'none';
     case 'none':
       return 'none';
   }
@@ -363,12 +537,17 @@ function buildMaskedValue(
     return secret.length > 8 ? `acct_****${secret.slice(-4)}` : fallbackMask;
   }
 
+  if (provider === 'openai') {
+    return secret.length > 8 ? `chatgpt:****${secret.slice(-4)}` : fallbackMask;
+  }
+
   return fallbackMask;
 }
 
 export class CredentialVault {
   private activePassphrase: string | null = null;
   private unlockedAt: number | undefined;
+  private readonly browserLoginAttempts = new Map<AIProviderType, StoredBrowserLoginAttempt>();
 
   async init(passphrase: string): Promise<VaultState> {
     return this.unlock(passphrase, true);
@@ -423,6 +602,7 @@ export class CredentialVault {
     const metadata = await this.getMetadata();
     const sessionState = await this.getSessionState();
     const hasLegacySecrets = await this.hasLegacySecrets();
+    const reconciledAccounts = reconcileAccountSurface(metadata.accounts, metadata.activeAccounts);
     const lockState = metadata.initialized
       ? sessionState
         ? 'unlocked'
@@ -441,9 +621,129 @@ export class CredentialVault {
       unlockedAt: lockState === 'unlocked' ? this.unlockedAt : undefined,
       hasLegacySecrets,
       credentials: metadata.credentials,
-      accounts: metadata.accounts,
-      activeAccounts: metadata.activeAccounts,
+      accounts: reconciledAccounts.accounts,
+      activeAccounts: reconciledAccounts.activeAccounts,
+      browserLogins: this.buildBrowserLoginSurfaceState(
+        metadata.browserLogins ?? {},
+        this.getBrowserLoginAttempts(),
+      ),
     };
+  }
+
+  async setBrowserLoginPending(
+    provider: AIProviderType,
+    input: {
+      requestId: string;
+      state: string;
+      nonce: string;
+      issuedAt: number;
+      expiresAt: number;
+      uiContext?: 'options' | 'onboarding' | 'unknown';
+    },
+  ): Promise<VaultState> {
+    if (provider !== 'openai') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Provider ${provider} does not support browser-account pending state`,
+        true,
+      );
+    }
+
+    const requestId = input.requestId.trim();
+    const state = input.state.trim();
+    const nonce = input.nonce.trim();
+    if (!requestId || !state || !nonce) {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        'Browser login pending state requires requestId, state, and nonce',
+        true,
+      );
+    }
+
+    const attempts = this.getBrowserLoginAttempts();
+    attempts[provider] = {
+      provider,
+      authMethod: 'browser-account',
+      requestId,
+      state,
+      nonce,
+      issuedAt: input.issuedAt,
+      expiresAt: input.expiresAt,
+      updatedAt: Date.now(),
+      uiContext: input.uiContext,
+    };
+    this.saveBrowserLoginAttempts(attempts);
+
+    const metadata = await this.getMetadata();
+    const current = metadata.browserLogins?.[provider];
+    if (current) {
+      metadata.browserLogins = {
+        ...metadata.browserLogins,
+        [provider]: {
+          ...current,
+          authMethod: 'browser-account',
+          lastAttemptAt: input.issuedAt,
+          updatedAt: Math.max(current.updatedAt, input.issuedAt),
+        },
+      };
+      await this.saveMetadata(metadata);
+    }
+
+    return this.getState();
+  }
+
+  async clearBrowserLoginPending(provider: AIProviderType): Promise<VaultState> {
+    const attempts = this.getBrowserLoginAttempts();
+    if (attempts[provider]) {
+      delete attempts[provider];
+      this.saveBrowserLoginAttempts(attempts);
+    }
+
+    return this.getState();
+  }
+
+  async setBrowserLoginResult(
+    provider: AIProviderType,
+    result: Omit<ProviderBrowserLoginMetadata, 'authMethod'>,
+  ): Promise<VaultState> {
+    if (provider !== 'openai') {
+      throw new ExtensionError(
+        ErrorCode.ACTION_INVALID,
+        `Provider ${provider} does not support browser-account result state`,
+        true,
+      );
+    }
+
+    const metadata = await this.getMetadata();
+    metadata.browserLogins = {
+      ...(metadata.browserLogins ?? {}),
+      [provider]: {
+        authMethod: 'browser-account',
+        status: result.status,
+        updatedAt: result.updatedAt,
+        lastAttemptAt: result.lastAttemptAt,
+        lastCompletedAt: result.lastCompletedAt,
+        accountId: result.accountId?.trim() || undefined,
+        accountLabel: result.accountLabel?.trim() || undefined,
+        lastErrorCode: result.lastErrorCode?.trim() || undefined,
+        retryable: result.retryable === true,
+        helper: result.helper
+          ? {
+              id: result.helper.id?.trim() || undefined,
+              version: result.helper.version?.trim() || undefined,
+            }
+          : undefined,
+      },
+    };
+    await this.saveMetadata(metadata);
+    await this.clearBrowserLoginPending(provider);
+
+    return this.getState();
+  }
+
+  async getBrowserLoginState(provider: AIProviderType): Promise<ProviderBrowserLoginState | undefined> {
+    const state = await this.getState();
+    return cloneBrowserLoginState(state.browserLogins?.[provider]);
   }
 
   async setCredential(
@@ -528,7 +828,7 @@ export class CredentialVault {
     provider: AIProviderType,
     input: SaveAccountInput,
   ): Promise<ProviderAccountRecord> {
-    if (provider !== 'codex') {
+    if (!supportsAccountArtifactProvider(provider)) {
       throw new ExtensionError(
         ErrorCode.ACTION_INVALID,
         `Provider ${provider} does not support account-backed storage yet`,
@@ -553,7 +853,7 @@ export class CredentialVault {
     const existingAccount = existingIndex >= 0 ? providerAccounts[existingIndex] : undefined;
 
     let credentialKey = existingAccount?.credentialKey;
-    if (provider === 'codex' && input.artifact?.value.trim()) {
+    if (input.artifact?.value.trim()) {
       const secureStorage = await this.requireUnlockedStorage();
       credentialKey = this.getAccountArtifactStorageKey(provider, accountId);
       await secureStorage.setEncrypted(credentialKey, {
@@ -584,7 +884,7 @@ export class CredentialVault {
     const nextAccount: ProviderAccountRecord = {
       version: 1,
       provider,
-      providerFamily: 'chatgpt-account',
+      providerFamily: resolveProviderFamily(provider),
       authFamily: 'account-backed',
       accountId,
       label,
@@ -624,7 +924,12 @@ export class CredentialVault {
         };
       }
     } else if (metadata.activeAccounts[provider] === accountId) {
-      metadata.activeAccounts[provider] = accountId;
+      const fallbackAccount = providerAccounts.find((account) => account.accountId !== accountId && account.isActive);
+      if (fallbackAccount) {
+        metadata.activeAccounts[provider] = fallbackAccount.accountId;
+      } else {
+        delete metadata.activeAccounts[provider];
+      }
     }
 
     metadata.accounts[provider] = providerAccounts;
@@ -1049,6 +1354,74 @@ export class CredentialVault {
       passphrase: candidate.passphrase,
       unlockedAt: candidate.unlockedAt,
     };
+  }
+
+  private getBrowserLoginAttempts(): Partial<Record<AIProviderType, StoredBrowserLoginAttempt>> {
+    const attempts: Partial<Record<AIProviderType, StoredBrowserLoginAttempt>> = {};
+
+    for (const [provider, attempt] of this.browserLoginAttempts.entries()) {
+      attempts[provider] = { ...attempt };
+    }
+
+    return attempts;
+  }
+
+  private saveBrowserLoginAttempts(
+    attempts: Partial<Record<AIProviderType, StoredBrowserLoginAttempt>>,
+  ): void {
+    this.browserLoginAttempts.clear();
+
+    for (const [provider, attempt] of Object.entries(attempts)) {
+      if (isProviderType(provider) && attempt) {
+        this.browserLoginAttempts.set(provider, { ...attempt });
+      }
+    }
+  }
+
+  private buildBrowserLoginSurfaceState(
+    browserLogins: Partial<Record<AIProviderType, ProviderBrowserLoginMetadata>>,
+    attempts: Partial<Record<AIProviderType, StoredBrowserLoginAttempt>>,
+  ): Partial<Record<AIProviderType, ProviderBrowserLoginState>> | undefined {
+    const providers = new Set<AIProviderType>([
+      ...(Object.keys(browserLogins) as AIProviderType[]),
+      ...(Object.keys(attempts) as AIProviderType[]),
+    ]);
+    if (providers.size === 0) {
+      return undefined;
+    }
+
+    const surfaceState: Partial<Record<AIProviderType, ProviderBrowserLoginState>> = {};
+    for (const provider of providers) {
+      const durable = browserLogins[provider];
+      const pending = attempts[provider];
+      if (pending) {
+        surfaceState[provider] = {
+          authMethod: 'browser-account',
+          status: 'pending',
+          updatedAt: pending.updatedAt,
+          lastAttemptAt: pending.issuedAt,
+          lastCompletedAt: durable?.lastCompletedAt,
+          accountId: durable?.accountId,
+          accountLabel: durable?.accountLabel,
+          lastErrorCode: durable?.lastErrorCode,
+          retryable: durable?.retryable,
+          helper: durable?.helper ? { ...durable.helper } : undefined,
+          pending: {
+            requestId: pending.requestId,
+            issuedAt: pending.issuedAt,
+            expiresAt: pending.expiresAt,
+            uiContext: pending.uiContext,
+          },
+        };
+        continue;
+      }
+
+      if (durable) {
+        surfaceState[provider] = cloneBrowserLoginState(durable);
+      }
+    }
+
+    return Object.keys(surfaceState).length > 0 ? surfaceState : undefined;
   }
 
   private async requireUnlockedStorage(): Promise<SecureStorage> {
