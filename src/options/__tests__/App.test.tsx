@@ -630,7 +630,9 @@ describe('Options App', () => {
       );
     });
 
-    expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/cliproxyapi endpoint saved and the api key was stored in the vault/i),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue('http://127.0.0.1:8317/v1')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('API key'), 'sk-cliproxyapi-test');
@@ -641,6 +643,21 @@ describe('Options App', () => {
     expect(initialize).toHaveBeenCalledOnce();
     expect(validateApiKey).toHaveBeenCalledWith('sk-cliproxyapi-test');
     expect(screen.getByDisplayValue('http://127.0.0.1:8317/v1')).toBeInTheDocument();
+  });
+
+  it('shows CLIProxyAPI-specific readiness copy in the main options surface', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'cliproxyapi');
+
+    expect(
+      screen.getByText(
+        /cliproxyapi requires an endpoint\. save the endpoint and api key first, then run test connection to mark it ready/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('normalizes https provider endpoints to /v1 on save', async () => {
@@ -1227,6 +1244,33 @@ describe('Options App', () => {
     expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
     expect(screen.getByText(/almost ready for the full flux workspace/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
+  });
+
+  it('shows CLIProxyAPI-specific onboarding guidance for endpoint-first setup', async () => {
+    const user = userEvent.setup();
+
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /continue/i }));
+    expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Provider'), 'cliproxyapi');
+
+    expect(
+      screen.getByText(
+        /for cliproxyapi, the endpoint is mandatory: save the endpoint, keep the api key in the vault, then run test connection before flux marks it ready/i,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /cliproxyapi requires an explicit endpoint\. save the endpoint first, keep the api key in the vault, then run test connection before popup quick actions or sidepanel chat unlock/i,
+      ),
+    ).toBeInTheDocument();
   });
 
   it('keeps onboarding completion locked when a key-based provider is only validated without saving', async () => {

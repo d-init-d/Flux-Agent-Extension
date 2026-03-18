@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Session } from '@shared/types';
+import type { Session } from '../../../shared/types';
 import { useSessionStore, resetSessionStore } from '../sessionStore';
 
 const sendExtensionRequest = vi.fn();
@@ -134,10 +134,26 @@ describe('sessionStore', () => {
   describe('createSession', () => {
     it('should create a session, add to list, and set as active', async () => {
       const newSession = createSession('s-new');
-      sendExtensionRequest.mockResolvedValueOnce({ session: newSession });
+      sendExtensionRequest
+        .mockResolvedValueOnce({
+          activeProvider: 'openai',
+          providers: {
+            openai: {
+              model: 'gpt-4o-mini',
+            },
+          },
+        })
+        .mockResolvedValueOnce({ session: newSession });
 
       const result = await useSessionStore.getState().createSession();
 
+      expect(sendExtensionRequest).toHaveBeenNthCalledWith(1, 'SETTINGS_GET', undefined);
+      expect(sendExtensionRequest).toHaveBeenNthCalledWith(2, 'SESSION_CREATE', {
+        config: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+        },
+      });
       expect(result.config.id).toBe('s-new');
       expect(useSessionStore.getState().activeSessionId).toBe('s-new');
       expect(useSessionStore.getState().sessions).toHaveLength(1);
@@ -149,12 +165,79 @@ describe('sessionStore', () => {
       useSessionStore.setState({ sessions: [existing] });
 
       const updated = createSession('s1', { lastActivityAt: 2000 });
-      sendExtensionRequest.mockResolvedValueOnce({ session: updated });
+      sendExtensionRequest
+        .mockResolvedValueOnce({
+          activeProvider: 'openai',
+          providers: {
+            openai: {
+              model: 'gpt-4o-mini',
+            },
+          },
+        })
+        .mockResolvedValueOnce({ session: updated });
 
       await useSessionStore.getState().createSession();
 
       expect(useSessionStore.getState().sessions).toHaveLength(1);
       expect(useSessionStore.getState().sessions[0].lastActivityAt).toBe(2000);
+    });
+
+    it('uses the active provider and model from settings when creating a session', async () => {
+      const newSession = createSession('s-cliproxyapi', {
+        config: {
+          id: 's-cliproxyapi',
+          provider: 'cliproxyapi',
+          model: 'gpt-5',
+        },
+      });
+
+      sendExtensionRequest
+        .mockResolvedValueOnce({
+          activeProvider: 'cliproxyapi',
+          providers: {
+            cliproxyapi: {
+              model: 'gpt-5',
+            },
+          },
+        })
+        .mockResolvedValueOnce({ session: newSession });
+
+      await useSessionStore.getState().createSession();
+
+      expect(sendExtensionRequest).toHaveBeenNthCalledWith(2, 'SESSION_CREATE', {
+        config: {
+          provider: 'cliproxyapi',
+          model: 'gpt-5',
+        },
+      });
+    });
+
+    it('falls back to the provider registry default model when settings omit a model', async () => {
+      const newSession = createSession('s-cliproxyapi', {
+        config: {
+          id: 's-cliproxyapi',
+          provider: 'cliproxyapi',
+          model: 'gpt-5',
+        },
+      });
+
+      sendExtensionRequest
+        .mockResolvedValueOnce({
+          activeProvider: 'cliproxyapi',
+          providers: {
+            cliproxyapi: {},
+          },
+        })
+        .mockResolvedValueOnce({ session: newSession });
+
+      await useSessionStore.getState().createSession();
+
+      expect(sendExtensionRequest).toHaveBeenNthCalledWith(2, 'SESSION_CREATE', {
+        config: {
+          provider: 'cliproxyapi',
+          model: 'gpt-5',
+        },
+      });
     });
   });
 
@@ -307,9 +390,34 @@ describe('sessionStore', () => {
 
   describe('createSession — error propagation', () => {
     it('should propagate error from sendExtensionRequest', async () => {
-      sendExtensionRequest.mockRejectedValueOnce(new Error('Create failed'));
+      sendExtensionRequest
+        .mockResolvedValueOnce({
+          activeProvider: 'openai',
+          providers: {
+            openai: {
+              model: 'gpt-4o-mini',
+            },
+          },
+        })
+        .mockRejectedValueOnce(new Error('Create failed'));
 
       await expect(useSessionStore.getState().createSession()).rejects.toThrow('Create failed');
+    });
+
+    it('falls back to the legacy default when settings lookup fails', async () => {
+      const newSession = createSession('s-new');
+      sendExtensionRequest
+        .mockRejectedValueOnce(new Error('Settings failed'))
+        .mockResolvedValueOnce({ session: newSession });
+
+      await useSessionStore.getState().createSession();
+
+      expect(sendExtensionRequest).toHaveBeenNthCalledWith(2, 'SESSION_CREATE', {
+        config: {
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+        },
+      });
     });
   });
 

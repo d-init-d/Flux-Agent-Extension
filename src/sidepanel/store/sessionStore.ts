@@ -1,11 +1,35 @@
 import { create } from 'zustand';
-import type { Session } from '@shared/types';
+import { PROVIDER_LOOKUP } from '@shared/config';
+import type { AIProviderType, Session } from '@shared/types';
 import { sendExtensionRequest } from '../lib/extension-client';
 
-const DEFAULT_SESSION_CONFIG = {
-  provider: 'openai' as const,
-  model: 'gpt-4o-mini',
+interface SessionDefaults {
+  provider: AIProviderType;
+  model: string;
+}
+
+const DEFAULT_SESSION_CONFIG: SessionDefaults = {
+  provider: 'openai',
+  model: PROVIDER_LOOKUP.openai.defaultModel,
 };
+
+async function resolveDefaultSessionConfig(): Promise<SessionDefaults> {
+  try {
+    const response = await sendExtensionRequest('SETTINGS_GET', undefined);
+    const provider = response.activeProvider;
+    const configuredModel = response.providers?.[provider]?.model;
+
+    return {
+      provider,
+      model:
+        typeof configuredModel === 'string' && configuredModel.trim().length > 0
+          ? configuredModel
+          : PROVIDER_LOOKUP[provider].defaultModel,
+    };
+  } catch {
+    return DEFAULT_SESSION_CONFIG;
+  }
+}
 
 interface SessionStoreState {
   sessions: Session[];
@@ -50,8 +74,9 @@ export const useSessionStore = create<SessionStoreState>((set, get) => ({
     }
   },
   createSession: async () => {
+    const defaultSessionConfig = await resolveDefaultSessionConfig();
     const response = await sendExtensionRequest('SESSION_CREATE', {
-      config: DEFAULT_SESSION_CONFIG,
+      config: defaultSessionConfig,
     });
     const nextSession = response.session;
 

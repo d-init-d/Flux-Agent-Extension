@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDefaultProviderConfigs } from '../../shared/config';
-import type { ExtensionMessage, VaultState } from '../../shared/types';
+import type { AIProviderType, ExtensionMessage, VaultState } from '../../shared/types';
 import { ThemeProvider } from '../../ui/theme';
 import { createDefaultOnboardingState } from '../../shared/storage/onboarding';
 import { readStorage, seedStorage } from '../../test/helpers';
@@ -59,12 +59,17 @@ function createVaultState(overrides: Partial<VaultState> = {}): VaultState {
 }
 
 function mockPopupRuntime(options?: {
-  activeProvider?: 'openai' | 'codex';
+  activeProvider?: 'openai' | 'codex' | 'cliproxyapi';
   vault?: VaultState;
   accountAuthStatus?: Record<string, unknown>;
   sessions?: Array<Record<string, unknown>>;
+  providerConfigs?: Partial<Record<AIProviderType, Record<string, unknown>>>;
 }): void {
   const vault = options?.vault ?? createVaultState();
+  const providerConfigs = createDefaultProviderConfigs();
+  for (const [provider, config] of Object.entries(options?.providerConfigs ?? {})) {
+    Object.assign(providerConfigs[provider as AIProviderType], config);
+  }
   const settingsResponse = {
     settings: {
       language: 'en',
@@ -83,7 +88,7 @@ function mockPopupRuntime(options?: {
       highlightElements: true,
       soundNotifications: false,
     },
-    providers: createDefaultProviderConfigs(),
+    providers: providerConfigs,
     activeProvider: options?.activeProvider ?? 'openai',
     onboarding: {
       version: 1,
@@ -404,6 +409,103 @@ describe('Popup App (U-06 quick actions + page info)', () => {
       within(providerCard).getByText(/unlock the vault in options, then validate the active account again if needed/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+  });
+
+  it('shows a missing-endpoint readiness state for cliproxyapi', async () => {
+    mockPopupRuntime({
+      activeProvider: 'cliproxyapi',
+      vault: createVaultState({
+        credentials: {
+          cliproxyapi: {
+            version: 1,
+            provider: 'cliproxyapi',
+            providerFamily: 'default',
+            authFamily: 'api-key',
+            authKind: 'api-key',
+            maskedValue: '••••••••••••',
+            updatedAt: Date.now(),
+          },
+        },
+      }),
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('CLIProxyAPI')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Endpoint required')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Add a CLIProxyAPI endpoint')).toBeInTheDocument();
+    expect(
+      within(providerCard).getByText(/cliproxyapi is endpoint-driven/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
+  });
+
+  it('shows an unvalidated readiness state for cliproxyapi after the endpoint is saved', async () => {
+    mockPopupRuntime({
+      activeProvider: 'cliproxyapi',
+      providerConfigs: {
+        cliproxyapi: {
+          customEndpoint: 'http://127.0.0.1:8317/v1',
+        },
+      },
+      vault: createVaultState({
+        credentials: {
+          cliproxyapi: {
+            version: 1,
+            provider: 'cliproxyapi',
+            providerFamily: 'default',
+            authFamily: 'api-key',
+            authKind: 'api-key',
+            maskedValue: '••••••••••••',
+            updatedAt: Date.now(),
+          },
+        },
+      }),
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('Test connection')).toBeInTheDocument();
+    expect(within(providerCard).getByText('CLIProxyAPI endpoint saved but unvalidated')).toBeInTheDocument();
+    expect(
+      within(providerCard).getByText(/saved cliproxyapi endpoint and vault-backed api key/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /extract data/i })).toBeDisabled();
+  });
+
+  it('shows cliproxyapi as ready only after endpoint validation has passed', async () => {
+    const validatedAt = Date.now();
+    mockPopupRuntime({
+      activeProvider: 'cliproxyapi',
+      providerConfigs: {
+        cliproxyapi: {
+          customEndpoint: 'http://127.0.0.1:8317/v1',
+        },
+      },
+      vault: createVaultState({
+        credentials: {
+          cliproxyapi: {
+            version: 1,
+            provider: 'cliproxyapi',
+            providerFamily: 'default',
+            authFamily: 'api-key',
+            authKind: 'api-key',
+            maskedValue: '••••••••••••',
+            updatedAt: validatedAt,
+            validatedAt,
+          },
+        },
+      }),
+    });
+
+    renderApp();
+
+    const providerCard = await screen.findByTestId('popup-provider-card');
+    expect(within(providerCard).getByText('Ready')).toBeInTheDocument();
+    expect(within(providerCard).getByText('CLIProxyAPI is ready')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /summarize page/i })).toBeEnabled();
   });
 
   it('falls back gracefully when tab access fails', async () => {

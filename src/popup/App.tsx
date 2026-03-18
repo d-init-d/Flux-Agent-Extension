@@ -23,6 +23,7 @@ import { sendExtensionRequest } from '@/shared/extension-client';
 import { PROVIDER_LOOKUP, providerUsesAccountImport } from '@/shared/config';
 import { normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@/shared/storage/onboarding';
 import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
+import { resolveKeyBasedProviderUx } from '@/shared/ui/key-based-provider-ux';
 import type { AccountAuthStatusGetResponse, AIProviderType, Session, SettingsGetResponse } from '@/shared/types';
 import { ThemeToggle } from '@/ui/theme';
 
@@ -219,6 +220,25 @@ function createDefaultProviderStatus(snapshot: SettingsGetResponse): PopupProvid
   const provider = snapshot.activeProvider;
   const providerLabel = PROVIDER_LOOKUP[provider].label;
   const hasCredential = Boolean(snapshot.vault.credentials[provider]);
+
+  if (provider === 'cliproxyapi') {
+    const ux = resolveKeyBasedProviderUx(provider, {
+      config: snapshot.providers[provider],
+      credential: snapshot.vault.credentials[provider],
+      vaultLockState: snapshot.vault.lockState,
+    });
+
+    return {
+      provider,
+      providerLabel,
+      badgeLabel: ux.badgeLabel,
+      badgeVariant: ux.badgeVariant,
+      title: ux.title,
+      detail: ux.detail,
+      action: ux.action,
+      blocksQuickActions: ux.blocksRuntime,
+    };
+  }
 
   if (snapshot.vault.lockState === 'locked' && hasCredential) {
     return {
@@ -525,7 +545,7 @@ export function App() {
     const model =
       typeof configuredModel === 'string' && configuredModel.trim().length > 0
         ? configuredModel
-        : 'gpt-4o-mini';
+        : PROVIDER_LOOKUP[provider].defaultModel;
 
     const created = await sendExtensionRequest(
       'SESSION_CREATE',

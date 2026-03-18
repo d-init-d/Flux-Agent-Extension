@@ -10,13 +10,16 @@ import { useSession } from './hooks/useSession';
 import { sendExtensionRequest, subscribeToExtensionEvents } from './lib/extension-client';
 import { useWorkflowUIStore } from './store/workflowUIStore';
 import { Button } from '@/ui/components';
-import { PROVIDER_LOOKUP } from '@/shared/config';
+import { PROVIDER_LOOKUP, providerUsesAccountImport } from '@/shared/config';
 import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
+import { resolveKeyBasedProviderUx } from '@/shared/ui/key-based-provider-ux';
 import { ThemeToggle } from '@/ui/theme';
 import type {
   AccountAuthStatusGetResponse,
+  AIProviderType,
   AIStreamEventPayload,
   ActionProgressEventPayload,
+  SettingsGetResponse,
   SavedWorkflowSource,
   SessionRecordingExportFormat,
   SessionPlaybackSpeed,
@@ -157,6 +160,26 @@ function getWorkflowSource(session: Session | null): SavedWorkflowSource | undef
     sessionId: session.config.id,
     sessionName: session.config.name?.trim() || undefined,
     recordedAt: session.recording.updatedAt ?? session.recording.startedAt ?? undefined,
+  };
+}
+
+function mapKeyBasedProviderNotice(
+  provider: AIProviderType,
+  settingsSnapshot: SettingsGetResponse,
+): SidepanelProviderNotice {
+  const ux = resolveKeyBasedProviderUx(provider, {
+    config: settingsSnapshot.providers[provider],
+    credential: settingsSnapshot.vault.credentials[provider],
+    vaultLockState: settingsSnapshot.vault.lockState,
+  });
+
+  return {
+    badgeLabel: ux.badgeLabel,
+    badgeVariant: ux.badgeVariant,
+    title: ux.title,
+    detail: ux.detail,
+    action: ux.action,
+    blocksSend: ux.blocksRuntime,
   };
 }
 
@@ -342,38 +365,57 @@ export function App() {
   }, [activeSessionId, playbackState.speed]);
 
   useEffect(() => {
-    if (activeSession?.config.provider !== 'codex') {
+    const provider = activeSession?.config.provider;
+    if (!provider || (!providerUsesAccountImport(provider) && provider !== 'cliproxyapi')) {
       setProviderNotice(null);
       return;
     }
 
     let cancelled = false;
 
-    void sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', { provider: 'codex' })
-      .then((authStatus) => {
-        if (cancelled) {
-          return;
-        }
-
+    const loadNotice = async () => {
+      if (providerUsesAccountImport(provider)) {
+        const authStatus = await sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', { provider });
         const ux = resolveAccountBackedProviderUx(authStatus as AccountAuthStatusGetResponse);
-        setProviderNotice({
+        return {
           badgeLabel: ux.badgeLabel,
           badgeVariant: ux.badgeVariant,
           title: ux.title,
           detail: ux.detail,
           action: ux.action,
           blocksSend: ux.blocksRuntime,
-        });
+        } satisfies SidepanelProviderNotice;
+      }
+
+      const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined);
+      return mapKeyBasedProviderNotice(provider, settingsSnapshot as SettingsGetResponse);
+    };
+
+    void loadNotice()
+      .then((authStatus) => {
+        if (cancelled) {
+          return;
+        }
+
+        setProviderNotice(authStatus);
       })
       .catch(() => {
         if (!cancelled) {
           setProviderNotice({
             badgeLabel: 'Status unavailable',
             badgeVariant: 'warning',
-            title: 'Codex account state could not be refreshed',
+            title:
+              provider === 'cliproxyapi'
+                ? 'CLIProxyAPI readiness could not be refreshed'
+                : 'Codex account state could not be refreshed',
             detail:
-              'The side panel could not confirm the current Codex account health, so provider guidance may be stale.',
-            action: 'Open options and re-check the imported account before retrying a live request.',
+              provider === 'cliproxyapi'
+                ? 'The side panel could not confirm the current CLIProxyAPI endpoint and validation state, so provider guidance may be stale.'
+                : 'The side panel could not confirm the current Codex account health, so provider guidance may be stale.',
+            action:
+              provider === 'cliproxyapi'
+                ? 'Open options and re-check the saved endpoint plus connection test before retrying a live request.'
+                : 'Open options and re-check the imported account before retrying a live request.',
             blocksSend: false,
           });
         }
@@ -527,20 +569,59 @@ export function App() {
   const handleSend = async (value: string, uploads?: SerializedFileUpload[]) => {
     setSubmitError(null);
     let sessionId = activeSessionId;
+    let nextProviderNotice = providerNotice;
 
     try {
+      let targetProvider = activeSession?.config.provider;
+
       if (!sessionId) {
         const createdSession = await createSession();
         syncSession(createdSession);
         sessionId = createdSession.config.id;
+        targetProvider = createdSession.config.provider;
+      }
+
+      if (targetProvider && (!providerUsesAccountImport(targetProvider) && targetProvider !== 'cliproxyapi')) {
+        nextProviderNotice = null;
+      } else if (targetProvider) {
+        if (providerUsesAccountImport(targetProvider)) {
+          const authStatus = await sendExtensionRequest('ACCOUNT_AUTH_STATUS_GET', {
+            provider: targetProvider,
+          });
+          const ux = resolveAccountBackedProviderUx(authStatus as AccountAuthStatusGetResponse);
+          nextProviderNotice = {
+            badgeLabel: ux.badgeLabel,
+            badgeVariant: ux.badgeVariant,
+            title: ux.title,
+            detail: ux.detail,
+            action: ux.action,
+            blocksSend: ux.blocksRuntime,
+          };
+        } else {
+          const settingsSnapshot = await sendExtensionRequest('SETTINGS_GET', undefined);
+          nextProviderNotice = mapKeyBasedProviderNotice(
+            targetProvider,
+            settingsSnapshot as SettingsGetResponse,
+          );
+        }
+
+        setProviderNotice(nextProviderNotice);
+        if (nextProviderNotice.blocksSend) {
+          const message = `${nextProviderNotice.title}. ${nextProviderNotice.action}`;
+          setSubmitError(message);
+          if (sessionId) {
+            appendError(sessionId, message);
+          }
+          return;
+        }
       }
 
       await sendMessage(sessionId, value, uploads);
     } catch (error) {
       const fallbackMessage = error instanceof Error ? error.message : 'Request failed';
       const message =
-        activeSession?.config.provider === 'codex' && providerNotice?.blocksSend
-          ? `${providerNotice.title}. ${providerNotice.action}`
+        nextProviderNotice?.blocksSend
+          ? `${nextProviderNotice.title}. ${nextProviderNotice.action}`
           : fallbackMessage;
       setSubmitError(message);
       if (sessionId) {
@@ -612,7 +693,10 @@ export function App() {
         </div>
       </header>
 
-      {activeSession?.config.provider === 'codex' && providerNotice ? (
+      {providerNotice &&
+      activeSession?.config.provider &&
+      (providerUsesAccountImport(activeSession.config.provider) ||
+        activeSession.config.provider === 'cliproxyapi') ? (
         <section className="border-b border-[rgb(var(--color-border-default))] bg-[rgb(var(--color-bg-secondary)/0.7)] px-4 py-3 sm:px-6">
           <div className="mx-auto w-full max-w-3xl">
             <div className="rounded-2xl border border-[rgb(var(--color-border-default)/0.8)] bg-[rgb(var(--color-bg-primary))] px-4 py-4 shadow-sm sm:px-5">

@@ -19,6 +19,7 @@ interface OnboardingFlowProps {
   theme: ExtensionSettings['theme'];
   language: ExtensionSettings['language'];
   providerRequiresApiKey: boolean;
+  providerRequiresEndpoint?: boolean;
   providerUsesAccountImport?: boolean;
   providerStatusLabel?: string;
   providerSetupHint?: string;
@@ -60,6 +61,7 @@ export function OnboardingFlow({
   theme,
   language,
   providerRequiresApiKey,
+  providerRequiresEndpoint = false,
   providerUsesAccountImport = false,
   providerStatusLabel,
   providerSetupHint,
@@ -198,7 +200,9 @@ export function OnboardingFlow({
                     <p className="mt-3 max-w-3xl text-sm leading-7 text-content-secondary sm:text-base">
                       {providerUsesAccountImport
                         ? 'This onboarding step reuses the live provider setup controls. For Codex, save the provider, unlock the vault, import an official artifact, then validate the active account before you finish onboarding.'
-                        : 'This onboarding step reuses the live provider setup controls. For providers with API keys, save the provider and validate the connection before you finish onboarding.'}
+                        : providerRequiresEndpoint
+                          ? 'This onboarding step reuses the live provider setup controls. For CLIProxyAPI, the endpoint is mandatory: save the endpoint, keep the API key in the vault, then run Test connection before Flux marks it ready.'
+                          : 'This onboarding step reuses the live provider setup controls. For providers with API keys, save the provider and validate the connection before you finish onboarding.'}
                     </p>
                   </div>
 
@@ -307,8 +311,9 @@ export function OnboardingFlow({
                     </p>
                     {providerRequiresApiKey ? (
                       <p className="mt-3 text-sm leading-6 text-content-secondary">
-                        Key-based providers now store credentials in the encrypted vault. Unlock the
-                        vault once per browser session before validating or running those providers.
+                        {providerRequiresEndpoint
+                          ? 'CLIProxyAPI is only considered ready after the saved endpoint and vault-backed API key pass Test connection. Unlock the vault once per browser session before validating or running it.'
+                          : 'Key-based providers now store credentials in the encrypted vault. Unlock the vault once per browser session before validating or running those providers.'}
                       </p>
                     ) : null}
                     {providerReadyHint ? (

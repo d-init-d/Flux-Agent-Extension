@@ -64,7 +64,7 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | CP-05 - Shared endpoint policy | DONE | `pnpm exec vitest run src/shared/config/__tests__/provider-endpoint-policy.test.ts`; `pnpm typecheck` | Added a shared endpoint policy/normalization module for CLIProxyAPI, Ollama, and HTTPS-only providers |
 | CP-06 - Options endpoint validation and quick connect UX | DONE | `pnpm exec vitest run src/options/__tests__/App.test.tsx`; `pnpm typecheck` | Options and runtime mock now reuse the shared policy, normalize `/v1...` inputs, and show provider-specific helper/error copy |
 | CP-07 - Background validation and runtime enforcement | DONE | `pnpm exec vitest run src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "cliproxyapi"`; `pnpm typecheck` | Background save/validate/runtime paths now enforce the same policy and keep normalized base URLs through credential checks and live session sends |
-| CP-08 - Popup, onboarding, and sidepanel alignment | TODO | - | Keep provider naming and ready-state UX consistent across surfaces |
+| CP-08 - Popup, onboarding, and sidepanel alignment | DONE | `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck` | Popup, onboarding/options, sidepanel, and session defaults now surface real CLIProxyAPI readiness instead of generic OpenAI-biased states |
 | CP-09 - Test sweep and security regression coverage | TODO | - | Cover registry, loader, provider, options, runtime, and secret-handling regressions |
 | CP-10 - Docs and closeout | TODO | - | Update README/testing guidance and close the roadmap initiative cleanly |
 
@@ -93,6 +93,10 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
   - Background provider save, credential validation, and live session runtime now enforce the shared endpoint policy and preserve normalized base URLs for CLIProxyAPI.
   - Added targeted runtime coverage to prove `cliproxyapi` session sends switch providers with the normalized `/v1` base URL.
   - Next step: move to CP-08 for popup/onboarding/sidepanel alignment and then CP-09 for a broader regression sweep.
+- [2026-03-18] CP-08 DONE
+  - Popup, sidepanel, and onboarding/options now distinguish missing endpoint vs saved-but-unvalidated vs ready for `cliproxyapi`, while Codex account-backed guidance stays intact.
+  - Session creation defaults now prefer the active provider/model from settings so new sidepanel sessions no longer fall back to OpenAI-biased defaults when CLIProxyAPI is selected.
+  - Next step: move to CP-09 for the broader regression/security sweep over provider readiness, runtime gating, and secret-handling edges.
 
 ### Decision Notes
 

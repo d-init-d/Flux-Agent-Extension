@@ -1347,10 +1347,14 @@ export function App() {
       const activeImportedAccount = getActiveProviderAccount(snapshot.vault, selectedProvider);
       setSaveState('success');
       setSaveMessage(
-        providerUsesApiKey(selectedDefinition) && rawApiKey
-          ? 'Provider settings saved and the credential was stored in the vault.'
-          : providerUsesApiKey(selectedDefinition) && !savedRecord
-            ? 'Provider settings saved. Add a vault credential before using this provider.'
+        selectedProvider === 'cliproxyapi' && rawApiKey
+          ? 'CLIProxyAPI endpoint saved and the API key was stored in the vault. Run Test connection to mark this provider ready.'
+          : selectedProvider === 'cliproxyapi' && !savedRecord
+            ? 'CLIProxyAPI endpoint saved. Add a vault-backed API key, then run Test connection before using popup or sidepanel workflows.'
+            : providerUsesApiKey(selectedDefinition) && rawApiKey
+              ? 'Provider settings saved and the credential was stored in the vault.'
+              : providerUsesApiKey(selectedDefinition) && !savedRecord
+                ? 'Provider settings saved. Add a vault credential before using this provider.'
             : providerUsesOAuthToken(selectedDefinition) && !savedRecord
               ? 'Provider settings saved. Connect GitHub Copilot in the vault before using this provider.'
               : providerUsesAccountImport(selectedDefinition) && importedAccounts.length === 0
@@ -1822,16 +1826,26 @@ export function App() {
     : !savedMetadata
       ? providerUsesOAuthToken(selectedDefinition)
         ? 'Connect GitHub Copilot and store the token in the vault before running this provider.'
-        : selectedDefinition.requiresCredential
-          ? 'Save a vault-backed credential or enter a fresh one when testing.'
-          : 'No credential is required for this provider.'
+        : selectedProvider === 'cliproxyapi'
+          ? 'CLIProxyAPI needs both a saved endpoint and a vault-backed API key. Save first, then run Test connection before relying on it.'
+          : selectedDefinition.requiresCredential
+            ? 'Save a vault-backed credential or enter a fresh one when testing.'
+            : 'No credential is required for this provider.'
       : selectedCredentialRecord?.stale
-        ? 'The provider configuration changed after the last validation. Re-test before relying on this credential.'
+        ? selectedProvider === 'cliproxyapi'
+          ? 'The CLIProxyAPI endpoint or API key changed after the last validation. Re-test before relying on this provider.'
+          : 'The provider configuration changed after the last validation. Re-test before relying on this credential.'
         : vaultState.lockState === 'locked'
-          ? 'Unlock the vault to validate, rotate, or remove this credential.'
+          ? selectedProvider === 'cliproxyapi'
+            ? 'Unlock the vault to validate, rotate, or remove the saved CLIProxyAPI API key.'
+            : 'Unlock the vault to validate, rotate, or remove this credential.'
           : selectedCredentialRecord?.validatedAt
-              ? 'Credential validated against the current provider settings.'
-              : 'Credential is stored in the vault. Run a connection test to validate it.';
+              ? selectedProvider === 'cliproxyapi'
+                ? 'CLIProxyAPI endpoint and API key validated against the current provider settings.'
+                : 'Credential validated against the current provider settings.'
+              : selectedProvider === 'cliproxyapi'
+                ? 'CLIProxyAPI settings are saved in the vault. Run Test connection to confirm the endpoint and API key together.'
+                : 'Credential is stored in the vault. Run a connection test to validate it.';
   const onboardingProviderStatusLabel = providerUsesAccountImport(selectedDefinition)
     ? credentialStatusLabel
     : providerUsesOAuthToken(selectedDefinition)
@@ -1849,6 +1863,8 @@ export function App() {
       ? savedMetadata
         ? 'The Copilot token is already in the vault. Run connection validation before you finish onboarding.'
         : 'Connect GitHub Copilot, keep the token in the unlocked vault, then validate the provider connection.'
+      : selectedProvider === 'cliproxyapi'
+        ? 'CLIProxyAPI requires an explicit endpoint. Save the endpoint first, keep the API key in the vault, then run Test connection before popup quick actions or sidepanel chat unlock.'
       : selectedDefinition.requiresCredential
         ? 'Save the provider settings first, then validate the current credential before finishing onboarding.'
         : 'Save the provider settings so the active model and endpoint are carried into the workspace.';
@@ -1860,6 +1876,10 @@ export function App() {
       ? isProviderReadyForOnboarding()
         ? 'Copilot is connected and validated, so the side panel and popup can reuse it immediately.'
         : 'Copilot still needs a connected vault token plus a successful validation before onboarding can finish.'
+      : selectedProvider === 'cliproxyapi'
+        ? isProviderReadyForOnboarding()
+          ? 'CLIProxyAPI is ready because the endpoint is saved, the API key is in the vault, and the latest connection test passed.'
+          : `CLIProxyAPI is not ready yet. Current state: ${credentialStatusLabel.toLowerCase()}. Save endpoint -> save key -> Test connection -> ready.`
       : selectedDefinition.requiresCredential
         ? isProviderReadyForOnboarding()
           ? 'This provider passed validation, so Flux can carry the saved credential into live workflows.'
@@ -1905,6 +1925,13 @@ export function App() {
       : accountMessageState === 'error'
         ? 'border-error-500/30 bg-error-50 text-error-700'
         : 'border-border bg-surface-primary text-content-secondary';
+
+  const providerStatusSummary =
+    validationMessage ||
+    saveMessage ||
+    (selectedProvider === 'cliproxyapi'
+      ? 'CLIProxyAPI requires an endpoint. Save the endpoint and API key first, then run Test connection to mark it ready.'
+      : 'Save changes, then test the selected provider configuration.');
 
   const providerSetupPanel = (
     <section className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
@@ -2557,9 +2584,7 @@ export function App() {
         )}
 
         <div className={`rounded-2xl border px-4 py-3 text-sm ${statusTone}`}>
-          {validationMessage ||
-            saveMessage ||
-            'Save changes, then test the selected provider configuration.'}
+          {providerStatusSummary}
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2601,6 +2626,7 @@ export function App() {
         language={settings.language}
         providerSetupPanel={providerSetupPanel}
         providerUsesAccountImport={providerUsesAccountImport(selectedDefinition)}
+        providerRequiresEndpoint={selectedProvider === 'cliproxyapi'}
         providerStatusLabel={onboardingProviderStatusLabel}
         providerSetupHint={onboardingProviderSetupHint}
         providerReadyHint={onboardingProviderReadyHint}

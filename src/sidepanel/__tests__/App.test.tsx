@@ -8,8 +8,9 @@ import { resetActionLogStore } from '../store/actionLogStore';
 import { resetChatStore } from '../store/chatStore';
 import { resetWorkflowUIStore } from '../store/workflowUIStore';
 import { resetSessionStore } from '../store/sessionStore';
+import { createDefaultProviderConfigs } from '../../shared/config';
 
-import type { ExtensionMessage, SavedWorkflow, Session } from '@shared/types';
+import type { ExtensionMessage, SavedWorkflow, Session } from '../../shared/types';
 
 const listeners = new Set<(message: unknown) => void>();
 
@@ -137,6 +138,46 @@ describe('Side panel App (U-15 integration)', () => {
       switch (type) {
         case 'SESSION_LIST':
           return { sessions: [createSession('session-1')] };
+        case 'SETTINGS_GET':
+          return {
+            settings: {
+              language: 'en',
+              theme: 'system',
+              defaultProvider: 'openai',
+              streamResponses: true,
+              includeScreenshotsInContext: true,
+              maxContextLength: 12,
+              defaultTimeout: 30000,
+              autoRetryOnFailure: true,
+              maxRetries: 2,
+              screenshotOnError: true,
+              allowCustomScripts: false,
+              debugMode: false,
+              showFloatingBar: true,
+              highlightElements: true,
+              soundNotifications: false,
+            },
+            providers: createDefaultProviderConfigs(),
+            activeProvider: 'openai',
+            onboarding: {
+              version: 1,
+              completed: true,
+              lastStep: 3,
+              completedAt: Date.now(),
+              providerReady: true,
+              configuredProvider: 'openai',
+              validatedProvider: 'openai',
+            },
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {},
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
         case 'SESSION_CREATE':
           return { session: createSession('session-2') };
         case 'SESSION_SEND_MESSAGE':
@@ -324,6 +365,96 @@ describe('Side panel App (U-15 integration)', () => {
     expect(screen.getByText('Vault locked')).toBeInTheDocument();
     expect(
       screen.getByText(/unlock the vault in options, then validate the active account again if needed/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('shows CLIProxyAPI readiness guidance and blocks send until validation passes', async () => {
+    sendExtensionRequest.mockImplementation(async (type: string) => {
+      switch (type) {
+        case 'SESSION_LIST':
+          return {
+            sessions: [
+              createSession('session-cliproxyapi', {
+                config: {
+                  id: 'session-cliproxyapi',
+                  provider: 'cliproxyapi',
+                  model: 'gpt-5',
+                  name: 'CLIProxyAPI troubleshooting',
+                },
+              }),
+            ],
+          };
+        case 'SETTINGS_GET': {
+          const providers = createDefaultProviderConfigs();
+          providers.cliproxyapi.customEndpoint = 'http://127.0.0.1:8317/v1';
+
+          return {
+            settings: {
+              language: 'en',
+              theme: 'system',
+              defaultProvider: 'cliproxyapi',
+              streamResponses: true,
+              includeScreenshotsInContext: true,
+              maxContextLength: 12,
+              defaultTimeout: 30000,
+              autoRetryOnFailure: true,
+              maxRetries: 2,
+              screenshotOnError: true,
+              allowCustomScripts: false,
+              debugMode: false,
+              showFloatingBar: true,
+              highlightElements: true,
+              soundNotifications: false,
+            },
+            providers,
+            activeProvider: 'cliproxyapi',
+            onboarding: {
+              version: 1,
+              completed: true,
+              lastStep: 3,
+              completedAt: Date.now(),
+              providerReady: false,
+              configuredProvider: 'cliproxyapi',
+            },
+            vault: {
+              version: 1,
+              initialized: true,
+              lockState: 'unlocked',
+              hasLegacySecrets: false,
+              credentials: {
+                cliproxyapi: {
+                  version: 1,
+                  provider: 'cliproxyapi',
+                  providerFamily: 'default',
+                  authFamily: 'api-key',
+                  authKind: 'api-key',
+                  maskedValue: '••••••••••••',
+                  updatedAt: Date.now(),
+                },
+              },
+              accounts: {},
+              activeAccounts: {},
+            },
+          };
+        }
+        case 'SESSION_CREATE':
+          return { session: createSession('session-2') };
+        case 'SESSION_SEND_MESSAGE':
+          return undefined;
+        case 'WORKFLOW_LIST':
+          return { workflows: [] };
+        default:
+          return undefined;
+      }
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText('CLIProxyAPI endpoint saved but unvalidated')).toBeInTheDocument();
+    expect(screen.getByText('Test connection')).toBeInTheDocument();
+    expect(
+      screen.getByText(/keep the saved endpoint, then run test connection/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
