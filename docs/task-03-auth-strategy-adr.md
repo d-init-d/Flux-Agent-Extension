@@ -4,6 +4,14 @@
 
 Accepted
 
+## Superseded-In-Part Note
+
+`docs/task-oa-01-openai-unified-auth-surface-adr.md` supersedes the earlier product-surface naming decision from this ADR.
+
+- The security and trust-boundary rules in this document still stand.
+- The earlier decision to keep the account-backed path as a separate primary provider surface (`codex`) is no longer the target UX.
+- The current direction is one primary `OpenAI` provider surface with multiple auth lanes, while preserving the same background-owned secret boundary and the same rejection of cookie/session scraping.
+
 ## Context
 
 The current extension supports provider auth modes oriented around single-provider credentials such as API keys and GitHub OAuth. The project now wants an OpenCode-style provider that can use a ChatGPT Plus account with Codex access.
@@ -13,11 +21,11 @@ Task 01 documented the architectural gap between the extension and OpenCode-styl
 ## Decision
 
 - Continue the feature as `experimental`
-- Introduce a new account-backed provider family instead of overloading `openai`
-- Use provider code name `codex`
-- Use auth family label `chatgpt-account`
+- Keep a distinct internal account-backed auth lane instead of pretending ChatGPT account access is the same as an API key
+- Allow `codex` to remain as a migration/compatibility path rather than the long-term primary UX surface
+- Use auth family label `chatgpt-account` / `browser-account` semantics for the account-backed lane
 - Enforce `official-auth-first` as a hard architecture rule
-- Accept only an import or reuse model based on official client auth artifacts as the experimental fallback
+- Accept only official-client-derived account material, with helper/deep-link browser login as the current product direction and direct import/reuse retained only as historical or migration compatibility input
 - Reject cookie scraping, browser-session scraping, localStorage scraping, and anti-bot replay as implementation strategies
 
 ## Decision Drivers
@@ -28,17 +36,17 @@ Task 01 documented the architectural gap between the extension and OpenCode-styl
 - The vault and background runtime need stricter trust boundaries than a browser-session-driven design would allow
 - Product copy must reflect the real risk and support level of the feature
 
-## Provider Naming Strategy
+## Provider Naming Strategy (Historical For Task 03)
 
 ### Provider Family
 
 - Family: `chatgpt-account`
-- Concrete provider name in code: `codex`
-- UI label: `ChatGPT Plus / Codex (Experimental)`
+- Concrete provider name in code at the time: `codex`
+- UI label at the time: `ChatGPT Plus / Codex (Experimental)`
 
 ### Naming Rules
 
-- Do not overload `openai`
+- Do not overload `openai` in a way that hides the distinction between API-key billing and ChatGPT-account entitlement
 - Do not present this as API-key-backed access
 - Keep room for a future official OpenAI extension auth path without breaking the account-backed provider identity
 
@@ -52,9 +60,11 @@ If a public, supported extension-facing auth surface becomes available, the proj
 
 ### Accepted Experimental Path
 
-- Import or reuse auth artifacts produced by official OpenAI or Codex clients
+- Helper/deep-link handoff of official-client-derived account material is the current forward path for browser login
+- Direct import or reuse of official-client-derived auth artifacts is historical/migration compatibility input, not the primary OA-01+ product surface
 - Store only the minimum long-lived artifact required for refresh or revalidation
 - Keep short-lived runtime session tokens in memory only
+- Require background provenance validation and request `state`/nonce matching before any helper/deep-link payload is persisted
 
 ### Explicitly Rejected Paths
 
@@ -85,14 +95,15 @@ If a public, supported extension-facing auth surface becomes available, the proj
 
 ## High-Level Data Flow
 
-1. User opens the provider settings UI and selects `ChatGPT Plus / Codex (Experimental)`
-2. User imports or connects an auth artifact produced by an official OpenAI/Codex client
-3. Background verifies artifact shape and minimal entitlement viability
-4. Vault stores encrypted long-lived artifact and masked metadata
-5. Runtime resolves the active account and exchanges or refreshes a short-lived runtime token
-6. Provider `codex` performs requests using the runtime token only
-7. Quota, rate-limit, and entitlement status are cached as metadata
-8. Revoke or remove wipes the stored artifact, metadata, and in-memory session cache
+1. User opens the provider settings UI and selects the account-backed OpenAI browser-login lane.
+2. The extension initiates an approved helper/deep-link browser-login request.
+3. The helper/deep-link response returns official-client-derived account material to the trusted background boundary.
+4. Background verifies artifact shape, helper provenance, request `state`/nonce binding, and minimal entitlement viability.
+5. Vault stores encrypted long-lived artifact and masked metadata.
+6. Runtime resolves the active account and exchanges or refreshes a short-lived runtime token.
+7. The account-backed runtime path performs requests using the runtime token only.
+8. Quota, rate-limit, and entitlement status are cached as metadata.
+9. Revoke or remove wipes the stored artifact, metadata, and in-memory session cache.
 
 ## Runtime Injection Point
 
@@ -118,8 +129,8 @@ The account-backed provider must resolve credentials before the provider instanc
 
 ### Reuse `openai` Provider
 
-- Rejected
-- It would blur billing, auth, and entitlement semantics between API keys and ChatGPT-account-backed access
+- Reframed by OA-01
+- The product may reuse `OpenAI` as the user-facing provider surface, but only if the implementation keeps the API-key lane and the browser-account lane explicitly distinct in storage, runtime resolution, readiness, and model policy
 
 ### Wait For Official Third-Party Extension OAuth Only
 
@@ -174,7 +185,8 @@ The account-backed provider must resolve credentials before the provider instanc
 
 ### Task 08
 
-- Add manifest, identity, callback, or permission changes only if the chosen import or validation flow truly requires them
+- Historical note: later docs now narrow the current phase to helper/deep-link browser login without extension-owned callback pages
+- Add manifest, identity, callback, or permission changes only if a later ADR explicitly replaces that narrower phase rule
 
 ### Task 09
 

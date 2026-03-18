@@ -1,7 +1,7 @@
 # AI Browser Controller - Master Blueprint
 
 > **Version:** 1.0.0
-> **Last Updated:** 2026-03-05
+> **Last Updated:** 2026-03-18
 > **Status:** Planning Phase
 > **Codename:** Phantom
 > **Goal:** Build a Chrome Extension that rivals Playwright/Comet Browser in automation power, controlled entirely by AI, with zero local setup.
@@ -29,46 +29,46 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 
 ### 1.2 Competitive Landscape
 
-| Feature | Playwright | Comet Browser | Our Extension |
-|---------|-----------|---------------|---------------|
-| **Setup** | Node.js + npm | Separate browser | Chrome Extension only |
-| **User** | Developers | Power users | Everyone |
-| **Control** | Code | AI + Code | AI Chat |
-| **Navigate** | ✅ | ✅ | ✅ `chrome.tabs` |
-| **Click** | ✅ | ✅ | ✅ Content Script + CDP |
-| **Fill forms** | ✅ | ✅ | ✅ Content Script + CDP |
-| **Screenshot** | ✅ | ✅ | ✅ `chrome.tabs.captureVisibleTab` + CDP |
-| **Full page screenshot** | ✅ | ✅ | ✅ CDP `Page.captureScreenshot` |
-| **Network intercept** | ✅ | ✅ | ✅ `chrome.debugger` CDP |
-| **Wait for element** | ✅ | ✅ | ✅ MutationObserver + polling |
-| **Wait for navigation** | ✅ | ✅ | ✅ `chrome.webNavigation` |
-| **Multi-tab** | ✅ | ✅ | ✅ `chrome.tabs` |
-| **Selectors (CSS/XPath/text/ARIA)** | ✅ | ✅ | ✅ Custom selector engine |
-| **Auto-wait** | ✅ | ⚠️ Partial | ✅ Custom auto-wait |
-| **Retry logic** | ⚠️ Manual | ⚠️ | ✅ Built-in intelligent retry |
-| **Keyboard simulation** | ✅ | ✅ | ✅ `KeyboardEvent` + CDP `Input.dispatchKeyEvent` |
-| **Mouse simulation** | ✅ | ✅ | ✅ `MouseEvent` + CDP `Input.dispatchMouseEvent` |
-| **File upload** | ✅ | ⚠️ | ✅ CDP `DOM.setFileInputFiles` |
-| **PDF generation** | ✅ | ✅ | ✅ CDP `Page.printToPDF` |
-| **Video recording** | ✅ | ⚠️ | ⚠️ Possible via `MediaRecorder` |
-| **Geolocation mock** | ✅ | ✅ | ✅ CDP `Emulation.setGeolocationOverride` |
-| **Device emulation** | ✅ | ✅ | ✅ CDP `Emulation.setDeviceMetricsOverride` |
-| **Cookie management** | ✅ | ✅ | ✅ `chrome.cookies` + CDP |
-| **Local storage access** | ✅ | ✅ | ✅ Content Script |
-| **iframe support** | ✅ | ⚠️ | ✅ Frame-aware content scripts + targeted bridge routing |
-| **Shadow DOM** | ✅ | ⚠️ | ✅ `element.shadowRoot` piercing |
+| Feature                             | Playwright    | Comet Browser    | Our Extension                                            |
+| ----------------------------------- | ------------- | ---------------- | -------------------------------------------------------- |
+| **Setup**                           | Node.js + npm | Separate browser | Chrome Extension only                                    |
+| **User**                            | Developers    | Power users      | Everyone                                                 |
+| **Control**                         | Code          | AI + Code        | AI Chat                                                  |
+| **Navigate**                        | ✅            | ✅               | ✅ `chrome.tabs`                                         |
+| **Click**                           | ✅            | ✅               | ✅ Content Script + CDP                                  |
+| **Fill forms**                      | ✅            | ✅               | ✅ Content Script + CDP                                  |
+| **Screenshot**                      | ✅            | ✅               | ✅ `chrome.tabs.captureVisibleTab` + CDP                 |
+| **Full page screenshot**            | ✅            | ✅               | ✅ CDP `Page.captureScreenshot`                          |
+| **Network intercept**               | ✅            | ✅               | ✅ `chrome.debugger` CDP                                 |
+| **Wait for element**                | ✅            | ✅               | ✅ MutationObserver + polling                            |
+| **Wait for navigation**             | ✅            | ✅               | ✅ `chrome.webNavigation`                                |
+| **Multi-tab**                       | ✅            | ✅               | ✅ `chrome.tabs`                                         |
+| **Selectors (CSS/XPath/text/ARIA)** | ✅            | ✅               | ✅ Custom selector engine                                |
+| **Auto-wait**                       | ✅            | ⚠️ Partial       | ✅ Custom auto-wait                                      |
+| **Retry logic**                     | ⚠️ Manual     | ⚠️               | ✅ Built-in intelligent retry                            |
+| **Keyboard simulation**             | ✅            | ✅               | ✅ `KeyboardEvent` + CDP `Input.dispatchKeyEvent`        |
+| **Mouse simulation**                | ✅            | ✅               | ✅ `MouseEvent` + CDP `Input.dispatchMouseEvent`         |
+| **File upload**                     | ✅            | ⚠️               | ✅ CDP `DOM.setFileInputFiles`                           |
+| **PDF generation**                  | ✅            | ✅               | ✅ CDP `Page.printToPDF`                                 |
+| **Video recording**                 | ✅            | ⚠️               | ⚠️ Possible via `MediaRecorder`                          |
+| **Geolocation mock**                | ✅            | ✅               | ✅ CDP `Emulation.setGeolocationOverride`                |
+| **Device emulation**                | ✅            | ✅               | ✅ CDP `Emulation.setDeviceMetricsOverride`              |
+| **Cookie management**               | ✅            | ✅               | ✅ `chrome.cookies` + CDP                                |
+| **Local storage access**            | ✅            | ✅               | ✅ Content Script                                        |
+| **iframe support**                  | ✅            | ⚠️               | ✅ Frame-aware content scripts + targeted bridge routing |
+| **Shadow DOM**                      | ✅            | ⚠️               | ✅ `element.shadowRoot` piercing                         |
 
 ### 1.3 Our Unique Advantages
 
-| Advantage | Description |
-|-----------|-------------|
-| **Zero setup** | Install extension → done. No Node.js, no terminal. |
-| **AI-first** | Natural language, not code. "Fill this form" not `page.fill()` |
-| **Context-aware** | AI sees the page, understands layout, adapts to changes |
-| **Self-healing** | AI retries with different selectors if first attempt fails |
-| **Multi-provider** | Claude, GPT, Gemini, Ollama — user's choice |
-| **Visual feedback** | Real-time highlighting of what AI is doing |
-| **Session memory** | AI remembers what it did, can undo, can learn patterns |
+| Advantage           | Description                                                    |
+| ------------------- | -------------------------------------------------------------- |
+| **Zero setup**      | Install extension → done. No Node.js, no terminal.             |
+| **AI-first**        | Natural language, not code. "Fill this form" not `page.fill()` |
+| **Context-aware**   | AI sees the page, understands layout, adapts to changes        |
+| **Self-healing**    | AI retries with different selectors if first attempt fails     |
+| **Multi-provider**  | Claude, GPT, Gemini, Ollama — user's choice                    |
+| **Visual feedback** | Real-time highlighting of what AI is doing                     |
+| **Session memory**  | AI remembers what it did, can undo, can learn patterns         |
 
 ---
 
@@ -167,6 +167,110 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 └────────────────────────────────────────────────────────────────┘
 ```
 
+### 2.3 OpenAI Unified Auth Surface (Planned)
+
+**Product goal:** keep `OpenAI` as the single primary provider surface for the OpenAI ecosystem, but let users choose one of exactly 2 auth methods:
+
+1. `ChatGPT Pro/Plus (browser)`
+2. `Manually enter API Key`
+
+This phase does **not** include headless login and does **not** move to full extension-owned OAuth callback handling. OA-01 locks that contract at the documentation level before runtime/UI work begins.
+
+#### UX shape
+
+- `Provider = OpenAI`
+- `Login method = ChatGPT Pro/Plus (browser)`
+  - helper/deep-link initiated
+  - account-backed runtime state
+  - readiness depends on a successful helper/deep-link handoff plus a validated account session
+- `Login method = Manually enter API Key`
+  - existing API-key path
+  - readiness depends on saved key + connection validation
+
+#### Internal architecture rule
+
+The UI should treat this as one provider surface, but the background runtime still needs two internal auth lanes. The unified provider label is a UX simplification, not a semantic merge.
+
+| Layer            | Manual API Key                      | ChatGPT Pro/Plus (browser)                                     |
+| ---------------- | ----------------------------------- | -------------------------------------------------------------- |
+| UI surface       | `OpenAI` + `Manually enter API Key` | `OpenAI` + `ChatGPT Pro/Plus (browser)`                        |
+| Vault material   | encrypted API key                   | encrypted long-lived account artifact/minimal refresh material |
+| Runtime material | provider API key                    | memory-only account-backed runtime token/session               |
+| Primary adapter  | `openai` provider                   | `openai + browser-account` account-backed runtime path         |
+| Readiness gate   | key saved + validated               | helper login completed + account validated + session healthy   |
+
+#### Browser helper/deep-link flow
+
+```
+Options UI
+  -> user selects OpenAI
+  -> user selects ChatGPT Pro/Plus (browser)
+  -> extension launches helper/deep-link flow
+  -> helper opens official browser login flow
+  -> helper returns official artifact/minimal account material to background
+  -> background validates and stores encrypted long-lived state in vault
+  -> runtime resolves short-lived session/token in memory only
+  -> popup/sidepanel unlock when account-backed OpenAI is healthy
+```
+
+#### Why helper/deep-link instead of full extension OAuth
+
+- keeps the current background-owned vault boundary intact
+- avoids adding `chrome.identity`, callback pages, PKCE/state handling, and extension-owned browser auth windows in this phase
+- keeps room for a future official auth contract without forcing a large auth rewrite now
+- better matches the desired OpenCode-like UX without adding headless complexity
+
+#### Model policy
+
+- Model selection must become auth-aware.
+- `OpenAI + API key` shows OpenAI platform/API models.
+- `OpenAI + browser-account` shows account-backed models supported by the Codex/OpenAI account runtime.
+- The UI should stop pretending one static default model works for both auth methods.
+- The runtime must reject models incompatible with the selected auth method before a live request is sent.
+
+#### Legacy migration policy
+
+- Existing `codex` users should migrate to `OpenAI + ChatGPT Pro/Plus (browser)` without losing encrypted account state.
+- `codex` may remain as an internal or legacy compatibility route during migration, but the destination semantic shape is `openai + browser-account`.
+- Once migration is stable, `codex` should no longer be the primary first-run UX surface.
+
+#### Security constraints
+
+- no cookie scraping
+- no localStorage/sessionStorage scraping
+- no piggybacking on logged-in ChatGPT tabs
+- no headless flow in this phase
+- no persistence of short-lived runtime session tokens
+- no raw helper payloads or tokens exposed to the UI
+- no helper/deep-link payload may enter the vault until the background verifies provenance and matches it to an extension-issued request `state`/nonce
+
+#### Expected file touchpoints for this phase
+
+- `src/shared/config/provider-registry.ts`
+- `src/shared/types/ai.ts`
+- `src/shared/types/storage.ts`
+- `src/shared/types/messages.ts`
+- `src/options/App.tsx`
+- `src/options/onboarding/OnboardingFlow.tsx`
+- `src/popup/App.tsx`
+- `src/sidepanel/App.tsx`
+- `src/background/ui-session-runtime.ts`
+- `src/background/credential-vault.ts`
+- `src/background/codex-account-session-manager.ts`
+- new helper/deep-link coordination module under `src/core/auth/` or `src/background/`
+
+#### Delivery order
+
+1. lock ADR and UX contract
+2. redesign provider/auth surface for multi-auth-per-provider
+3. define helper/deep-link transport
+4. expand vault and message contracts
+5. unify runtime auth resolution for OpenAI
+6. ship the OpenAI auth-choice UX
+7. add auth-aware model routing
+8. land Codex migration bridge
+9. close with tests, docs, and manual QA
+
 ---
 
 ## 3. Module Blueprint
@@ -223,102 +327,110 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 ### 3.2 Module Details
 
 #### MODULE 1: AI Client Manager
+
 **Assigned to:** `@sub-tech-lead`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | Communicate with AI providers, manage streaming, handle errors |
-| **Key Files** | `src/core/ai-client/manager.ts`, `providers/*.ts`, `prompts/*.ts` |
-| **Interfaces** | `IAIProvider`, `IAIClientManager` (see ARCHITECTURE.md) |
-| **Providers** | Claude, GPT-4o, Gemini, Ollama, OpenRouter |
-| **Features** | Streaming, token counting, auto-retry, provider fallback |
-| **Security** | API keys encrypted (AES-256-GCM), never logged |
-| **Tests** | Mock fetch, streaming parser tests, error scenarios |
+| Aspect         | Detail                                                            |
+| -------------- | ----------------------------------------------------------------- |
+| **Purpose**    | Communicate with AI providers, manage streaming, handle errors    |
+| **Key Files**  | `src/core/ai-client/manager.ts`, `providers/*.ts`, `prompts/*.ts` |
+| **Interfaces** | `IAIProvider`, `IAIClientManager` (see ARCHITECTURE.md)           |
+| **Providers**  | Claude, GPT-4o, Gemini, Ollama, OpenRouter                        |
+| **Features**   | Streaming, token counting, auto-retry, provider fallback          |
+| **Security**   | API keys encrypted (AES-256-GCM), never logged                    |
+| **Tests**      | Mock fetch, streaming parser tests, error scenarios               |
 
 #### MODULE 2: Command Parser & Validator
+
 **Assigned to:** `@sub-tech-lead` + `@sub-security-auditor`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | Parse AI JSON responses into validated, safe action sequences |
-| **Key Files** | `src/core/command-parser/parser.ts`, `validator.ts`, `sanitizer.ts` |
-| **Action Types** | 30+ types (see ARCHITECTURE.md ActionType union) |
-| **Validation** | Zod schemas for every action type |
-| **Security** | URL blocklist, selector sanitization, sensitivity classification |
-| **Tests** | Valid/invalid action parsing, injection attempts, edge cases |
+| Aspect           | Detail                                                              |
+| ---------------- | ------------------------------------------------------------------- |
+| **Purpose**      | Parse AI JSON responses into validated, safe action sequences       |
+| **Key Files**    | `src/core/command-parser/parser.ts`, `validator.ts`, `sanitizer.ts` |
+| **Action Types** | 30+ types (see ARCHITECTURE.md ActionType union)                    |
+| **Validation**   | Zod schemas for every action type                                   |
+| **Security**     | URL blocklist, selector sanitization, sensitivity classification    |
+| **Tests**        | Valid/invalid action parsing, injection attempts, edge cases        |
 
 #### MODULE 3: Browser Controller
+
 **Assigned to:** `@sub-tech-lead`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | Execute validated actions via chrome APIs (scripting + debugger) |
-| **Key Files** | `src/core/browser-controller/controller.ts`, `tab-manager.ts`, `debugger-adapter.ts`, `scripting-adapter.ts` |
-| **Strategy** | Hybrid: Content Script primary, CDP fallback |
-| **Features** | Auto-wait, retry with alternative selectors, action queue |
-| **CDP Commands** | DOM, Input, Page, Network, Emulation, Runtime |
-| **Tests** | Mock chrome APIs, action execution tests |
+| Aspect           | Detail                                                                                                       |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Purpose**      | Execute validated actions via chrome APIs (scripting + debugger)                                             |
+| **Key Files**    | `src/core/browser-controller/controller.ts`, `tab-manager.ts`, `debugger-adapter.ts`, `scripting-adapter.ts` |
+| **Strategy**     | Hybrid: Content Script primary, CDP fallback                                                                 |
+| **Features**     | Auto-wait, retry with alternative selectors, action queue                                                    |
+| **CDP Commands** | DOM, Input, Page, Network, Emulation, Runtime                                                                |
+| **Tests**        | Mock chrome APIs, action execution tests                                                                     |
 
 #### MODULE 4: Content Script Engine
+
 **Assigned to:** `@sub-tech-lead` + `@sub-qa-tester`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | DOM interaction, event simulation, visual feedback on target pages |
-| **Key Files** | `src/content/dom/*.ts`, `actions/*.ts`, `visual/*.ts` |
-| **Selector Engine** | CSS, XPath, text, ARIA label, placeholder, testId, nearText |
-| **Event Sim** | MouseEvent, KeyboardEvent, InputEvent, FocusEvent dispatch |
-| **Auto-Wait** | MutationObserver + polling + requestAnimationFrame |
-| **Visual** | Element highlighting, action overlay, progress indicator |
-| **Security** | Isolated world, input sanitization, PII redaction |
+| Aspect              | Detail                                                             |
+| ------------------- | ------------------------------------------------------------------ |
+| **Purpose**         | DOM interaction, event simulation, visual feedback on target pages |
+| **Key Files**       | `src/content/dom/*.ts`, `actions/*.ts`, `visual/*.ts`              |
+| **Selector Engine** | CSS, XPath, text, ARIA label, placeholder, testId, nearText        |
+| **Event Sim**       | MouseEvent, KeyboardEvent, InputEvent, FocusEvent dispatch         |
+| **Auto-Wait**       | MutationObserver + polling + requestAnimationFrame                 |
+| **Visual**          | Element highlighting, action overlay, progress indicator           |
+| **Security**        | Isolated world, input sanitization, PII redaction                  |
 
 #### MODULE 5: Session Manager
+
 **Assigned to:** `@sub-tech-lead`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | Manage conversation sessions, context building, action history |
-| **Key Files** | `src/core/session/manager.ts`, `context-builder.ts`, `history.ts` |
-| **Features** | Multi-session, pause/resume, undo, context compression |
-| **Context** | Progressive loading: URL+title → DOM summary → full DOM → screenshot |
-| **Storage** | Conversation history in chrome.storage.local |
+| Aspect        | Detail                                                               |
+| ------------- | -------------------------------------------------------------------- |
+| **Purpose**   | Manage conversation sessions, context building, action history       |
+| **Key Files** | `src/core/session/manager.ts`, `context-builder.ts`, `history.ts`    |
+| **Features**  | Multi-session, pause/resume, undo, context compression               |
+| **Context**   | Progressive loading: URL+title → DOM summary → full DOM → screenshot |
+| **Storage**   | Conversation history in chrome.storage.local                         |
 
 #### MODULE 6: Orchestrator Engine
+
 **Assigned to:** `@sub-tech-lead`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | Coordinate all modules: receive user input → AI → parse → execute → feedback |
-| **Key Files** | `src/background/orchestrator.ts` |
-| **Features** | Action queue, priority system, error recovery, rate limiting |
-| **Error Recovery** | 3-level: retry same → retry alternative → ask user |
-| **Kill Switch** | Immediate halt of all operations |
+| Aspect             | Detail                                                                       |
+| ------------------ | ---------------------------------------------------------------------------- |
+| **Purpose**        | Coordinate all modules: receive user input → AI → parse → execute → feedback |
+| **Key Files**      | `src/background/orchestrator.ts`                                             |
+| **Features**       | Action queue, priority system, error recovery, rate limiting                 |
+| **Error Recovery** | 3-level: retry same → retry alternative → ask user                           |
+| **Kill Switch**    | Immediate halt of all operations                                             |
 
 #### MODULE 7: Presentation Layer
+
 **Assigned to:** `@sub-ui-designer`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | All user-facing UI: Side Panel, Popup, Options, In-Page Overlay |
-| **Tech** | React 18 + Tailwind CSS + shadcn/ui + Lucide Icons |
-| **Side Panel** | Chat interface, action log, progress bar, quick actions |
-| **Popup** | Quick access, current page info, recent commands |
-| **Options** | Provider settings, permissions, appearance, data management |
-| **Overlay** | Element highlight, action indicator, floating status |
-| **Onboarding** | 4-step flow: Welcome → Connect AI → Permissions → Ready |
-| **a11y** | WCAG 2.1 AA, keyboard navigation, screen reader support |
+| Aspect         | Detail                                                          |
+| -------------- | --------------------------------------------------------------- |
+| **Purpose**    | All user-facing UI: Side Panel, Popup, Options, In-Page Overlay |
+| **Tech**       | React 18 + Tailwind CSS + shadcn/ui + Lucide Icons              |
+| **Side Panel** | Chat interface, action log, progress bar, quick actions         |
+| **Popup**      | Quick access, current page info, recent commands                |
+| **Options**    | Provider settings, permissions, appearance, data management     |
+| **Overlay**    | Element highlight, action indicator, floating status            |
+| **Onboarding** | 4-step flow: Welcome → Connect AI → Permissions → Ready         |
+| **a11y**       | WCAG 2.1 AA, keyboard navigation, screen reader support         |
 
 #### MODULE 8: Security Layer
+
 **Assigned to:** `@sub-security-auditor`
 
-| Aspect | Detail |
-|--------|--------|
-| **Purpose** | Cross-cutting security: encryption, validation, PII detection |
-| **Key Files** | `src/shared/storage/encryption.ts`, `src/core/command-parser/sanitizer.ts` |
-| **Encryption** | AES-256-GCM for API keys, PBKDF2 key derivation |
-| **PII** | SSN, CC, email, phone, API key pattern detection & redaction |
-| **Prompt Defense** | 5-layer defense (see SECURITY.md) |
-| **Audit Log** | Sensitive operations logged with timestamps |
+| Aspect             | Detail                                                                     |
+| ------------------ | -------------------------------------------------------------------------- |
+| **Purpose**        | Cross-cutting security: encryption, validation, PII detection              |
+| **Key Files**      | `src/shared/storage/encryption.ts`, `src/core/command-parser/sanitizer.ts` |
+| **Encryption**     | AES-256-GCM for API keys, PBKDF2 key derivation                            |
+| **PII**            | SSN, CC, email, phone, API key pattern detection & redaction               |
+| **Prompt Defense** | 5-layer defense (see SECURITY.md)                                          |
+| **Audit Log**      | Sensitive operations logged with timestamps                                |
 
 ---
 
@@ -358,104 +470,104 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 
 #### PHASE 1: Foundation (Week 1-4)
 
-| Task ID | Task | Primary | Support | Deliverable |
-|---------|------|---------|---------|-------------|
-| F-01 | Project scaffolding (Vite + CRXJS + TS) | `@sub-tech-lead` | — | Build system, manifest.json |
-| F-02 | Design token system & Tailwind config | `@sub-ui-designer` | — | design-tokens.css, tailwind.config |
-| F-03 | Shared types & interfaces | `@sub-tech-lead` | `@sub-security-auditor` | src/shared/** types |
-| F-04 | Storage layer + encryption | `@sub-tech-lead` | `@sub-security-auditor` | encryption.ts, storage API |
-| F-05 | Message protocol & bridge | `@sub-tech-lead` | `@sub-qa-tester` | Protocol types, bridge impl |
-| F-06 | Error handling framework | `@sub-tech-lead` | — | Error codes, ExtensionError |
-| F-07 | Unit test setup (Vitest) | `@sub-qa-tester` | — | vitest.config, test helpers |
-| F-08 | CI/CD pipeline (GitHub Actions) | `@sub-qa-tester` | — | .github/workflows/* |
-| F-09 | Security controls implementation | `@sub-security-auditor` | `@sub-tech-lead` | Sanitizer, validator, PII |
-| F-10 | Base UI components (Button, Input, etc.) | `@sub-ui-designer` | — | src/sidepanel/components/common/* |
+| Task ID | Task                                     | Primary                 | Support                 | Deliverable                        |
+| ------- | ---------------------------------------- | ----------------------- | ----------------------- | ---------------------------------- |
+| F-01    | Project scaffolding (Vite + CRXJS + TS)  | `@sub-tech-lead`        | —                       | Build system, manifest.json        |
+| F-02    | Design token system & Tailwind config    | `@sub-ui-designer`      | —                       | design-tokens.css, tailwind.config |
+| F-03    | Shared types & interfaces                | `@sub-tech-lead`        | `@sub-security-auditor` | src/shared/\*\* types              |
+| F-04    | Storage layer + encryption               | `@sub-tech-lead`        | `@sub-security-auditor` | encryption.ts, storage API         |
+| F-05    | Message protocol & bridge                | `@sub-tech-lead`        | `@sub-qa-tester`        | Protocol types, bridge impl        |
+| F-06    | Error handling framework                 | `@sub-tech-lead`        | —                       | Error codes, ExtensionError        |
+| F-07    | Unit test setup (Vitest)                 | `@sub-qa-tester`        | —                       | vitest.config, test helpers        |
+| F-08    | CI/CD pipeline (GitHub Actions)          | `@sub-qa-tester`        | —                       | .github/workflows/\*               |
+| F-09    | Security controls implementation         | `@sub-security-auditor` | `@sub-tech-lead`        | Sanitizer, validator, PII          |
+| F-10    | Base UI components (Button, Input, etc.) | `@sub-ui-designer`      | —                       | src/sidepanel/components/common/\* |
 
 #### PHASE 2: Core Engine (Week 5-10)
 
-| Task ID | Task | Primary | Support | Deliverable |
-|---------|------|---------|---------|-------------|
-| C-01 | AI Client: Abstract provider interface | `@sub-tech-lead` | — | IAIProvider impl |
-| C-02 | AI Client: Claude provider | `@sub-tech-lead` | — | claude.ts |
-| C-03 | AI Client: OpenAI provider | `@sub-tech-lead` | — | openai.ts |
-| C-04 | AI Client: Gemini provider | `@sub-tech-lead` | — | gemini.ts |
-| C-05 | AI Client: Ollama/OpenRouter | `@sub-tech-lead` | — | ollama.ts, openrouter.ts |
-| C-06 | AI Client: Streaming engine | `@sub-tech-lead` | — | Stream parsing + buffering |
-| C-07 | System prompt engineering | `@sub-tech-lead` | `@sub-security-auditor` | prompts/system.ts |
-| C-08 | Command Parser: JSON parsing | `@sub-tech-lead` | — | parser.ts |
-| C-09 | Command Parser: Zod schemas | `@sub-tech-lead` | `@sub-security-auditor` | action-schemas.ts |
-| C-10 | Command Parser: Sanitizer | `@sub-security-auditor` | `@sub-tech-lead` | sanitizer.ts |
-| C-11 | Browser Controller: Tab manager | `@sub-tech-lead` | — | tab-manager.ts |
-| C-12 | Browser Controller: Scripting adapter | `@sub-tech-lead` | — | scripting-adapter.ts |
-| C-13 | Browser Controller: Debugger (CDP) adapter | `@sub-tech-lead` | — | debugger-adapter.ts |
-| C-14 | Content Script: Selector engine | `@sub-tech-lead` | `@sub-qa-tester` | selector.ts |
-| C-15 | Content Script: Click/hover/focus | `@sub-tech-lead` | — | click.ts |
-| C-16 | Content Script: Fill/type/select | `@sub-tech-lead` | — | fill.ts, type.ts |
-| C-17 | Content Script: Scroll actions | `@sub-tech-lead` | — | scroll.ts |
-| C-18 | Content Script: Extract/screenshot | `@sub-tech-lead` | — | extract.ts |
-| C-19 | Content Script: DOM inspector | `@sub-tech-lead` | — | inspector.ts |
-| C-20 | Content Script: Auto-wait engine | `@sub-tech-lead` | — | MutationObserver + polling |
-| C-21 | Session Manager: Core impl | `@sub-tech-lead` | — | manager.ts |
-| C-22 | Session Manager: Context builder | `@sub-tech-lead` | `@sub-security-auditor` | context-builder.ts |
-| C-23 | Orchestrator: Action queue + execution | `@sub-tech-lead` | — | orchestrator.ts |
-| C-24 | Orchestrator: Error recovery | `@sub-tech-lead` | — | Retry + fallback logic |
-| C-25 | Unit tests for ALL core modules | `@sub-qa-tester` | `@sub-tech-lead` | tests/unit/** |
-| C-26 | Security review of core modules | `@sub-security-auditor` | — | Security findings report |
+| Task ID | Task                                       | Primary                 | Support                 | Deliverable                |
+| ------- | ------------------------------------------ | ----------------------- | ----------------------- | -------------------------- |
+| C-01    | AI Client: Abstract provider interface     | `@sub-tech-lead`        | —                       | IAIProvider impl           |
+| C-02    | AI Client: Claude provider                 | `@sub-tech-lead`        | —                       | claude.ts                  |
+| C-03    | AI Client: OpenAI provider                 | `@sub-tech-lead`        | —                       | openai.ts                  |
+| C-04    | AI Client: Gemini provider                 | `@sub-tech-lead`        | —                       | gemini.ts                  |
+| C-05    | AI Client: Ollama/OpenRouter               | `@sub-tech-lead`        | —                       | ollama.ts, openrouter.ts   |
+| C-06    | AI Client: Streaming engine                | `@sub-tech-lead`        | —                       | Stream parsing + buffering |
+| C-07    | System prompt engineering                  | `@sub-tech-lead`        | `@sub-security-auditor` | prompts/system.ts          |
+| C-08    | Command Parser: JSON parsing               | `@sub-tech-lead`        | —                       | parser.ts                  |
+| C-09    | Command Parser: Zod schemas                | `@sub-tech-lead`        | `@sub-security-auditor` | action-schemas.ts          |
+| C-10    | Command Parser: Sanitizer                  | `@sub-security-auditor` | `@sub-tech-lead`        | sanitizer.ts               |
+| C-11    | Browser Controller: Tab manager            | `@sub-tech-lead`        | —                       | tab-manager.ts             |
+| C-12    | Browser Controller: Scripting adapter      | `@sub-tech-lead`        | —                       | scripting-adapter.ts       |
+| C-13    | Browser Controller: Debugger (CDP) adapter | `@sub-tech-lead`        | —                       | debugger-adapter.ts        |
+| C-14    | Content Script: Selector engine            | `@sub-tech-lead`        | `@sub-qa-tester`        | selector.ts                |
+| C-15    | Content Script: Click/hover/focus          | `@sub-tech-lead`        | —                       | click.ts                   |
+| C-16    | Content Script: Fill/type/select           | `@sub-tech-lead`        | —                       | fill.ts, type.ts           |
+| C-17    | Content Script: Scroll actions             | `@sub-tech-lead`        | —                       | scroll.ts                  |
+| C-18    | Content Script: Extract/screenshot         | `@sub-tech-lead`        | —                       | extract.ts                 |
+| C-19    | Content Script: DOM inspector              | `@sub-tech-lead`        | —                       | inspector.ts               |
+| C-20    | Content Script: Auto-wait engine           | `@sub-tech-lead`        | —                       | MutationObserver + polling |
+| C-21    | Session Manager: Core impl                 | `@sub-tech-lead`        | —                       | manager.ts                 |
+| C-22    | Session Manager: Context builder           | `@sub-tech-lead`        | `@sub-security-auditor` | context-builder.ts         |
+| C-23    | Orchestrator: Action queue + execution     | `@sub-tech-lead`        | —                       | orchestrator.ts            |
+| C-24    | Orchestrator: Error recovery               | `@sub-tech-lead`        | —                       | Retry + fallback logic     |
+| C-25    | Unit tests for ALL core modules            | `@sub-qa-tester`        | `@sub-tech-lead`        | tests/unit/\*\*            |
+| C-26    | Security review of core modules            | `@sub-security-auditor` | —                       | Security findings report   |
 
 #### PHASE 3: UI & Integration (Week 11-14)
 
-| Task ID | Task | Primary | Support | Deliverable |
-|---------|------|---------|---------|-------------|
-| U-01 | Side Panel: Chat container | `@sub-ui-designer` | — | ChatContainer.tsx |
-| U-02 | Side Panel: Message bubbles (user/AI/action/error) | `@sub-ui-designer` | — | MessageBubble.tsx |
-| U-03 | Side Panel: Input area + commands | `@sub-ui-designer` | — | InputArea.tsx |
-| U-04 | Side Panel: Action log panel | `@sub-ui-designer` | — | ActionLogPanel.tsx |
-| U-05 | Side Panel: Action progress/timeline | `@sub-ui-designer` | — | ActionTimeline.tsx |
-| U-06 | Popup: Quick actions + page info | `@sub-ui-designer` | — | Popup App.tsx |
-| U-07 | Options: Provider settings | `@sub-ui-designer` | `@sub-security-auditor` | API key input (secure) |
-| U-08 | Options: Permission toggles | `@sub-ui-designer` | — | Permission settings |
-| U-09 | Options: Appearance (theme, lang) | `@sub-ui-designer` | — | Theme switcher |
-| U-10 | Onboarding: 4-step flow | `@sub-ui-designer` | — | Onboarding components |
-| U-11 | In-Page: Element highlight overlay | `@sub-ui-designer` | `@sub-tech-lead` | highlight.ts |
-| U-12 | In-Page: Action status overlay | `@sub-ui-designer` | `@sub-tech-lead` | overlay.ts |
-| U-13 | Dark/Light mode | `@sub-ui-designer` | — | Theme system |
-| U-14 | Keyboard shortcuts | `@sub-ui-designer` | `@sub-tech-lead` | Shortcut system |
-| U-15 | Integration: Connect UI ↔ Service Worker | `@sub-tech-lead` | `@sub-ui-designer` | Hooks + stores |
-| U-16 | Integration: E2E flow test | `@sub-qa-tester` | All agents | Full pipeline test |
-| U-17 | Accessibility audit | `@sub-ui-designer` | `@sub-qa-tester` | WCAG 2.1 AA compliance |
-| U-18 | Security audit of UI layer | `@sub-security-auditor` | `@sub-ui-designer` | XSS, injection review |
+| Task ID | Task                                               | Primary                 | Support                 | Deliverable            |
+| ------- | -------------------------------------------------- | ----------------------- | ----------------------- | ---------------------- |
+| U-01    | Side Panel: Chat container                         | `@sub-ui-designer`      | —                       | ChatContainer.tsx      |
+| U-02    | Side Panel: Message bubbles (user/AI/action/error) | `@sub-ui-designer`      | —                       | MessageBubble.tsx      |
+| U-03    | Side Panel: Input area + commands                  | `@sub-ui-designer`      | —                       | InputArea.tsx          |
+| U-04    | Side Panel: Action log panel                       | `@sub-ui-designer`      | —                       | ActionLogPanel.tsx     |
+| U-05    | Side Panel: Action progress/timeline               | `@sub-ui-designer`      | —                       | ActionTimeline.tsx     |
+| U-06    | Popup: Quick actions + page info                   | `@sub-ui-designer`      | —                       | Popup App.tsx          |
+| U-07    | Options: Provider settings                         | `@sub-ui-designer`      | `@sub-security-auditor` | API key input (secure) |
+| U-08    | Options: Permission toggles                        | `@sub-ui-designer`      | —                       | Permission settings    |
+| U-09    | Options: Appearance (theme, lang)                  | `@sub-ui-designer`      | —                       | Theme switcher         |
+| U-10    | Onboarding: 4-step flow                            | `@sub-ui-designer`      | —                       | Onboarding components  |
+| U-11    | In-Page: Element highlight overlay                 | `@sub-ui-designer`      | `@sub-tech-lead`        | highlight.ts           |
+| U-12    | In-Page: Action status overlay                     | `@sub-ui-designer`      | `@sub-tech-lead`        | overlay.ts             |
+| U-13    | Dark/Light mode                                    | `@sub-ui-designer`      | —                       | Theme system           |
+| U-14    | Keyboard shortcuts                                 | `@sub-ui-designer`      | `@sub-tech-lead`        | Shortcut system        |
+| U-15    | Integration: Connect UI ↔ Service Worker           | `@sub-tech-lead`        | `@sub-ui-designer`      | Hooks + stores         |
+| U-16    | Integration: E2E flow test                         | `@sub-qa-tester`        | All agents              | Full pipeline test     |
+| U-17    | Accessibility audit                                | `@sub-ui-designer`      | `@sub-qa-tester`        | WCAG 2.1 AA compliance |
+| U-18    | Security audit of UI layer                         | `@sub-security-auditor` | `@sub-ui-designer`      | XSS, injection review  |
 
 #### PHASE 4: Advanced Features (Week 15-18)
 
-| Task ID | Task | Primary | Support | Deliverable |
-|---------|------|---------|---------|-------------|
-| A-01 | CDP: Network interception | `@sub-tech-lead` | — | Network.* CDP commands |
-| A-02 | CDP: Device emulation | `@sub-tech-lead` | — | Emulation.* commands |
-| A-03 | CDP: Geolocation mock | `@sub-tech-lead` | — | setGeolocationOverride |
-| A-04 | CDP: PDF generation | `@sub-tech-lead` | — | Page.printToPDF |
-| A-05 | CDP: File upload | `@sub-tech-lead` | — | DOM.setFileInputFiles |
-| A-06 | Frame-aware iframe support | `@sub-tech-lead` | — | `all_frames` + targeted bridge routing |
-| A-07 | Multi-tab automation | `@sub-tech-lead` | — | Cross-tab orchestration |
-| A-08 | Action recording (watch & learn) | `@sub-tech-lead` | `@sub-ui-designer` | Record user actions |
-| A-09 | Action playback (macros) | `@sub-tech-lead` | `@sub-ui-designer` | Replay saved sequences |
-| A-10 | Export actions as script | `@sub-tech-lead` | — | JSON/Playwright export |
-| A-11 | Saved workflows (templates) | `@sub-ui-designer` | `@sub-tech-lead` | Workflow manager UI |
-| A-12 | Advanced prompt templates | `@sub-tech-lead` | `@sub-security-auditor` | Template library |
+| Task ID | Task                             | Primary            | Support                 | Deliverable                            |
+| ------- | -------------------------------- | ------------------ | ----------------------- | -------------------------------------- |
+| A-01    | CDP: Network interception        | `@sub-tech-lead`   | —                       | Network.\* CDP commands                |
+| A-02    | CDP: Device emulation            | `@sub-tech-lead`   | —                       | Emulation.\* commands                  |
+| A-03    | CDP: Geolocation mock            | `@sub-tech-lead`   | —                       | setGeolocationOverride                 |
+| A-04    | CDP: PDF generation              | `@sub-tech-lead`   | —                       | Page.printToPDF                        |
+| A-05    | CDP: File upload                 | `@sub-tech-lead`   | —                       | DOM.setFileInputFiles                  |
+| A-06    | Frame-aware iframe support       | `@sub-tech-lead`   | —                       | `all_frames` + targeted bridge routing |
+| A-07    | Multi-tab automation             | `@sub-tech-lead`   | —                       | Cross-tab orchestration                |
+| A-08    | Action recording (watch & learn) | `@sub-tech-lead`   | `@sub-ui-designer`      | Record user actions                    |
+| A-09    | Action playback (macros)         | `@sub-tech-lead`   | `@sub-ui-designer`      | Replay saved sequences                 |
+| A-10    | Export actions as script         | `@sub-tech-lead`   | —                       | JSON/Playwright export                 |
+| A-11    | Saved workflows (templates)      | `@sub-ui-designer` | `@sub-tech-lead`        | Workflow manager UI                    |
+| A-12    | Advanced prompt templates        | `@sub-tech-lead`   | `@sub-security-auditor` | Template library                       |
 
 > Execution note: `A-04` stays in scope, but implementation priority is currently `A-05 -> A-06 -> A-04` because upload and iframe support unlock more core browser-control flows.
 
 #### PHASE 5: Polish & Ship (Week 19-20)
 
-| Task ID | Task | Primary | Support | Deliverable |
-|---------|------|---------|---------|-------------|
-| P-01 | Performance optimization | `@sub-tech-lead` | `@sub-qa-tester` | Bundle size, memory |
-| P-02 | E2E test suite (50+ scenarios) | `@sub-qa-tester` | All agents | tests/e2e/** |
-| P-03 | Penetration testing | `@sub-security-auditor` | `@sub-qa-tester` | Security report |
-| P-04 | Chrome Web Store compliance | `@sub-security-auditor` | — | Policy checklist |
-| P-05 | Documentation | All agents | — | README, CONTRIBUTING |
-| P-06 | Beta testing with real users | `@sub-qa-tester` | All agents | Bug reports, feedback |
-| P-07 | Final security audit | `@sub-security-auditor` | — | Sign-off |
-| P-08 | Chrome Web Store submission | `@sub-tech-lead` | `@sub-security-auditor` | Published extension |
+| Task ID | Task                           | Primary                 | Support                 | Deliverable           |
+| ------- | ------------------------------ | ----------------------- | ----------------------- | --------------------- |
+| P-01    | Performance optimization       | `@sub-tech-lead`        | `@sub-qa-tester`        | Bundle size, memory   |
+| P-02    | E2E test suite (50+ scenarios) | `@sub-qa-tester`        | All agents              | tests/e2e/\*\*        |
+| P-03    | Penetration testing            | `@sub-security-auditor` | `@sub-qa-tester`        | Security report       |
+| P-04    | Chrome Web Store compliance    | `@sub-security-auditor` | —                       | Policy checklist      |
+| P-05    | Documentation                  | All agents              | —                       | README, CONTRIBUTING  |
+| P-06    | Beta testing with real users   | `@sub-qa-tester`        | All agents              | Bug reports, feedback |
+| P-07    | Final security audit           | `@sub-security-auditor` | —                       | Sign-off              |
+| P-08    | Chrome Web Store submission    | `@sub-tech-lead`        | `@sub-security-auditor` | Published extension   |
 
 > P-08a asset pack: five store-ready Chrome Web Store screenshots now live in `store-assets/`, with captions and file mapping tracked in `STORE_SCREENSHOTS.md`.
 
@@ -689,25 +801,25 @@ ai-browser-controller/
 
 ## 6. Technology Stack
 
-| Category | Technology | Version | Owner |
-|----------|-----------|---------|-------|
-| Language | TypeScript | 5.5+ | `@sub-tech-lead` |
-| Build | Vite + CRXJS | 5.4+ / 2.0-beta | `@sub-tech-lead` |
-| UI Framework | React | 18.3+ | `@sub-ui-designer` |
-| State | Zustand | 4.5+ | `@sub-tech-lead` |
-| Server State | TanStack Query | 5.0+ | `@sub-tech-lead` |
-| Styling | Tailwind CSS | 3.4+ | `@sub-ui-designer` |
-| Components | shadcn/ui | latest | `@sub-ui-designer` |
-| Icons | Lucide React | 0.400+ | `@sub-ui-designer` |
-| Validation | Zod | 3.23+ | `@sub-tech-lead` |
-| IDs | nanoid | 5.0+ | `@sub-tech-lead` |
-| Markdown | marked + DOMPurify | latest | `@sub-security-auditor` |
-| Encryption | Web Crypto API | native | `@sub-security-auditor` |
-| Unit Test | Vitest | 2.0+ | `@sub-qa-tester` |
-| E2E Test | Playwright | 1.45+ | `@sub-qa-tester` |
-| Linting | ESLint + typescript-eslint | 9.x / 8.x | `@sub-tech-lead` |
-| Formatting | Prettier | 3.3+ | `@sub-tech-lead` |
-| Git Hooks | Husky + lint-staged | 9.x / 15.x | `@sub-qa-tester` |
+| Category     | Technology                 | Version         | Owner                   |
+| ------------ | -------------------------- | --------------- | ----------------------- |
+| Language     | TypeScript                 | 5.5+            | `@sub-tech-lead`        |
+| Build        | Vite + CRXJS               | 5.4+ / 2.0-beta | `@sub-tech-lead`        |
+| UI Framework | React                      | 18.3+           | `@sub-ui-designer`      |
+| State        | Zustand                    | 4.5+            | `@sub-tech-lead`        |
+| Server State | TanStack Query             | 5.0+            | `@sub-tech-lead`        |
+| Styling      | Tailwind CSS               | 3.4+            | `@sub-ui-designer`      |
+| Components   | shadcn/ui                  | latest          | `@sub-ui-designer`      |
+| Icons        | Lucide React               | 0.400+          | `@sub-ui-designer`      |
+| Validation   | Zod                        | 3.23+           | `@sub-tech-lead`        |
+| IDs          | nanoid                     | 5.0+            | `@sub-tech-lead`        |
+| Markdown     | marked + DOMPurify         | latest          | `@sub-security-auditor` |
+| Encryption   | Web Crypto API             | native          | `@sub-security-auditor` |
+| Unit Test    | Vitest                     | 2.0+            | `@sub-qa-tester`        |
+| E2E Test     | Playwright                 | 1.45+           | `@sub-qa-tester`        |
+| Linting      | ESLint + typescript-eslint | 9.x / 8.x       | `@sub-tech-lead`        |
+| Formatting   | Prettier                   | 3.3+            | `@sub-tech-lead`        |
+| Git Hooks    | Husky + lint-staged        | 9.x / 15.x      | `@sub-qa-tester`        |
 
 ---
 
@@ -715,41 +827,41 @@ ai-browser-controller/
 
 ### 7.1 Per-PR Gates
 
-| Gate | Tool | Threshold | Enforced By |
-|------|------|-----------|-------------|
-| TypeScript compilation | `tsc --noEmit` | 0 errors | `@sub-tech-lead` |
-| Lint | ESLint | 0 errors, 0 warnings | `@sub-tech-lead` |
-| Format | Prettier | All files formatted | `@sub-tech-lead` |
-| Unit tests | Vitest | 100% pass, 80%+ coverage | `@sub-qa-tester` |
-| Bundle size | Vite build | < 500KB (gzip) | `@sub-tech-lead` |
-| Security scan | npm audit | 0 high/critical | `@sub-security-auditor` |
+| Gate                   | Tool           | Threshold                | Enforced By             |
+| ---------------------- | -------------- | ------------------------ | ----------------------- |
+| TypeScript compilation | `tsc --noEmit` | 0 errors                 | `@sub-tech-lead`        |
+| Lint                   | ESLint         | 0 errors, 0 warnings     | `@sub-tech-lead`        |
+| Format                 | Prettier       | All files formatted      | `@sub-tech-lead`        |
+| Unit tests             | Vitest         | 100% pass, 80%+ coverage | `@sub-qa-tester`        |
+| Bundle size            | Vite build     | < 500KB (gzip)           | `@sub-tech-lead`        |
+| Security scan          | npm audit      | 0 high/critical          | `@sub-security-auditor` |
 
 ### 7.2 Per-Phase Gates
 
-| Phase | Gate | Responsible |
-|-------|------|-------------|
-| Phase 1 | Build succeeds, all shared types compile | `@sub-tech-lead` |
-| Phase 2 | Core modules 80%+ unit test coverage | `@sub-qa-tester` |
-| Phase 3 | Full E2E: user input → AI → action → result | `@sub-qa-tester` |
-| Phase 4 | Security audit passed | `@sub-security-auditor` |
-| Phase 5 | Chrome Web Store policy compliance | `@sub-security-auditor` |
+| Phase   | Gate                                        | Responsible             |
+| ------- | ------------------------------------------- | ----------------------- |
+| Phase 1 | Build succeeds, all shared types compile    | `@sub-tech-lead`        |
+| Phase 2 | Core modules 80%+ unit test coverage        | `@sub-qa-tester`        |
+| Phase 3 | Full E2E: user input → AI → action → result | `@sub-qa-tester`        |
+| Phase 4 | Security audit passed                       | `@sub-security-auditor` |
+| Phase 5 | Chrome Web Store policy compliance          | `@sub-security-auditor` |
 
 ---
 
 ## 8. Risk Registry
 
-| ID | Risk | Probability | Impact | Mitigation | Owner |
-|----|------|-------------|--------|------------|-------|
-| R1 | AI generates harmful actions | High | Critical | 5-layer defense, action whitelist | `@sub-security-auditor` |
-| R2 | Content script blocked by site CSP | Medium | High | Fallback to CDP | `@sub-tech-lead` |
-| R3 | chrome.debugger banner annoys users | High | Medium | Use CS by default, CDP only when needed | `@sub-tech-lead` |
-| R4 | AI response parsing fails | Medium | Medium | Robust parser, retry with clarification | `@sub-tech-lead` |
-| R5 | Service Worker killed by Chrome | High | Medium | Keep-alive strategy, state persistence | `@sub-tech-lead` |
-| R6 | API key leaked in error/log | Low | Critical | Encryption, never log keys | `@sub-security-auditor` |
-| R7 | Extension rejected by Chrome Web Store | Medium | High | Pre-submission compliance check | `@sub-security-auditor` |
-| R8 | Poor performance on complex pages | Medium | Medium | Progressive context, throttling | `@sub-tech-lead` |
-| R9 | Cross-origin iframe issues | Medium | Medium | CDP Target.attachToTarget | `@sub-tech-lead` |
-| R10 | User accidentally triggers purchases | Medium | Critical | Confirmation for all payment actions | `@sub-security-auditor` |
+| ID  | Risk                                   | Probability | Impact   | Mitigation                              | Owner                   |
+| --- | -------------------------------------- | ----------- | -------- | --------------------------------------- | ----------------------- |
+| R1  | AI generates harmful actions           | High        | Critical | 5-layer defense, action whitelist       | `@sub-security-auditor` |
+| R2  | Content script blocked by site CSP     | Medium      | High     | Fallback to CDP                         | `@sub-tech-lead`        |
+| R3  | chrome.debugger banner annoys users    | High        | Medium   | Use CS by default, CDP only when needed | `@sub-tech-lead`        |
+| R4  | AI response parsing fails              | Medium      | Medium   | Robust parser, retry with clarification | `@sub-tech-lead`        |
+| R5  | Service Worker killed by Chrome        | High        | Medium   | Keep-alive strategy, state persistence  | `@sub-tech-lead`        |
+| R6  | API key leaked in error/log            | Low         | Critical | Encryption, never log keys              | `@sub-security-auditor` |
+| R7  | Extension rejected by Chrome Web Store | Medium      | High     | Pre-submission compliance check         | `@sub-security-auditor` |
+| R8  | Poor performance on complex pages      | Medium      | Medium   | Progressive context, throttling         | `@sub-tech-lead`        |
+| R9  | Cross-origin iframe issues             | Medium      | Medium   | CDP Target.attachToTarget               | `@sub-tech-lead`        |
+| R10 | User accidentally triggers purchases   | Medium      | Critical | Confirmation for all payment actions    | `@sub-security-auditor` |
 
 ---
 
@@ -807,14 +919,15 @@ For **every task** in the todolist, execute the following steps **strictly in or
 
 ### 9.3 Sub-Agent Assignment Rules
 
-| Sub-Agent | `subagent_type` | Assigned Work |
-|-----------|----------------|---------------|
-| `@sub-tech-lead` | `sub-tech-lead` | Core logic, managers, adapters, runtime routing, CDP integration, schemas, types, system prompts |
-| `@sub-ui-designer` | `sub-ui-designer` | UI components, sidepanel, popup, options page, overlays, CSS/styling |
-| `@sub-qa-tester` | `sub-qa-tester` | Unit tests, integration tests, E2E scenarios, test mocks, coverage |
-| `@sub-security-auditor` | `sub-security-auditor` | Security audit, action classification, permission checks, vulnerability scans |
+| Sub-Agent               | `subagent_type`        | Assigned Work                                                                                    |
+| ----------------------- | ---------------------- | ------------------------------------------------------------------------------------------------ |
+| `@sub-tech-lead`        | `sub-tech-lead`        | Core logic, managers, adapters, runtime routing, CDP integration, schemas, types, system prompts |
+| `@sub-ui-designer`      | `sub-ui-designer`      | UI components, sidepanel, popup, options page, overlays, CSS/styling                             |
+| `@sub-qa-tester`        | `sub-qa-tester`        | Unit tests, integration tests, E2E scenarios, test mocks, coverage                               |
+| `@sub-security-auditor` | `sub-security-auditor` | Security audit, action classification, permission checks, vulnerability scans                    |
 
 **Delegation rules:**
+
 - The main agent MUST use the `task` tool with the correct `subagent_type` to delegate work
 - The main agent MUST NOT implement tasks directly — it only plans, delegates, reviews, and verifies
 - If a task spans multiple sub-agent domains, split it into sub-tasks, one per sub-agent
@@ -825,15 +938,16 @@ For **every task** in the todolist, execute the following steps **strictly in or
 
 Every task MUST pass **all** gates before being marked PASS:
 
-| Gate | Command | Pass Criteria |
-|------|---------|---------------|
-| TypeScript | `pnpm typecheck` | Exit 0, no errors |
-| Unit Tests (selective) | `pnpm vitest run <changed-files>` | All pass |
-| Full Test Suite | `pnpm test` | All pass (known flaky tests documented) |
-| Build | `pnpm build` | Exit 0, no errors |
-| Security Regression | `pnpm audit --audit-level=high` | No NEW advisories |
+| Gate                   | Command                           | Pass Criteria                           |
+| ---------------------- | --------------------------------- | --------------------------------------- |
+| TypeScript             | `pnpm typecheck`                  | Exit 0, no errors                       |
+| Unit Tests (selective) | `pnpm vitest run <changed-files>` | All pass                                |
+| Full Test Suite        | `pnpm test`                       | All pass (known flaky tests documented) |
+| Build                  | `pnpm build`                      | Exit 0, no errors                       |
+| Security Regression    | `pnpm audit --audit-level=high`   | No NEW advisories                       |
 
 **Evidence format** — paste in the response:
+
 ```
 ✅ Gate Results for <TASK-ID>:
 - TypeScript:  pnpm typecheck       → Exit 0
@@ -855,26 +969,26 @@ When a task passes ALL gates:
 
 ### 9.6 TodoList Management Rules
 
-| Rule | Detail |
-|------|--------|
-| **Create BEFORE work** | Todolist must exist before any code is written |
-| **One `in_progress` at a time** | Never have multiple tasks in_progress simultaneously |
-| **Mark complete IMMEDIATELY** | As soon as a task passes, mark it — never batch completions |
-| **Include sub-agent assignment** | Each todo must note which `@sub-*` agent is responsible |
-| **Update on scope change** | If scope changes mid-phase, update the todolist before proceeding |
-| **Todolist = source of truth** | If it's not in the todolist, it doesn't get done |
+| Rule                             | Detail                                                            |
+| -------------------------------- | ----------------------------------------------------------------- |
+| **Create BEFORE work**           | Todolist must exist before any code is written                    |
+| **One `in_progress` at a time**  | Never have multiple tasks in_progress simultaneously              |
+| **Mark complete IMMEDIATELY**    | As soon as a task passes, mark it — never batch completions       |
+| **Include sub-agent assignment** | Each todo must note which `@sub-*` agent is responsible           |
+| **Update on scope change**       | If scope changes mid-phase, update the todolist before proceeding |
+| **Todolist = source of truth**   | If it's not in the todolist, it doesn't get done                  |
 
 ### 9.7 Hard Rules
 
-| Rule | Enforcement |
-|------|-------------|
-| Never skip a task | Tasks execute in roadmap/todolist order |
-| Never mark PASS without evidence | All 5 gates must show exit 0 |
-| Never batch commits | One commit per task |
-| Never leave code broken | If 3 failures → revert → escalate |
-| Never commit unrelated changes | Only task-scoped files in each commit |
-| Sub-agent MUST implement | Main agent delegates via `task` tool, reviews, does NOT implement |
-| Never start without todolist | Phase-level todolist is mandatory before any execution |
+| Rule                             | Enforcement                                                       |
+| -------------------------------- | ----------------------------------------------------------------- |
+| Never skip a task                | Tasks execute in roadmap/todolist order                           |
+| Never mark PASS without evidence | All 5 gates must show exit 0                                      |
+| Never batch commits              | One commit per task                                               |
+| Never leave code broken          | If 3 failures → revert → escalate                                 |
+| Never commit unrelated changes   | Only task-scoped files in each commit                             |
+| Sub-agent MUST implement         | Main agent delegates via `task` tool, reviews, does NOT implement |
+| Never start without todolist     | Phase-level todolist is mandatory before any execution            |
 | Never bypass the delegation step | Every implementation task goes through a sub-agent, no exceptions |
 
 ---
@@ -889,6 +1003,7 @@ When a task passes ALL gates:
 ### 10.1 What's Already Done (A-03.1)
 
 File `src/shared/types/actions.ts` has been modified:
+
 - `'mockGeolocation'` added to `ActionType` union (line ~48)
 - `MockGeolocationAction` interface created (lines 308-313):
   ```ts
@@ -917,6 +1032,7 @@ File `src/shared/types/actions.ts` has been modified:
 
 **File:** `src/core/command-parser/schemas/action-schemas.ts`
 **Changes (3 locations):**
+
 1. Add `'mockGeolocation'` to `ACTION_TYPES` array (after `'mockResponse'`, total becomes **35**)
 2. Add schema to `actionSchemas` object (after `mockResponse` entry):
    ```ts
@@ -936,6 +1052,7 @@ File `src/shared/types/actions.ts` has been modified:
 
 **File:** `src/core/ai-client/prompts/system.ts`
 **Changes (3 locations):**
+
 1. Add to `ACTION_REFERENCE` in the Advanced section (after `mockResponse`):
    ```
    - mockGeolocation: Set fake GPS coordinates (latitude, longitude, optional accuracy)
@@ -950,6 +1067,7 @@ File `src/shared/types/actions.ts` has been modified:
 **File:** `src/core/browser-controller/debugger-adapter.ts`
 **Location:** After `setTouchEmulationEnabled` method (line ~281 area)
 **Changes:**
+
 1. Add `GeolocationOverrideParams` type:
    ```ts
    export type GeolocationOverrideParams = {
@@ -971,6 +1089,7 @@ File `src/shared/types/actions.ts` has been modified:
 **Pattern:** Copy structure from `src/background/device-emulation-manager.ts`
 
 Key design:
+
 - Interface `IGeolocationMockManager` with methods: `activateSession`, `applyAction`, `clearSession`, `dispose`
 - State tracking: `mockByTab` (Map<number, AppliedGeolocationMock>), `tabIdsBySession`, `activeSessionByTab`
 - `applyAction(sessionId, tabId, action: MockGeolocationAction)`:
@@ -991,12 +1110,14 @@ Key design:
 
 **File:** `src/background/ui-session-runtime.ts`
 **Changes (mirror `DeviceEmulationManager` integration exactly):**
+
 1. **Import** `GeolocationMockManager` and `IGeolocationMockManager` from `./geolocation-mock-manager`
 2. **Add** `geolocationMockManager?: IGeolocationMockManager` to `UISessionRuntimeOptions`
 3. **Add** `private readonly geolocationMockManager: IGeolocationMockManager` property
 4. **Init** in constructor (after device emulation manager init):
    ```ts
-   this.geolocationMockManager = options.geolocationMockManager ??
+   this.geolocationMockManager =
+     options.geolocationMockManager ??
      new GeolocationMockManager({
        logger: this.logger.child('GeolocationMockManager'),
        debuggerAdapter: this.debuggerAdapter,
@@ -1021,10 +1142,12 @@ Key design:
 **Status:** PASS
 
 **New File:** `src/background/__tests__/geolocation-mock-manager.test.ts`
+
 - Follow `src/background/__tests__/device-emulation-manager.test.ts` pattern
 - Test: apply, clear session, clear tab, debugger detach cleanup, tab remove cleanup
 
 **Update existing test files:**
+
 - `src/core/command-parser/__tests__/action-schemas.test.ts` — change count 34→35, add `mockGeolocation` valid payload test
 - `src/core/ai-client/__tests__/prompts.test.ts` — change count 34→35
 - `src/core/browser-controller/__tests__/debugger-adapter.test.ts` — add `setGeolocationOverride` and `clearGeolocationOverride` tests
@@ -1035,6 +1158,7 @@ Key design:
 **Status:** PASS
 
 Observed results:
+
 - `pnpm typecheck` -> pass
 - selective Vitest runs for geolocation manager, action schemas, prompts, debugger adapter, and UI session runtime -> pass
 - `pnpm test` -> 65 files passed, 1004 tests passed
@@ -1042,6 +1166,7 @@ Observed results:
 - `pnpm audit --audit-level=high` -> no new advisories; only the known pre-existing `rollup` issues via `@crxjs/vite-plugin`
 
 Run in order:
+
 1. `pnpm typecheck` → exit 0
 2. `pnpm vitest run src/background/__tests__/geolocation-mock-manager.test.ts` → all pass
 3. `pnpm vitest run src/core/command-parser/__tests__/action-schemas.test.ts` → all pass
@@ -1062,14 +1187,14 @@ Run in order:
 
 ### 10.3 Known Context
 
-| Item | Value |
-|------|-------|
-| Action count before A-03 | 34 |
-| Action count after A-03 | 35 |
-| Test file count (as of A-02) | 64 |
-| Test count (as of A-02) | 997 |
-| Pre-existing audit advisories | 2 high (rollup via @crxjs/vite-plugin) — not a blocker |
-| Known flaky test | `src/options/__tests__/App.test.tsx > saves provider configuration...` — occasionally times out, passes on re-run |
-| Known stderr noise | React `act()` warnings from sidepanel tests — cosmetic only |
-| Working tree dirty files | `BLUEPRINT.md`, `ROADMAP.md` (workflow section additions), `actions.ts` (A-03.1 changes) — all uncommitted |
-| Latest pushed commit | `7d31cbd` — `feat: implement A-02 device emulation` |
+| Item                          | Value                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Action count before A-03      | 34                                                                                                                |
+| Action count after A-03       | 35                                                                                                                |
+| Test file count (as of A-02)  | 64                                                                                                                |
+| Test count (as of A-02)       | 997                                                                                                               |
+| Pre-existing audit advisories | 2 high (rollup via @crxjs/vite-plugin) — not a blocker                                                            |
+| Known flaky test              | `src/options/__tests__/App.test.tsx > saves provider configuration...` — occasionally times out, passes on re-run |
+| Known stderr noise            | React `act()` warnings from sidepanel tests — cosmetic only                                                       |
+| Working tree dirty files      | `BLUEPRINT.md`, `ROADMAP.md` (workflow section additions), `actions.ts` (A-03.1 changes) — all uncommitted        |
+| Latest pushed commit          | `7d31cbd` — `feat: implement A-02 device emulation`                                                               |
