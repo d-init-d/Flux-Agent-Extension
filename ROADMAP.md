@@ -1,7 +1,7 @@
-﻿# AI Browser Controller - Detailed Roadmap
+# AI Browser Controller - Detailed Roadmap
 
 > **Version:** 1.0.0
-> **Last Updated:** 2026-03-17
+> **Last Updated:** 2026-03-18
 > **Timeline:** 20 weeks (5 phases)
 > **Target Release:** v1.0.0 Chrome Web Store
 
@@ -44,6 +44,43 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | T14 - Unit and integration tests | DONE | Codex auth/provider/runtime/UI coverage now spans parser, session manager, adapter, popup, sidepanel, and options flows |
 | T15 - Manual QA checklist | DONE | Manual QA checklist is captured in `docs/task-15-manual-qa-checklist.md` |
 | T16 - Docs and tester guidance | DONE | README, TESTING, SECURITY, and tester-facing references now describe the Codex account-backed flow accurately |
+
+---
+
+## Active Initiative: CLIProxyAPI First-Class Provider
+
+**Goal:** Add a first-class `cliproxyapi` provider for the extension so users can connect to CLIProxyAPI directly instead of routing through the OpenAI provider setup, while keeping the existing OpenAI-compatible runtime plumbing and security posture.
+
+**MVP Scope:** API-key auth, endpoint-based setup, first-class provider UI, hosted `https://...` support, local loopback `http://localhost` / `http://127.0.0.1` support for CLIProxyAPI only, runtime validation, popup/sidepanel compatibility, test coverage, and docs.
+
+**Execution Rule:** one task at a time -> implement -> verify -> PASS -> commit -> push -> update roadmap -> move next.
+
+| Task | Status | Verify | Notes |
+| --- | --- | --- | --- |
+| CP-01 - Initiative scaffold in roadmap | DONE | Roadmap section reviewed locally | Added execution rule, task table, decision notes, and execution log scaffold for CLIProxyAPI work |
+| CP-02 - Shared provider surface | TODO | - | Add `cliproxyapi` to provider types, registry metadata, defaults, token/rate-limit maps |
+| CP-03 - Loader alignment | TODO | - | Make `cliproxyapi` lazy-loadable and runtime-registerable |
+| CP-04 - Provider plumbing | TODO | - | Reuse OpenAI-compatible provider flow for CLIProxyAPI |
+| CP-05 - Shared endpoint policy | TODO | - | Canonicalize and validate CLIProxyAPI endpoints in one shared module |
+| CP-06 - Options endpoint validation and quick connect UX | TODO | - | Allow hosted HTTPS and loopback HTTP only for CLIProxyAPI, with guided setup copy |
+| CP-07 - Background validation and runtime enforcement | TODO | - | Enforce normalized endpoint policy and runtime base URL pass-through in background paths |
+| CP-08 - Popup, onboarding, and sidepanel alignment | TODO | - | Keep provider naming and ready-state UX consistent across surfaces |
+| CP-09 - Test sweep and security regression coverage | TODO | - | Cover registry, loader, provider, options, runtime, and secret-handling regressions |
+| CP-10 - Docs and closeout | TODO | - | Update README/testing guidance and close the roadmap initiative cleanly |
+
+### Execution Notes
+
+- [2026-03-18] CP-01 DONE
+  - Roadmap scaffold created for the CLIProxyAPI initiative.
+  - Next step: start CP-02 and land the shared provider surface before touching runtime or UI policy.
+
+### Decision Notes
+
+- `cliproxyapi` ships as a dedicated provider, not as an alias of `custom` or a hidden OpenAI endpoint override.
+- Runtime should reuse the existing OpenAI-compatible provider plumbing wherever possible.
+- Local non-HTTPS support is a narrow exception for CLIProxyAPI only and must stay limited to exact loopback hosts.
+- Endpoint normalization and validation must converge in a shared policy module so options, background, and tests use the same source of truth.
+- `customHeaders` is out of MVP unless required by a real CLIProxyAPI deployment; if enabled later it must be reviewed as a separate security-sensitive task.
 
 ---
 
