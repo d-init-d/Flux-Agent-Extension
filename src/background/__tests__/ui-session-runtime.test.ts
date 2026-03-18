@@ -4364,6 +4364,310 @@ describe('UI session runtime', () => {
     );
   });
 
+  it('bridges legacy codex settings and vault state onto the OpenAI browser-account surface', async () => {
+    const observedAt = Date.UTC(2026, 2, 18, 10, 0, 0);
+    await chrome.storage.local.set({
+      settings: {
+        defaultProvider: 'codex',
+      },
+      activeProvider: 'codex',
+      providers: {
+        codex: {
+          enabled: true,
+          model: 'codex-latest',
+          maxTokens: 8192,
+          temperature: 0.15,
+        },
+      },
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****9012',
+            updatedAt: observedAt,
+            validatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_legacy_bridge',
+              label: 'Legacy Codex Bridge',
+              maskedIdentifier: 'legacy@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              validatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_legacy_bridge',
+        },
+      },
+    });
+    await chrome.storage.session.set({
+      __flux_vault_session__: {
+        passphrase: 'test-passphrase',
+        unlockedAt: observedAt,
+      },
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({ actionId: action.id, success: true, duration: 5 })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const settingsResponse = await runtime.handleMessage(
+      createExtensionMessage('SETTINGS_GET', undefined),
+    );
+
+    expect(settingsResponse.success).toBe(true);
+    expect(settingsResponse.data).toEqual(
+      expect.objectContaining({
+        activeProvider: 'openai',
+        settings: expect.objectContaining({ defaultProvider: 'openai' }),
+        providers: expect.objectContaining({
+          openai: expect.objectContaining({
+            authChoiceId: 'browser-account',
+            model: 'codex-latest',
+            maxTokens: 8192,
+            temperature: 0.15,
+          }),
+        }),
+        vault: expect.objectContaining({
+          activeAccounts: expect.objectContaining({ openai: 'acct_legacy_bridge' }),
+          credentials: expect.objectContaining({
+            openai: expect.objectContaining({
+              provider: 'openai',
+              authFamily: 'account-backed',
+            }),
+          }),
+          accounts: expect.objectContaining({
+            openai: [expect.objectContaining({ provider: 'openai', accountId: 'acct_legacy_bridge' })],
+          }),
+          browserLogins: expect.objectContaining({
+            openai: expect.objectContaining({ status: 'success', accountId: 'acct_legacy_bridge' }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('routes OpenAI browser-account account actions through legacy codex state when OpenAI browser state is absent', async () => {
+    await chrome.storage.local.clear();
+    await chrome.storage.session.clear();
+    const observedAt = Date.UTC(2026, 2, 18, 11, 0, 0);
+    const idToken = createJwt({
+      email: 'legacy-openai-bridge@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'plus',
+        chatgpt_user_id: 'user_legacy_openai_bridge',
+      },
+    });
+
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.saveAccount('codex', {
+      accountId: 'acct_openai_bridge_primary',
+      label: 'Legacy Bridge Primary',
+      isActive: true,
+      status: 'active',
+      validatedAt: observedAt,
+      metadata: {
+        quota: {
+          scope: 'account',
+          unit: 'requests',
+          period: 'day',
+          used: 5,
+          limit: 50,
+          remaining: 45,
+          observedAt,
+        },
+      },
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(observedAt).toISOString(),
+          tokens: {
+            access_token: 'access-openai-bridge-primary',
+            id_token: idToken,
+            refresh_token: 'refresh-openai-bridge-primary',
+            account_id: 'acct_openai_bridge_primary',
+          },
+        }),
+      },
+    });
+    await vault.saveAccount('codex', {
+      accountId: 'acct_openai_bridge_backup',
+      label: 'Legacy Bridge Backup',
+      isActive: false,
+      status: 'available',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(observedAt).toISOString(),
+          tokens: {
+            access_token: 'access-openai-bridge-backup',
+            id_token: idToken,
+            refresh_token: 'refresh-openai-bridge-backup',
+            account_id: 'acct_openai_bridge_backup',
+          },
+        }),
+      },
+    });
+    await vault.markValidated('codex');
+    await chrome.storage.local.set({
+      providers: {
+        codex: {
+          enabled: true,
+          model: 'codex-latest',
+          maxTokens: 4096,
+          temperature: 0.2,
+        },
+      },
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({ actionId: action.id, success: true, duration: 5 })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const authStatus = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_STATUS_GET', { provider: 'openai' }),
+    );
+    expect(authStatus.success).toBe(true);
+    expect(authStatus.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        status: 'ready',
+        availableTransports: ['browser-helper'],
+        activeAccountId: 'acct_openai_bridge_primary',
+        accounts: expect.arrayContaining([
+          expect.objectContaining({ provider: 'openai', accountId: 'acct_openai_bridge_primary' }),
+          expect.objectContaining({ provider: 'openai', accountId: 'acct_openai_bridge_backup' }),
+        ]),
+      }),
+    );
+
+    const accountGet = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_GET', {
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_primary',
+      }),
+    );
+    expect(accountGet.success).toBe(true);
+    expect(accountGet.data?.account).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_primary',
+        metadata: expect.objectContaining({
+          quota: expect.objectContaining({ remaining: 45 }),
+        }),
+      }),
+    );
+
+    const validateResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_VALIDATE', {
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_primary',
+      }),
+    );
+    expect(validateResponse.success).toBe(true);
+    expect(validateResponse.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        valid: true,
+        account: expect.objectContaining({ provider: 'openai', accountId: 'acct_openai_bridge_primary' }),
+      }),
+    );
+
+    const activateResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_ACTIVATE', {
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_backup',
+      }),
+    );
+    expect(activateResponse.success).toBe(true);
+    expect(activateResponse.data).toEqual({
+      provider: 'openai',
+      accountId: 'acct_openai_bridge_backup',
+      activeAccountId: 'acct_openai_bridge_backup',
+    });
+
+    const quotaRefreshResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_QUOTA_REFRESH', {
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_backup',
+      }),
+    );
+    expect(quotaRefreshResponse.success).toBe(true);
+    expect(quotaRefreshResponse.data).toEqual({
+      provider: 'openai',
+      accountId: 'acct_openai_bridge_backup',
+      quota: undefined,
+      refreshedAt: expect.any(Number),
+    });
+
+    const revokeResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_REVOKE', {
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_backup',
+      }),
+    );
+    expect(revokeResponse.success).toBe(true);
+    expect(revokeResponse.data).toEqual({
+      provider: 'openai',
+      accountId: 'acct_openai_bridge_backup',
+      revoked: true,
+    });
+
+    const removeResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_REMOVE', {
+        provider: 'openai',
+        accountId: 'acct_openai_bridge_primary',
+      }),
+    );
+    expect(removeResponse.success).toBe(true);
+    expect(removeResponse.data).toEqual({
+      provider: 'openai',
+      accountId: 'acct_openai_bridge_primary',
+      removed: true,
+    });
+
+    const accountList = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_LIST', { provider: 'openai' }),
+    );
+    expect(accountList.success).toBe(true);
+    expect(accountList.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        activeAccountId: undefined,
+        accounts: expect.arrayContaining([
+          expect.objectContaining({
+            provider: 'openai',
+            accountId: 'acct_openai_bridge_backup',
+            status: 'revoked',
+          }),
+        ]),
+      }),
+    );
+  });
+
   it('validates an existing trusted OpenAI browser-account artifact through the account-backed runtime path', async () => {
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
@@ -4655,7 +4959,7 @@ describe('UI session runtime', () => {
     expect(accountListResponse.data).toEqual(
       expect.objectContaining({
         provider: 'codex',
-        activeAccountId: undefined,
+        activeAccountId: 'acct_5aea75ff65d29e4c',
         accounts: expect.arrayContaining([
           expect.objectContaining({
             accountId: 'acct_5aea75ff65d29e4c',

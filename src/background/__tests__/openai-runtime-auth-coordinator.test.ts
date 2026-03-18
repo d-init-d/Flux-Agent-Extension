@@ -43,6 +43,19 @@ async function createRuntimeState(vault: CredentialVault) {
   };
 }
 
+function createCoordinator(vault: CredentialVault): OpenAIRuntimeAuthCoordinator {
+  const logger = new Logger('FluxSW:test', 'debug');
+
+  return new OpenAIRuntimeAuthCoordinator(
+    vault,
+    new CodexAccountSessionManager(vault, logger, {
+      sourceProvider: 'openai',
+      sourceLabel: 'OpenAI browser account',
+    }),
+    new CodexAccountSessionManager(vault, logger),
+  );
+}
+
 describe('OpenAIRuntimeAuthCoordinator', () => {
   beforeEach(async () => {
     await chrome.storage.local.clear();
@@ -55,13 +68,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
     await vault.setCredential('openai', 'sk-openai-runtime-key');
     await vault.markValidated('openai');
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     const resolution = await coordinator.resolve(await createRuntimeState(vault), 'gpt-4o-mini');
 
@@ -113,13 +120,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       accountLabel: 'OpenAI Browser Account',
     });
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     const resolution = await coordinator.resolve(
       {
@@ -183,13 +184,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       accountLabel: 'OpenAI Browser Account',
     });
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     const runtimeState = await createRuntimeState(vault);
     runtimeState.providers = {
@@ -248,13 +243,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       accountLabel: 'OpenAI Browser Account',
     });
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     const runtimeState = await createRuntimeState(vault);
     runtimeState.providers = {
@@ -279,13 +268,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
     await vault.setCredential('openai', 'sk-openai-runtime-key');
     await vault.markValidated('openai');
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     const runtimeState = await createRuntimeState(vault);
     runtimeState.providers = {
@@ -340,13 +323,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       accountLabel: 'OpenAI Browser Account',
     });
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     const runtimeState = await createRuntimeState(vault);
     runtimeState.providers = {
@@ -393,13 +370,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       uiContext: 'unknown',
     });
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     await expect(
       coordinator.resolve(
@@ -433,13 +404,7 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       retryable: true,
     });
 
-    const coordinator = new OpenAIRuntimeAuthCoordinator(
-      vault,
-      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
-        sourceProvider: 'openai',
-        sourceLabel: 'OpenAI browser account',
-      }),
-    );
+    const coordinator = createCoordinator(vault);
 
     await expect(
       coordinator.resolve(
@@ -456,6 +421,60 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
     ).rejects.toMatchObject({
       code: 'AI_INVALID_KEY',
       message: expect.stringContaining('browser-account auth is not ready yet'),
+    });
+  });
+
+  it('bridges legacy codex account state into the OpenAI browser-account lane when OpenAI browser state is absent', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    const now = Date.UTC(2026, 2, 19, 8, 0, 0);
+    const idToken = createJwt({
+      email: 'legacy-codex@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'plus',
+        chatgpt_user_id: 'user_legacy_codex_bridge',
+      },
+    });
+
+    await vault.saveAccount('codex', {
+      accountId: 'acct_legacy_codex',
+      label: 'Legacy Codex Seat',
+      isActive: true,
+      status: 'active',
+      validatedAt: now,
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            access_token: 'access-legacy-codex',
+            id_token: idToken,
+            refresh_token: 'refresh-legacy-codex',
+            account_id: 'acct_legacy_codex',
+          },
+        }),
+      },
+    });
+    await vault.markValidated('codex');
+
+    const runtimeState = await createRuntimeState(vault);
+    runtimeState.providers = {
+      codex: {
+        enabled: true,
+        model: 'codex-latest',
+        maxTokens: 4096,
+        temperature: 0.2,
+      },
+    };
+
+    const resolution = await createCoordinator(vault).resolve(runtimeState, 'codex-latest');
+
+    expect(resolution).toEqual({
+      lane: 'browser-account',
+      runtimeProvider: 'codex',
+      credential: 'access-legacy-codex',
+      model: 'codex-latest',
     });
   });
 });

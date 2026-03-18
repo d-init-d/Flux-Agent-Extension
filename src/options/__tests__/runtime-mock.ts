@@ -3,8 +3,12 @@ import * as providerLoader from '../../core/ai-client/provider-loader';
 import { importCodexAccountArtifact } from '../../core/auth/codex-account-import';
 import {
   PROVIDER_LOOKUP,
+  createBridgedOpenAIProviderConfig,
+  createBridgedOpenAIVaultSurface,
   createDefaultProviderConfigs,
   providerSupportsAccountBackedAuth,
+  resolveOpenAIAccountSurfaceSource,
+  shouldBridgeLegacyCodexToOpenAI,
 } from '../../shared/config';
 import {
   evaluateProviderEndpointPolicy,
@@ -265,7 +269,7 @@ function mapVaultToProviderMetadata(vault: VaultState) {
 async function getSettingsState() {
   const stored = await chrome.storage.local.get({
     settings: createDefaultSettings(),
-    providers: createDefaultProviderConfigs(),
+    providers: {},
     activeProvider: DEFAULT_PROVIDER,
     onboarding: normalizeOnboardingState(undefined),
     vault: undefined,
@@ -333,12 +337,47 @@ async function getSettingsState() {
     await chrome.storage.local.remove('providerKeyMetadata');
   }
 
-  return {
-    settings: stored.settings as ExtensionSettings,
-    providers: stored.providers as Record<AIProviderType, ProviderConfig>,
-    activeProvider: stored.activeProvider as AIProviderType,
-    onboarding: normalizeOnboardingState(stored.onboarding),
+  const rawProviders = stored.providers as Partial<Record<AIProviderType, ProviderConfig>>;
+  const bridgedVault = createBridgedOpenAIVaultSurface(rawProviders, vault);
+  const bridgedOpenAIConfig = createBridgedOpenAIProviderConfig(
+    rawProviders,
     vault,
+    createDefaultProviderConfigs(),
+  );
+  const shouldBridgeLegacyCodexSurface = shouldBridgeLegacyCodexToOpenAI(rawProviders, vault);
+  const settings = {
+    ...(stored.settings as ExtensionSettings),
+    defaultProvider:
+      shouldBridgeLegacyCodexSurface && (stored.settings as ExtensionSettings).defaultProvider === 'codex'
+        ? 'openai'
+        : (stored.settings as ExtensionSettings).defaultProvider,
+  };
+  const onboarding = normalizeOnboardingState(stored.onboarding);
+  if (shouldBridgeLegacyCodexSurface) {
+    if (onboarding.configuredProvider === 'codex') {
+      onboarding.configuredProvider = 'openai';
+    }
+    if (onboarding.validatedProvider === 'codex') {
+      onboarding.validatedProvider = 'openai';
+    }
+  }
+
+  return {
+    settings,
+    providers: bridgedOpenAIConfig
+      ? {
+          ...rawProviders,
+          openai: bridgedOpenAIConfig,
+        }
+      : rawProviders,
+    rawProviders,
+    activeProvider:
+      shouldBridgeLegacyCodexSurface && stored.activeProvider === 'codex'
+        ? 'openai'
+        : (stored.activeProvider as AIProviderType),
+    onboarding,
+    vault: bridgedVault,
+    rawVault: vault,
   };
 }
 
@@ -426,6 +465,13 @@ export function installOptionsRuntimeMock(): void {
       success: true,
       data,
     });
+    const resolveAccountSourceProvider = (provider: AIProviderType): AIProviderType => {
+      if (provider !== 'openai') {
+        return provider;
+      }
+
+      return resolveOpenAIAccountSurfaceSource(state.rawProviders, state.rawVault);
+    };
 
     switch (type) {
       case 'SETTINGS_GET':
@@ -576,7 +622,7 @@ export function installOptionsRuntimeMock(): void {
           });
         }
 
-        const providerConfig = request.config ?? state.providers[request.provider];
+        const providerConfig = request.config ?? state.providers[request.provider] ?? createDefaultProviderConfigs()[request.provider];
         const endpointPolicy = PROVIDER_LOOKUP[request.provider].supportsEndpoint
           ? evaluateProviderEndpointPolicy(request.provider, providerConfig.customEndpoint)
           : { valid: true };
@@ -755,6 +801,8 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
+        const sourceProvider = resolveAccountSourceProvider(request.provider);
+
         if (request.transport && request.transport !== 'artifact-import') {
           throw new Error(`Unsupported account auth transport ${request.transport}`);
         }
@@ -773,7 +821,7 @@ export function installOptionsRuntimeMock(): void {
           });
         }
 
-        const accounts = [...(state.vault.accounts[request.provider] ?? [])].map(
+        const accounts = [...(state.rawVault.accounts[sourceProvider] ?? [])].map(
           cloneAccountRecord,
         );
         const target = request.accountId
@@ -791,21 +839,21 @@ export function installOptionsRuntimeMock(): void {
           ...state.vault,
           credentials: {
             ...state.vault.credentials,
-            [request.provider]: state.vault.credentials[request.provider]
+            [sourceProvider]: state.rawVault.credentials[sourceProvider]
               ? {
-                  ...state.vault.credentials[request.provider],
+                  ...state.rawVault.credentials[sourceProvider],
                   validatedAt: now,
                   stale: false,
                 }
               : undefined,
           },
           accounts: {
-            ...state.vault.accounts,
-            [request.provider]: accounts,
+            ...state.rawVault.accounts,
+            [sourceProvider]: accounts,
           },
         };
-        if (!nextVault.credentials[request.provider]) {
-          delete nextVault.credentials[request.provider];
+        if (!nextVault.credentials[sourceProvider]) {
+          delete nextVault.credentials[sourceProvider];
         }
         await saveVault(nextVault);
 
@@ -824,7 +872,9 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        const accounts = [...(state.vault.accounts[request.provider] ?? [])];
+        const sourceProvider = resolveAccountSourceProvider(request.provider);
+
+        const accounts = [...(state.rawVault.accounts[sourceProvider] ?? [])];
         const target = accounts.find((account) => account.accountId === request.accountId);
         if (!target) {
           throw new Error(`Account ${request.accountId} was not found`);
@@ -835,7 +885,7 @@ export function installOptionsRuntimeMock(): void {
           ...state.vault,
           accounts: {
             ...state.vault.accounts,
-            [request.provider]: accounts.map((account) => ({
+            [sourceProvider]: accounts.map((account) => ({
               ...cloneAccountRecord(account),
               isActive: account.accountId === request.accountId,
               status:
@@ -851,7 +901,7 @@ export function installOptionsRuntimeMock(): void {
           },
           activeAccounts: {
             ...state.vault.activeAccounts,
-            [request.provider]: request.accountId,
+            [sourceProvider]: request.accountId,
           },
         };
         await saveVault(nextVault);
@@ -867,7 +917,9 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        const accounts = [...(state.vault.accounts[request.provider] ?? [])];
+        const sourceProvider = resolveAccountSourceProvider(request.provider);
+
+        const accounts = [...(state.rawVault.accounts[sourceProvider] ?? [])];
         const targetIndex = accounts.findIndex(
           (account) => account.accountId === request.accountId,
         );
@@ -898,14 +950,14 @@ export function installOptionsRuntimeMock(): void {
           },
         };
         const nextActiveAccounts = { ...state.vault.activeAccounts };
-        if (nextActiveAccounts[request.provider] === request.accountId) {
-          delete nextActiveAccounts[request.provider];
+        if (nextActiveAccounts[sourceProvider] === request.accountId) {
+          delete nextActiveAccounts[sourceProvider];
         }
         const nextVault = {
-          ...state.vault,
+          ...state.rawVault,
           accounts: {
-            ...state.vault.accounts,
-            [request.provider]: accounts,
+            ...state.rawVault.accounts,
+            [sourceProvider]: accounts,
           },
           activeAccounts: nextActiveAccounts,
         };
@@ -922,13 +974,15 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        const accounts = (state.vault.accounts[request.provider] ?? []).filter(
+        const sourceProvider = resolveAccountSourceProvider(request.provider);
+
+        const accounts = (state.rawVault.accounts[sourceProvider] ?? []).filter(
           (account) => account.accountId !== request.accountId,
         );
-        const removed = accounts.length !== (state.vault.accounts[request.provider] ?? []).length;
-        const nextActiveAccounts = { ...state.vault.activeAccounts };
-        if (nextActiveAccounts[request.provider] === request.accountId) {
-          delete nextActiveAccounts[request.provider];
+        const removed = accounts.length !== (state.rawVault.accounts[sourceProvider] ?? []).length;
+        const nextActiveAccounts = { ...state.rawVault.activeAccounts };
+        if (nextActiveAccounts[sourceProvider] === request.accountId) {
+          delete nextActiveAccounts[sourceProvider];
           if (accounts[0]) {
             accounts[0] = {
               ...cloneAccountRecord(accounts[0]),
@@ -936,17 +990,17 @@ export function installOptionsRuntimeMock(): void {
               status: accounts[0].status === 'revoked' ? 'needs-auth' : 'active',
               updatedAt: Date.now(),
             };
-            nextActiveAccounts[request.provider] = accounts[0].accountId;
+            nextActiveAccounts[sourceProvider] = accounts[0].accountId;
           }
         }
-        const nextAccounts = { ...state.vault.accounts };
+        const nextAccounts = { ...state.rawVault.accounts };
         if (accounts.length > 0) {
-          nextAccounts[request.provider] = accounts.map(cloneAccountRecord);
+          nextAccounts[sourceProvider] = accounts.map(cloneAccountRecord);
         } else {
-          delete nextAccounts[request.provider];
+          delete nextAccounts[sourceProvider];
         }
         const nextVault = {
-          ...state.vault,
+          ...state.rawVault,
           accounts: nextAccounts,
           activeAccounts: nextActiveAccounts,
         };
@@ -963,9 +1017,11 @@ export function installOptionsRuntimeMock(): void {
           return createUnsupportedAccountProviderResponse(request.provider);
         }
 
-        const accountId = request.accountId ?? state.vault.activeAccounts[request.provider];
+        const sourceProvider = resolveAccountSourceProvider(request.provider);
+
+        const accountId = request.accountId ?? state.rawVault.activeAccounts[sourceProvider];
         const account = accountId
-          ? (state.vault.accounts[request.provider] ?? []).find(
+          ? (state.rawVault.accounts[sourceProvider] ?? []).find(
               (candidate) => candidate.accountId === accountId,
             )
           : undefined;

@@ -371,6 +371,147 @@ describe('Options App', () => {
     expect(screen.getByLabelText('Login method')).toHaveValue('browser-account');
   });
 
+  it('bridges a legacy codex configuration onto the OpenAI browser-account surface on load', async () => {
+    const observedAt = Date.UTC(2026, 2, 19, 9, 0, 0);
+
+    await seedStorage({
+      activeProvider: 'codex',
+      settings: {
+        defaultProvider: 'codex',
+      },
+      providers: {
+        codex: {
+          enabled: true,
+          model: 'codex-latest',
+          maxTokens: 8192,
+          temperature: 0.15,
+        },
+      },
+      vault: {
+        version: 1,
+        initialized: true,
+        lockState: 'unlocked',
+        unlockedAt: observedAt,
+        hasLegacySecrets: false,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****2468',
+            updatedAt: observedAt,
+            validatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_legacy_ui_bridge',
+              label: 'Legacy UI Bridge',
+              maskedIdentifier: 'legacy-ui@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              validatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_legacy_ui_bridge',
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    expect(screen.getByLabelText('Provider')).toHaveValue('openai');
+    expect(screen.getByLabelText('Login method')).toHaveValue('browser-account');
+    expect(screen.getByLabelText('Model')).toHaveValue('codex-latest');
+    expect(screen.getByText('Legacy UI Bridge')).toBeInTheDocument();
+    expect(screen.getByText(/stored browser-account artifact/i)).toBeInTheDocument();
+  });
+
+  it('validates bridged legacy codex state through the OpenAI browser-account surface', async () => {
+    const user = userEvent.setup();
+    const observedAt = Date.UTC(2026, 2, 19, 9, 30, 0);
+
+    await seedStorage({
+      activeProvider: 'codex',
+      settings: {
+        defaultProvider: 'codex',
+      },
+      providers: {
+        codex: {
+          enabled: true,
+          model: 'codex-mini-latest',
+          maxTokens: 4096,
+          temperature: 0.2,
+        },
+      },
+      vault: {
+        version: 1,
+        initialized: true,
+        lockState: 'unlocked',
+        unlockedAt: observedAt,
+        hasLegacySecrets: false,
+        credentials: {
+          codex: {
+            version: 1,
+            provider: 'codex',
+            providerFamily: 'chatgpt-account',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****1357',
+            updatedAt: observedAt,
+          },
+        },
+        accounts: {
+          codex: [
+            {
+              version: 1,
+              provider: 'codex',
+              providerFamily: 'chatgpt-account',
+              authFamily: 'account-backed',
+              accountId: 'acct_openai_bridge_ui',
+              label: 'Legacy OpenAI Bridge UI',
+              maskedIdentifier: 'bridge-ui@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          codex: 'acct_openai_bridge_ui',
+        },
+      },
+    });
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    expect(screen.getByLabelText('Provider')).toHaveValue('openai');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findByText(/validated artifact shape for legacy openai bridge ui/i)).toBeInTheDocument();
+
+    const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
+      const message = call[0] as { type?: string };
+      return message.type;
+    });
+
+    expect(messageTypes).toContain('ACCOUNT_AUTH_STATUS_GET');
+    expect(messageTypes).toContain('ACCOUNT_AUTH_VALIDATE');
+    expect(messageTypes).not.toContain('API_KEY_VALIDATE');
+  });
+
   it('shows a clear account-backed empty state for codex when no account is imported', async () => {
     const user = userEvent.setup();
 
@@ -698,7 +839,7 @@ describe('Options App', () => {
     expect(await screen.findByTestId('onboarding-step-connect')).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Provider'), 'codex');
-    expect(screen.getByText(/codex stays locked until an official auth artifact is imported/i)).toBeInTheDocument();
+    expect(screen.getByText(/account-backed authentication/i)).toBeInTheDocument();
     expect(screen.getAllByText(/account missing/i)).not.toHaveLength(0);
     await user.click(screen.getByRole('button', { name: /save provider/i }));
     expect(
@@ -708,7 +849,8 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await user.click(screen.getByRole('button', { name: /continue/i }));
     expect(await screen.findByTestId('onboarding-step-ready')).toBeInTheDocument();
-    expect(screen.getByText(/codex is not ready yet\. current state: account missing\./i)).toBeInTheDocument();
+    expect(screen.getByText(/current state:/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/account missing/i)).not.toHaveLength(0);
     expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
   });
 

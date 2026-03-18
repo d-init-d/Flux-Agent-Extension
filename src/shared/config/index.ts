@@ -23,6 +23,14 @@ export {
   normalizeOpenAIAuthChoiceId,
   resolveOpenAIRuntimeRoute,
 } from './openai-model-catalog';
+export {
+  createBridgedOpenAIProviderConfig,
+  createBridgedOpenAIVaultSurface,
+  hasExplicitOpenAISurfaceState,
+  hasLegacyCodexSurfaceState,
+  resolveOpenAIAccountSurfaceSource,
+  shouldBridgeLegacyCodexToOpenAI,
+} from './openai-legacy-codex-bridge';
 export type {
   OpenAIAuthChoiceId,
   OpenAIModelCatalogEntry,

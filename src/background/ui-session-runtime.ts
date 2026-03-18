@@ -13,10 +13,14 @@ import { TabManager } from '@core/browser-controller/tab-manager';
 import {
   DEFAULT_PROVIDER_MODELS,
   PROVIDER_LOOKUP,
+  createBridgedOpenAIProviderConfig,
+  createBridgedOpenAIVaultSurface,
   createDefaultProviderConfigs,
   evaluateProviderEndpointPolicy,
   normalizeProviderEndpointConfig,
   providerSupportsAccountBackedAuth,
+  resolveOpenAIAccountSurfaceSource,
+  shouldBridgeLegacyCodexToOpenAI,
 } from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
@@ -151,9 +155,11 @@ interface UISessionRuntimeOptions {
 interface RuntimeState {
   settings: ExtensionSettings;
   providers: Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>;
+  rawProviders?: Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>;
   activeProvider: SessionConfig['provider'];
   onboarding: OnboardingState;
   vault: VaultState;
+  rawVault?: VaultState;
 }
 
 interface RegisteredFrame extends BridgeFrameContext {
@@ -246,6 +252,7 @@ export class UISessionRuntime {
     this.openAIRuntimeAuthCoordinator = new OpenAIRuntimeAuthCoordinator(
       this.credentialVault,
       this.openAIBrowserAccountSessionManager,
+      this.codexAccountSessionManager,
     );
     this.orchestrator = new ActionOrchestrator({
       execute: (action, context) => this.executeAutomationAction(action, context.sessionId),
@@ -1377,6 +1384,8 @@ export class UISessionRuntime {
     }
 
     const checkedAt = Date.now();
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
     let imported = payload.artifact
       ? await importCodexAccountArtifact(payload.artifact)
       : undefined;
@@ -1394,7 +1403,7 @@ export class UISessionRuntime {
     }
 
     const existingAccount = await this.credentialVault.getAccount(
-      payload.provider,
+      sourceProvider,
       targetAccountId,
     );
     if (!existingAccount && !imported) {
@@ -1407,7 +1416,7 @@ export class UISessionRuntime {
 
     if (!imported) {
       const storedArtifact = await this.credentialVault.getAccountArtifact(
-        payload.provider,
+        sourceProvider,
         targetAccountId,
       );
       if (!storedArtifact) {
@@ -1433,7 +1442,7 @@ export class UISessionRuntime {
       );
     }
 
-    await this.credentialVault.saveAccount(payload.provider, {
+    await this.credentialVault.saveAccount(sourceProvider, {
       accountId: imported.derived.accountId,
       label: existingAccount?.label ?? imported.derived.label,
       maskedIdentifier: imported.derived.maskedIdentifier,
@@ -1461,24 +1470,29 @@ export class UISessionRuntime {
           }
         : undefined,
     });
-    await this.credentialVault.markValidated(payload.provider);
+    await this.credentialVault.markValidated(sourceProvider);
 
-    const accountProvider = payload.provider as Extract<SessionConfig['provider'], 'codex' | 'openai'>;
-    const sessionSnapshot = await this.getAccountSessionManager(accountProvider).ensureSession({
+    const sessionSnapshot = await this.getAccountSessionManager(
+      sourceProvider as Extract<SessionConfig['provider'], 'codex' | 'openai'>,
+    ).ensureSession({
       accountId: imported.derived.accountId,
       purpose: 'validate',
       forceRefresh: payload.forceRefresh,
     });
+    const validatedAccount = await this.credentialVault.getAccount(sourceProvider, imported.derived.accountId);
+    const nextRuntimeState = await this.loadRuntimeState();
 
     return {
       success: true,
       data: {
         provider: payload.provider,
         valid: true,
-        account: this.cloneAccountRecord(sessionSnapshot.account),
+        account: validatedAccount
+          ? this.mapAccountRecordForSurface(payload.provider, validatedAccount)
+          : undefined,
         checkedAt,
-        message: `Validated artifact shape for ${sessionSnapshot.account.label}. ${sessionSnapshot.message}`,
-        vault: await this.credentialVault.getState(),
+        message: `Validated artifact shape for ${imported.derived.label}. ${sessionSnapshot.message}`,
+        vault: nextRuntimeState.vault,
       },
     };
   }
@@ -1508,16 +1522,15 @@ export class UISessionRuntime {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_GET', payload.provider);
     }
 
-    const [vault, account] = await Promise.all([
-      this.credentialVault.getState(),
-      this.credentialVault.getAccount(payload.provider, payload.accountId),
-    ]);
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
+    const account = await this.credentialVault.getAccount(sourceProvider, payload.accountId);
     return {
       success: true,
       data: {
         provider: payload.provider,
-        account: account ? this.cloneAccountRecord(account) : null,
-        activeAccountId: vault.activeAccounts[payload.provider],
+        account: account ? this.mapAccountRecordForSurface(payload.provider, account) : null,
+        activeAccountId: runtimeState.vault.activeAccounts[payload.provider],
       },
     };
   }
@@ -1528,18 +1541,20 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_ACTIVATE', payload.provider);
     }
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
     const activated = await this.credentialVault.activateAccount(
-      payload.provider,
+      sourceProvider,
       payload.accountId,
     );
-    const vault = await this.credentialVault.getState();
+    const nextRuntimeState = await this.loadRuntimeState();
 
     return {
       success: true,
       data: {
         provider: payload.provider,
         accountId: activated.accountId,
-        activeAccountId: vault.activeAccounts[payload.provider],
+        activeAccountId: nextRuntimeState.vault.activeAccounts[payload.provider],
       },
     };
   }
@@ -1550,7 +1565,9 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_REVOKE', payload.provider);
     }
-    const revoked = await this.credentialVault.revokeAccount(payload.provider, payload.accountId, {
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
+    const revoked = await this.credentialVault.revokeAccount(sourceProvider, payload.accountId, {
       revokeCredential: payload.revokeCredential,
     });
 
@@ -1570,7 +1587,9 @@ export class UISessionRuntime {
     if (!this.supportsAccountBackedAuth(payload.provider)) {
       return this.createUnsupportedAccountProviderResponse('ACCOUNT_REMOVE', payload.provider);
     }
-    const removed = await this.credentialVault.removeAccount(payload.provider, payload.accountId);
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
+    const removed = await this.credentialVault.removeAccount(sourceProvider, payload.accountId);
 
     return {
       success: true,
@@ -1592,10 +1611,11 @@ export class UISessionRuntime {
       );
     }
 
-    const vault = await this.credentialVault.getState();
-    const accountId = payload.accountId ?? vault.activeAccounts[payload.provider];
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
+    const accountId = payload.accountId ?? runtimeState.vault.activeAccounts[payload.provider];
     const quota = accountId
-      ? await this.credentialVault.getQuotaMetadata(payload.provider, accountId)
+      ? await this.credentialVault.getQuotaMetadata(sourceProvider, accountId)
       : undefined;
 
     return {
@@ -1617,17 +1637,18 @@ export class UISessionRuntime {
         payload.provider,
       );
     }
-    const vault = await this.credentialVault.getState();
-    const accountId = payload.accountId ?? vault.activeAccounts[payload.provider];
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(payload.provider, runtimeState);
+    const accountId = payload.accountId ?? runtimeState.vault.activeAccounts[payload.provider];
     if (accountId) {
-      const accountProvider = payload.provider as Extract<SessionConfig['provider'], 'codex' | 'openai'>;
+      const accountProvider = sourceProvider as Extract<SessionConfig['provider'], 'codex' | 'openai'>;
       await this.getAccountSessionManager(accountProvider).ensureSession({
         accountId,
         purpose: 'quota-refresh',
       });
     }
     const quota = accountId
-      ? await this.credentialVault.getQuotaMetadata(payload.provider, accountId)
+      ? await this.credentialVault.getQuotaMetadata(sourceProvider, accountId)
       : undefined;
 
     return {
@@ -2334,25 +2355,70 @@ export class UISessionRuntime {
       this.credentialVault.getState(),
     ]);
 
+    const rawProviders =
+      (stored.providers as
+        | Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>
+        | undefined) ?? {};
+    const bridgedVault = createBridgedOpenAIVaultSurface(rawProviders, vault);
+    const bridgedOpenAIConfig = createBridgedOpenAIProviderConfig(
+      rawProviders,
+      vault,
+      DEFAULT_PROVIDER_CONFIG,
+    );
+    const providers = bridgedOpenAIConfig
+      ? {
+          ...rawProviders,
+          openai: bridgedOpenAIConfig,
+        }
+      : rawProviders;
+    const shouldBridgeLegacyCodexSurface = shouldBridgeLegacyCodexToOpenAI(rawProviders, vault);
     const settings = {
       ...DEFAULT_RUNTIME_SETTINGS,
       ...(stored.settings as Partial<ExtensionSettings> | undefined),
     };
+    if (shouldBridgeLegacyCodexSurface && settings.defaultProvider === 'codex') {
+      settings.defaultProvider = 'openai';
+    }
     const activeProvider =
       typeof stored.activeProvider === 'string'
-        ? (stored.activeProvider as SessionConfig['provider'])
+        ? shouldBridgeLegacyCodexSurface && stored.activeProvider === 'codex'
+          ? 'openai'
+          : (stored.activeProvider as SessionConfig['provider'])
         : settings.defaultProvider;
+    const onboarding = normalizeOnboardingState(stored.onboarding);
+
+    if (shouldBridgeLegacyCodexSurface) {
+      if (onboarding.configuredProvider === 'codex') {
+        onboarding.configuredProvider = 'openai';
+      }
+      if (onboarding.validatedProvider === 'codex') {
+        onboarding.validatedProvider = 'openai';
+      }
+    }
 
     return {
       settings,
-      providers:
-        (stored.providers as
-          | Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>
-          | undefined) ?? {},
+      providers,
+      rawProviders,
       activeProvider,
-      onboarding: normalizeOnboardingState(stored.onboarding),
-      vault,
+      onboarding,
+      vault: bridgedVault,
+      rawVault: vault,
     };
+  }
+
+  private resolveAccountSourceProvider(
+    provider: SessionConfig['provider'],
+    runtimeState: RuntimeState,
+  ): SessionConfig['provider'] {
+    if (provider !== 'openai') {
+      return provider;
+    }
+
+    return resolveOpenAIAccountSurfaceSource(
+      runtimeState.rawProviders ?? runtimeState.providers,
+      runtimeState.rawVault ?? runtimeState.vault,
+    );
   }
 
   private supportsAccountBackedAuth(provider: SessionConfig['provider']): boolean {
@@ -2386,18 +2452,32 @@ export class UISessionRuntime {
     accounts: ProviderAccountRecord[];
     activeAccountId?: string;
   }> {
-    const [vault, accounts, browserLogin] = await Promise.all([
-      this.credentialVault.getState(),
-      this.credentialVault.listAccounts(provider),
-      provider === 'openai' ? this.credentialVault.getBrowserLoginState(provider) : undefined,
-    ]);
+    const runtimeState = await this.loadRuntimeState();
+    const sourceProvider = this.resolveAccountSourceProvider(provider, runtimeState);
+    const accounts = await this.credentialVault.listAccounts(sourceProvider);
 
     return {
-      vault,
-      browserLogin,
-      credential: vault.credentials[provider],
-      accounts: accounts.map((account) => this.cloneAccountRecord(account)),
-      activeAccountId: vault.activeAccounts[provider],
+      vault: runtimeState.vault,
+      browserLogin: runtimeState.vault.browserLogins?.[provider],
+      credential: runtimeState.vault.credentials[provider],
+      accounts: accounts.map((account) => this.mapAccountRecordForSurface(provider, account)),
+      activeAccountId: runtimeState.vault.activeAccounts[provider],
+    };
+  }
+
+  private mapAccountRecordForSurface(
+    provider: SessionConfig['provider'],
+    account: ProviderAccountRecord,
+  ): ProviderAccountRecord {
+    const cloned = this.cloneAccountRecord(account);
+    if (provider !== 'openai') {
+      return cloned;
+    }
+
+    return {
+      ...cloned,
+      provider: 'openai',
+      providerFamily: 'default',
     };
   }
 

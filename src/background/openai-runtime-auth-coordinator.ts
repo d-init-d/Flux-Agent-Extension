@@ -1,5 +1,7 @@
 import {
+  hasExplicitOpenAISurfaceState,
   normalizeOpenAIAuthChoiceId,
+  resolveOpenAIAccountSurfaceSource,
   resolveOpenAIRuntimeRoute,
 } from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
@@ -17,9 +19,11 @@ import { CodexAccountSessionManager } from './codex-account-session-manager';
 interface OpenAIRuntimeCoordinatorState {
   settings: ExtensionSettings;
   providers: Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>;
+  rawProviders?: Partial<Record<SessionConfig['provider'], Partial<ProviderConfig>>>;
   activeProvider: SessionConfig['provider'];
   onboarding: unknown;
   vault: VaultState;
+  rawVault?: VaultState;
 }
 
 export interface OpenAIRuntimeResolution {
@@ -33,12 +37,15 @@ export class OpenAIRuntimeAuthCoordinator {
   constructor(
     private readonly credentialVault: CredentialVault,
     private readonly browserAccountSessionManager: CodexAccountSessionManager,
+    private readonly legacyCodexSessionManager: CodexAccountSessionManager,
   ) {}
 
   async resolve(
     runtimeState: OpenAIRuntimeCoordinatorState,
     requestedModel: string,
   ): Promise<OpenAIRuntimeResolution> {
+    const sourceProviders = runtimeState.rawProviders ?? runtimeState.providers;
+    const sourceVault = runtimeState.rawVault ?? runtimeState.vault;
     const configuredLane = this.resolveConfiguredLane(runtimeState);
     const route = resolveOpenAIRuntimeRoute(configuredLane, requestedModel);
     if (route.mismatch) {
@@ -59,13 +66,14 @@ export class OpenAIRuntimeAuthCoordinator {
       };
     }
 
-    const credentialRecord = runtimeState.vault.credentials.openai;
-    const activeAccountId = runtimeState.vault.activeAccounts.openai?.trim();
+    const accountSource = resolveOpenAIAccountSurfaceSource(sourceProviders, sourceVault);
+    const credentialRecord = sourceVault.credentials[accountSource];
+    const activeAccountId = sourceVault.activeAccounts[accountSource]?.trim();
     const browserState = runtimeState.vault.browserLogins?.openai;
 
     this.assertVaultUnlocked(runtimeState);
 
-    if (browserState && browserState.status !== 'success') {
+    if (accountSource === 'openai' && browserState && browserState.status !== 'success') {
       throw new ExtensionError(
         ErrorCode.AI_INVALID_KEY,
         `OpenAI browser-account auth is not ready yet (state: ${browserState.status}). Complete browser auth before starting chat.`,
@@ -76,7 +84,7 @@ export class OpenAIRuntimeAuthCoordinator {
     if (!credentialRecord || credentialRecord.authFamily !== 'account-backed') {
       throw new ExtensionError(
         ErrorCode.AI_INVALID_KEY,
-        'OpenAI is marked for browser-account runtime, but the trusted account-backed credential metadata is missing.',
+        `OpenAI is marked for browser-account runtime, but the trusted ${accountSource === 'codex' ? 'legacy Codex' : 'OpenAI'} account-backed credential metadata is missing.`,
         false,
       );
     }
@@ -92,12 +100,12 @@ export class OpenAIRuntimeAuthCoordinator {
     if (!activeAccountId) {
       throw new ExtensionError(
         ErrorCode.AI_INVALID_KEY,
-        'No active OpenAI browser account is selected. Complete browser auth before starting chat.',
+        `No active ${accountSource === 'codex' ? 'legacy Codex' : 'OpenAI'} browser account is selected. Complete browser auth before starting chat.`,
         false,
       );
     }
 
-    const activeAccount = this.requireActiveAccount(runtimeState, activeAccountId);
+    const activeAccount = this.requireActiveAccount(sourceVault, accountSource, activeAccountId);
     if (activeAccount.stale) {
       throw new ExtensionError(
         ErrorCode.AI_INVALID_KEY,
@@ -114,9 +122,7 @@ export class OpenAIRuntimeAuthCoordinator {
       );
     }
 
-    const runtimeSession = await this.browserAccountSessionManager.getRuntimeSessionMaterial(
-      activeAccountId,
-    );
+    const runtimeSession = await this.getSessionManager(accountSource).getRuntimeSessionMaterial(activeAccountId);
 
     return {
       lane: 'browser-account',
@@ -127,13 +133,21 @@ export class OpenAIRuntimeAuthCoordinator {
   }
 
   private resolveConfiguredLane(runtimeState: OpenAIRuntimeCoordinatorState): 'api-key' | 'browser-account' {
+    const sourceProviders = runtimeState.rawProviders ?? runtimeState.providers;
+    const sourceVault = runtimeState.rawVault ?? runtimeState.vault;
     const configuredAuthChoiceId = runtimeState.providers.openai?.authChoiceId;
     if (typeof configuredAuthChoiceId === 'string' && configuredAuthChoiceId.trim().length > 0) {
       return normalizeOpenAIAuthChoiceId(configuredAuthChoiceId);
     }
 
-    const credentialRecord = runtimeState.vault.credentials.openai;
-    const activeAccountId = runtimeState.vault.activeAccounts.openai?.trim();
+    if (!hasExplicitOpenAISurfaceState(sourceProviders, sourceVault)) {
+      return resolveOpenAIAccountSurfaceSource(sourceProviders, sourceVault) === 'codex'
+        ? 'browser-account'
+        : 'api-key';
+    }
+
+    const credentialRecord = sourceVault.credentials.openai;
+    const activeAccountId = sourceVault.activeAccounts.openai?.trim();
     const browserState = runtimeState.vault.browserLogins?.openai;
 
     return credentialRecord?.authFamily === 'account-backed' || Boolean(activeAccountId) || Boolean(browserState)
@@ -152,10 +166,11 @@ export class OpenAIRuntimeAuthCoordinator {
   }
 
   private requireActiveAccount(
-    runtimeState: OpenAIRuntimeCoordinatorState,
+    vault: VaultState,
+    provider: 'openai' | 'codex',
     activeAccountId: string,
   ): ProviderAccountRecord {
-    const activeAccount = runtimeState.vault.accounts.openai?.find(
+    const activeAccount = vault.accounts[provider]?.find(
       (account) => account.accountId === activeAccountId,
     );
 
@@ -168,6 +183,12 @@ export class OpenAIRuntimeAuthCoordinator {
     }
 
     return activeAccount;
+  }
+
+  private getSessionManager(provider: 'openai' | 'codex'): CodexAccountSessionManager {
+    return provider === 'openai'
+      ? this.browserAccountSessionManager
+      : this.legacyCodexSessionManager;
   }
 
   private async requireApiKeyCredential(
