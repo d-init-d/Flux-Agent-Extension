@@ -15,12 +15,11 @@ import {
 } from 'lucide-react';
 import {
   createDefaultProviderConfigs as createRegistryDefaultProviderConfigs,
+  getProviderAuthChoiceById,
+  getProviderAuthChoices,
   PROVIDER_LOOKUP,
   PROVIDER_REGISTRY,
   providerRequiresConnectionValidation,
-  providerUsesAccountImport,
-  providerUsesApiKey,
-  providerUsesOAuthToken,
 } from '@shared/config';
 import type { ProviderDefinition } from '@shared/config';
 import {
@@ -67,6 +66,7 @@ import { OnboardingFlow } from './onboarding';
 
 type SaveState = 'idle' | 'success' | 'error';
 type ValidationState = 'idle' | 'success' | 'error';
+type OpenAIAuthChoiceId = 'api-key' | 'browser-account';
 
 interface ApiKeyMetadata {
   maskedValue: string;
@@ -104,6 +104,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const DEFAULT_PROVIDER: AIProviderType = 'openai';
+const DEFAULT_OPENAI_AUTH_CHOICE_ID: OpenAIAuthChoiceId = 'api-key';
 const GENERIC_MASK = '••••••••••••';
 
 const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
@@ -154,6 +155,45 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
 
 function createDefaultProviderConfigs(): ProviderConfigMap {
   return createRegistryDefaultProviderConfigs();
+}
+
+function resolveProviderAuthChoice(
+  provider: AIProviderType,
+  config: Pick<ProviderConfig, 'authChoiceId'>,
+) {
+  return getProviderAuthChoiceById(provider, config.authChoiceId);
+}
+
+function usesProviderApiKeyLane(
+  provider: AIProviderType,
+  config: Pick<ProviderConfig, 'authChoiceId'>,
+): boolean {
+  return resolveProviderAuthChoice(provider, config).authMethod === 'api-key';
+}
+
+function usesProviderBrowserAccountLane(
+  provider: AIProviderType,
+  config: Pick<ProviderConfig, 'authChoiceId'>,
+): boolean {
+  return resolveProviderAuthChoice(provider, config).authMethod === 'browser-login';
+}
+
+function usesProviderAccountImportLane(
+  provider: AIProviderType,
+  config: Pick<ProviderConfig, 'authChoiceId'>,
+): boolean {
+  return resolveProviderAuthChoice(provider, config).authMethod === 'account-import';
+}
+
+function usesProviderAccountSurface(
+  provider: AIProviderType,
+  config: Pick<ProviderConfig, 'authChoiceId'>,
+): boolean {
+  return resolveProviderAuthChoice(provider, config).authFamily === 'account-backed';
+}
+
+function normalizeOpenAIAuthChoiceId(value: unknown): OpenAIAuthChoiceId {
+  return value === 'browser-account' ? 'browser-account' : DEFAULT_OPENAI_AUTH_CHOICE_ID;
 }
 
 function createDefaultSettings(): ExtensionSettings {
@@ -213,6 +253,10 @@ function normalizeProviderConfigs(value: unknown): ProviderConfigMap {
         typeof existingConfig.temperature === 'number'
           ? existingConfig.temperature
           : defaults[provider.type].temperature,
+      authChoiceId:
+        provider.type === 'openai'
+          ? normalizeOpenAIAuthChoiceId(existingConfig.authChoiceId)
+          : defaults[provider.type].authChoiceId,
       customEndpoint:
         typeof existingConfig.customEndpoint === 'string'
           ? normalizeProviderEndpointConfig(provider.type, {
@@ -271,6 +315,7 @@ function createDefaultVaultState(): VaultState {
     credentials: {},
     accounts: {},
     activeAccounts: {},
+    browserLogins: {},
   };
 }
 
@@ -438,6 +483,86 @@ function getAccountStatusDetail(account: ProviderAccountRecord, vaultLocked: boo
   }
 
   return 'Imported and stored in the encrypted vault. Run validation before treating it as ready.';
+}
+
+function getBrowserLoginBadgeVariant(
+  status: AccountAuthStatusGetResponse['browserLogin'] extends infer T
+    ? T extends { status: infer U }
+      ? U
+      : never
+    : never,
+): BadgeVariant {
+  switch (status) {
+    case 'success':
+      return 'success';
+    case 'pending':
+    case 'helper-missing':
+    case 'timeout':
+    case 'stale':
+    case 'mismatch':
+      return 'warning';
+    case 'cancel':
+    case 'error':
+      return 'error';
+    default:
+      return 'default';
+  }
+}
+
+function getBrowserLoginStatusLabel(status: AccountAuthStatusGetResponse['browserLogin']): string {
+  switch (status?.status) {
+    case 'success':
+      return 'Trusted account available';
+    case 'pending':
+      return 'Browser login pending';
+    case 'helper-missing':
+      return 'Helper unavailable';
+    case 'timeout':
+      return 'Browser login timed out';
+    case 'cancel':
+      return 'Browser login cancelled';
+    case 'stale':
+      return 'Browser login stale';
+    case 'mismatch':
+      return 'Browser login mismatch';
+    case 'error':
+      return 'Browser login error';
+    default:
+      return 'Not connected';
+  }
+}
+
+function getOpenAIBrowserLoginHelperText(
+  status: AccountAuthStatusGetResponse | null,
+  activeAccount: ProviderAccountRecord | undefined,
+  vaultLocked: boolean,
+): string {
+  if (vaultLocked) {
+    return 'Unlock the vault before validating or using OpenAI browser-account artifacts.';
+  }
+
+  if (activeAccount?.validatedAt) {
+    return `Trusted browser-account artifacts already exist for ${activeAccount.label}. Test connection re-validates the stored state without exposing raw helper data.`;
+  }
+
+  switch (status?.browserLogin?.status) {
+    case 'helper-missing':
+      return 'The browser helper is not available in this build. Flux reports the missing-helper state explicitly and will not pretend browser login succeeded.';
+    case 'pending':
+      return 'A browser-account request is already pending in the background. Wait for the trusted status to change before testing again.';
+    case 'success':
+      return 'Trusted browser-account artifacts were detected. Run Test connection to validate the active account-backed state.';
+    case 'cancel':
+      return 'The last browser-account attempt was cancelled. Start a new connect attempt once the helper is available.';
+    case 'timeout':
+      return 'The last browser-account attempt timed out. Retry only after the helper is available and ready.';
+    case 'stale':
+    case 'mismatch':
+    case 'error':
+      return 'The saved browser-account state is not currently trusted. Reconnect with the helper or validate a previously trusted artifact.';
+    default:
+      return 'Use Connect browser account to ask the background for trusted OpenAI browser-account status. If the helper is unavailable, Flux will surface helper-missing instead of faking success.';
+  }
 }
 
 const SECRET_ERROR_PATTERNS = [
@@ -712,7 +837,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!isReady || !providerUsesAccountImport(selectedProvider)) {
+    if (!isReady || !usesProviderAccountSurface(selectedProvider, providerConfigs[selectedProvider])) {
       setAccountAuthStatus(null);
       setAccountQuotaStatus(null);
       return;
@@ -730,7 +855,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [isReady, loadAccountSurface, selectedProvider]);
+  }, [isReady, loadAccountSurface, providerConfigs, selectedProvider]);
 
   async function persistOnboardingState(nextState: OnboardingState): Promise<void> {
     onboardingStateRef.current = nextState;
@@ -763,6 +888,23 @@ export function App() {
   function isProviderReadyForOnboarding(): boolean {
     const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
     const selectedConfig = providerConfigs[selectedProvider];
+    const selectedAuthChoice = resolveProviderAuthChoice(selectedProvider, selectedConfig);
+
+    if (selectedAuthChoice.authMethod === 'browser-login') {
+      const browserLoginState = vaultState.browserLogins?.[selectedProvider];
+      const activeAccountId = vaultState.activeAccounts[selectedProvider];
+      const activeAccount = getProviderAccounts(vaultState, selectedProvider).find(
+        (account) => account.accountId === activeAccountId,
+      );
+
+      return (
+        onboardingState.configuredProvider === selectedProvider &&
+        onboardingState.validatedProvider === selectedProvider &&
+        browserLoginState?.status === 'success' &&
+        Boolean(activeAccountId) &&
+        Boolean(activeAccount?.validatedAt)
+      );
+    }
 
     if (providerRequiresConnectionValidation(selectedDefinition)) {
       return (
@@ -1102,6 +1244,40 @@ export function App() {
     }
   }
 
+  async function handleOpenAIBrowserConnect(): Promise<void> {
+    if (
+      !ensureUnlockedVaultForAccounts(
+        'Unlock the vault before starting OpenAI browser-account status checks.',
+      )
+    ) {
+      return;
+    }
+
+    setAccountActionKey('connect');
+    resetAccountMessage();
+
+    try {
+      const response = await sendExtensionRequest(
+        'ACCOUNT_AUTH_CONNECT_START',
+        {
+          provider: 'openai',
+          transport: 'browser-helper',
+          browserLogin: { uiContext: showOnboarding ? 'onboarding' : 'options' },
+        },
+        'options',
+      );
+
+      await loadAccountSurface('openai');
+      setAccountMessageState(response.accepted ? 'success' : 'error');
+      setAccountMessage(response.message);
+    } catch (error) {
+      setAccountMessageState('error');
+      setAccountMessage(getErrorMessage(error, 'Failed to start the OpenAI browser-account flow.'));
+    } finally {
+      setAccountActionKey(null);
+    }
+  }
+
   async function handleAccountValidate(accountId: string): Promise<void> {
     if (
       !ensureUnlockedVaultForAccounts(
@@ -1277,6 +1453,11 @@ export function App() {
   async function handleSave(): Promise<void> {
     const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
     const selectedConfig = providerConfigs[selectedProvider];
+    const selectedAuthChoice = resolveProviderAuthChoice(selectedProvider, selectedConfig);
+    const usesApiKeyLane = selectedAuthChoice.authMethod === 'api-key';
+    const usesBrowserAccountLane = selectedAuthChoice.authMethod === 'browser-login';
+    const usesAccountImportLane = selectedAuthChoice.authMethod === 'account-import';
+    const usesOAuthLane = selectedAuthChoice.authMethod === 'oauth-github';
     const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
 
     setIsSaving(true);
@@ -1307,11 +1488,7 @@ export function App() {
         }
       }
 
-      if (
-        providerUsesApiKey(selectedDefinition) &&
-        rawApiKey &&
-        vaultState.lockState !== 'unlocked'
-      ) {
+      if (usesApiKeyLane && rawApiKey && vaultState.lockState !== 'unlocked') {
         setSaveState('error');
         setSaveMessage('Unlock the vault before saving a new provider credential.');
         return;
@@ -1327,7 +1504,7 @@ export function App() {
         'options',
       );
 
-      if (providerUsesApiKey(selectedDefinition) && rawApiKey) {
+      if (usesApiKeyLane && rawApiKey) {
         const credentialResponse = await sendExtensionRequest(
           'API_KEY_SET',
           {
@@ -1351,19 +1528,25 @@ export function App() {
           ? 'CLIProxyAPI endpoint saved and the API key was stored in the vault. Run Test connection to mark this provider ready.'
           : selectedProvider === 'cliproxyapi' && !savedRecord
             ? 'CLIProxyAPI endpoint saved. Add a vault-backed API key, then run Test connection before using popup or sidepanel workflows.'
-            : providerUsesApiKey(selectedDefinition) && rawApiKey
+            : usesApiKeyLane && rawApiKey
               ? 'Provider settings saved and the credential was stored in the vault.'
-              : providerUsesApiKey(selectedDefinition) && !savedRecord
+              : usesApiKeyLane && !savedRecord
                 ? 'Provider settings saved. Add a vault credential before using this provider.'
-            : providerUsesOAuthToken(selectedDefinition) && !savedRecord
-              ? 'Provider settings saved. Connect GitHub Copilot in the vault before using this provider.'
-              : providerUsesAccountImport(selectedDefinition) && importedAccounts.length === 0
-                ? 'Provider settings saved. No imported account is available yet. Use the account import flow before testing or using this provider.'
-                : providerUsesAccountImport(selectedDefinition) && activeImportedAccount
-                  ? `Provider settings saved. ${activeImportedAccount.label} is ready for account-backed validation.`
-                  : providerUsesAccountImport(selectedDefinition)
-                    ? 'Provider settings saved. Validate an imported account before using this provider.'
-                    : 'Provider settings saved.',
+              : usesOAuthLane && !savedRecord
+                ? 'Provider settings saved. Connect GitHub Copilot in the vault before using this provider.'
+                : usesBrowserAccountLane && importedAccounts.length === 0
+                  ? 'OpenAI browser login method saved. Use Connect browser account to ask the background for trusted status. If the helper is unavailable, Flux will show helper-missing instead of faking a login.'
+                  : usesBrowserAccountLane && activeImportedAccount
+                    ? `OpenAI browser login method saved. ${activeImportedAccount.label} is available for validation through the trusted background lane.`
+                    : usesBrowserAccountLane
+                      ? 'OpenAI browser login method saved. Validate the active trusted browser-account state before relying on it.'
+                : usesAccountImportLane && importedAccounts.length === 0
+                  ? 'Provider settings saved. No imported account is available yet. Use the account import flow before testing or using this provider.'
+                  : usesAccountImportLane && activeImportedAccount
+                    ? `Provider settings saved. ${activeImportedAccount.label} is ready for account-backed validation.`
+                    : usesAccountImportLane
+                      ? 'Provider settings saved. Validate an imported account before using this provider.'
+                      : 'Provider settings saved.',
       );
     } catch (error) {
       setSaveState('error');
@@ -1547,10 +1730,14 @@ export function App() {
   async function handleTestConnection(): Promise<void> {
     const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
     const selectedConfig = providerConfigs[selectedProvider];
+    const selectedAuthChoice = resolveProviderAuthChoice(selectedProvider, selectedConfig);
+    const usesApiKeyLane = selectedAuthChoice.authMethod === 'api-key';
+    const usesBrowserAccountLane = selectedAuthChoice.authMethod === 'browser-login';
+    const usesAccountBackedLane = selectedAuthChoice.authFamily === 'account-backed';
     const rawApiKey = apiKeyInputRef.current?.value.trim() ?? '';
     const savedMetadata = apiKeyMetadata[selectedProvider];
 
-    if (providerUsesAccountImport(selectedDefinition)) {
+    if (usesAccountBackedLane) {
       setIsTesting(true);
       setValidationState('idle');
       setValidationMessage('');
@@ -1567,7 +1754,9 @@ export function App() {
         if (authStatus.status === 'vault-locked') {
           setValidationState('error');
           setValidationMessage(
-            'Unlock the vault before validating an imported account-backed provider.',
+            usesBrowserAccountLane
+              ? 'Unlock the vault before validating OpenAI browser-account state.'
+              : 'Unlock the vault before validating an imported account-backed provider.',
           );
           return;
         }
@@ -1579,7 +1768,9 @@ export function App() {
         if (!targetAccount) {
           setValidationState('error');
           setValidationMessage(
-            'No imported account is available yet. Import an official auth artifact before testing this provider.',
+            usesBrowserAccountLane
+              ? getOpenAIBrowserLoginHelperText(authStatus, undefined, false)
+              : 'No imported account is available yet. Import an official auth artifact before testing this provider.',
           );
           return;
         }
@@ -1599,7 +1790,9 @@ export function App() {
           response.valid
             ? (response.message ??
                 `${selectedDefinition.label} account ${targetAccount.label} validated successfully.`)
-            : `${selectedDefinition.label} could not validate the imported account.`,
+            : usesBrowserAccountLane
+              ? `${selectedDefinition.label} browser-account state is not ready yet.`
+              : `${selectedDefinition.label} could not validate the imported account.`,
         );
 
         if (response.valid) {
@@ -1621,7 +1814,7 @@ export function App() {
       return;
     }
 
-    if (providerUsesApiKey(selectedDefinition) && !rawApiKey && !savedMetadata) {
+    if (usesApiKeyLane && !rawApiKey && !savedMetadata) {
       setValidationState('error');
       setValidationMessage(
         'Enter an API key or unlock a stored vault credential before testing this provider.',
@@ -1630,7 +1823,7 @@ export function App() {
       return;
     }
 
-    if (providerUsesOAuthToken(selectedDefinition) && !savedMetadata) {
+    if (selectedAuthChoice.authMethod === 'oauth-github' && !savedMetadata) {
       setValidationState('error');
       setValidationMessage('Connect GitHub Copilot before testing this provider.');
       clearApiKeyInputValue();
@@ -1638,7 +1831,7 @@ export function App() {
     }
 
     if (
-      (providerUsesApiKey(selectedDefinition) || providerUsesOAuthToken(selectedDefinition)) &&
+      (usesApiKeyLane || selectedAuthChoice.authMethod === 'oauth-github') &&
       !rawApiKey &&
       vaultState.lockState !== 'unlocked'
     ) {
@@ -1679,13 +1872,13 @@ export function App() {
       const response = await sendExtensionRequest(
         'API_KEY_VALIDATE',
         {
-          provider: selectedProvider,
-          apiKey: rawApiKey || undefined,
-           authKind: providerUsesOAuthToken(selectedDefinition)
-             ? 'oauth-token'
-             : providerUsesApiKey(selectedDefinition)
-               ? 'api-key'
-               : undefined,
+            provider: selectedProvider,
+            apiKey: rawApiKey || undefined,
+            authKind: selectedAuthChoice.authMethod === 'oauth-github'
+              ? 'oauth-token'
+              : usesApiKeyLane
+                ? 'api-key'
+                : undefined,
            config: nextConfig,
          },
          'options',
@@ -1718,6 +1911,12 @@ export function App() {
 
   const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
   const selectedConfig = providerConfigs[selectedProvider];
+  const selectedAuthChoice = resolveProviderAuthChoice(selectedProvider, selectedConfig);
+  const selectedUsesApiKeyLane = selectedAuthChoice.authMethod === 'api-key';
+  const selectedUsesOAuthLane = selectedAuthChoice.authMethod === 'oauth-github';
+  const selectedUsesAccountImportLane = selectedAuthChoice.authMethod === 'account-import';
+  const selectedUsesBrowserAccountLane = selectedAuthChoice.authMethod === 'browser-login';
+  const selectedUsesAccountSurface = selectedAuthChoice.authFamily === 'account-backed';
   const providerAccounts = getProviderAccounts(vaultState, selectedProvider);
   const activeProviderAccount = getActiveProviderAccount(vaultState, selectedProvider);
   const selectedCredentialRecord = vaultState.credentials[selectedProvider];
@@ -1752,9 +1951,37 @@ export function App() {
       : vaultState.lockState === 'locked'
         ? 'Unlock once per browser session before saving, validating, or using credentials.'
         : 'Credentials are available for this browser session only.';
-  const credentialStatusLabel = !selectedDefinition.requiresCredential
+  const openAIBrowserHelperMessage = getOpenAIBrowserLoginHelperText(
+    accountAuthStatus,
+    surfacedActiveProviderAccount,
+    vaultState.lockState !== 'unlocked',
+  );
+  const credentialStatusLabel = selectedUsesBrowserAccountLane
+    ? vaultState.lockState === 'uninitialized'
+      ? 'Vault not initialized'
+      : vaultState.lockState === 'locked'
+        ? surfacedActiveProviderAccount || accountAuthStatus?.browserLogin
+          ? 'Vault locked'
+          : 'Browser account missing'
+        : surfacedActiveProviderAccount?.status === 'revoked' ||
+            activeProviderSessionStatus === 'revoked'
+          ? 'Account revoked'
+          : activeProviderSessionStatus === 'refresh-required'
+            ? 'Refresh required'
+            : activeProviderSessionStatus === 'expired'
+              ? 'Session expired'
+              : surfacedActiveProviderAccount?.status === 'needs-auth'
+                ? 'Needs auth'
+                : surfacedActiveProviderAccount?.stale
+                  ? 'Account stale'
+                  : surfacedActiveProviderAccount?.validatedAt
+                    ? 'Account validated'
+                    : accountAuthStatus?.browserLogin
+                      ? getBrowserLoginStatusLabel(accountAuthStatus.browserLogin)
+                      : 'Browser account missing'
+    : !selectedDefinition.requiresCredential
     ? 'Not required'
-    : providerUsesAccountImport(selectedDefinition)
+    : selectedUsesAccountImportLane
       ? vaultState.lockState === 'uninitialized'
         ? 'Vault not initialized'
         : vaultState.lockState === 'locked'
@@ -1786,23 +2013,25 @@ export function App() {
         : vaultState.lockState === 'locked'
           ? savedMetadata
             ? 'Vault locked'
-            : providerUsesOAuthToken(selectedDefinition)
+            : selectedUsesOAuthLane
               ? 'OAuth required'
               : 'Credential missing'
           : !savedMetadata
-            ? providerUsesOAuthToken(selectedDefinition)
+            ? selectedUsesOAuthLane
               ? 'OAuth required'
               : 'Credential missing'
             : selectedCredentialRecord?.stale
               ? 'Credential stale'
               : selectedCredentialRecord?.validatedAt
-                ? providerUsesOAuthToken(selectedDefinition)
+                ? selectedUsesOAuthLane
                   ? 'OAuth connected'
                   : 'Validated'
-                : providerUsesOAuthToken(selectedDefinition)
+                : selectedUsesOAuthLane
                   ? 'OAuth connected'
                   : 'Credential saved';
-  const credentialHelperMessage = providerUsesAccountImport(selectedDefinition)
+  const credentialHelperMessage = selectedUsesBrowserAccountLane
+    ? openAIBrowserHelperMessage
+    : selectedUsesAccountImportLane
     ? surfacedProviderAccounts.length === 0
       ? 'No imported account is available yet. Use the account import flow before testing or using this provider.'
       : surfacedActiveProviderAccount?.status === 'revoked' ||
@@ -1824,7 +2053,7 @@ export function App() {
                 ? `Imported account ${surfacedActiveProviderAccount.label} is stored. Run a connection test to confirm the current account session.`
                 : 'Select and validate an imported account before using this provider.'
     : !savedMetadata
-      ? providerUsesOAuthToken(selectedDefinition)
+      ? selectedUsesOAuthLane
         ? 'Connect GitHub Copilot and store the token in the vault before running this provider.'
         : selectedProvider === 'cliproxyapi'
           ? 'CLIProxyAPI needs both a saved endpoint and a vault-backed API key. Save first, then run Test connection before relying on it.'
@@ -1846,20 +2075,26 @@ export function App() {
               : selectedProvider === 'cliproxyapi'
                 ? 'CLIProxyAPI settings are saved in the vault. Run Test connection to confirm the endpoint and API key together.'
                 : 'Credential is stored in the vault. Run a connection test to validate it.';
-  const onboardingProviderStatusLabel = providerUsesAccountImport(selectedDefinition)
+  const onboardingProviderStatusLabel = selectedUsesBrowserAccountLane
     ? credentialStatusLabel
-    : providerUsesOAuthToken(selectedDefinition)
+    : selectedUsesAccountImportLane
+    ? credentialStatusLabel
+    : selectedUsesOAuthLane
       ? savedMetadata
         ? 'OAuth connected'
         : 'Connect GitHub'
       : selectedDefinition.requiresCredential
         ? credentialStatusLabel
         : 'Ready';
-  const onboardingProviderSetupHint = providerUsesAccountImport(selectedDefinition)
+  const onboardingProviderSetupHint = selectedUsesBrowserAccountLane
+    ? surfacedActiveProviderAccount
+      ? `${credentialHelperMessage} The browser-account lane stays background-owned and never exposes raw helper payloads or account artifacts in Options.`
+      : 'OpenAI browser-account reuses the live provider setup controls. Save the login method, unlock the vault, use Connect browser account, then run Test connection once trusted artifacts exist. If the helper is unavailable, Flux will show helper-missing instead of pretending success.'
+    : selectedUsesAccountImportLane
     ? surfacedProviderAccounts.length === 0
       ? 'Codex stays locked until an official auth artifact is imported into the vault and validated against the runtime.'
       : `${credentialHelperMessage} Popup quick actions and sidepanel sends stay locked until the active Codex account is validated and healthy.`
-    : providerUsesOAuthToken(selectedDefinition)
+    : selectedUsesOAuthLane
       ? savedMetadata
         ? 'The Copilot token is already in the vault. Run connection validation before you finish onboarding.'
         : 'Connect GitHub Copilot, keep the token in the unlocked vault, then validate the provider connection.'
@@ -1868,11 +2103,15 @@ export function App() {
       : selectedDefinition.requiresCredential
         ? 'Save the provider settings first, then validate the current credential before finishing onboarding.'
         : 'Save the provider settings so the active model and endpoint are carried into the workspace.';
-  const onboardingProviderReadyHint = providerUsesAccountImport(selectedDefinition)
+  const onboardingProviderReadyHint = selectedUsesBrowserAccountLane
+    ? isProviderReadyForOnboarding()
+      ? `OpenAI browser-account is ready because ${surfacedActiveProviderAccount?.label ?? 'the active trusted account'} is validated and the helper state is background-approved.`
+      : `OpenAI browser-account is not ready yet. Current state: ${credentialStatusLabel.toLowerCase()}. ${credentialHelperMessage}`
+    : selectedUsesAccountImportLane
     ? isProviderReadyForOnboarding()
       ? `Codex is ready because ${surfacedActiveProviderAccount?.label ?? 'the active imported account'} is validated and the runtime does not currently require a refresh.`
       : `Codex is not ready yet. Current state: ${credentialStatusLabel.toLowerCase()}. ${credentialHelperMessage}`
-    : providerUsesOAuthToken(selectedDefinition)
+    : selectedUsesOAuthLane
       ? isProviderReadyForOnboarding()
         ? 'Copilot is connected and validated, so the side panel and popup can reuse it immediately.'
         : 'Copilot still needs a connected vault token plus a successful validation before onboarding can finish.'
@@ -1929,9 +2168,12 @@ export function App() {
   const providerStatusSummary =
     validationMessage ||
     saveMessage ||
+    (selectedUsesBrowserAccountLane
+      ? 'OpenAI browser-account readiness comes from the background runtime. Connect browser account surfaces trusted helper status, and Test connection validates only stored trusted artifacts.'
+      :
     (selectedProvider === 'cliproxyapi'
       ? 'CLIProxyAPI requires an endpoint. Save the endpoint and API key first, then run Test connection to mark it ready.'
-      : 'Save changes, then test the selected provider configuration.');
+      : 'Save changes, then test the selected provider configuration.'));
 
   const providerSetupPanel = (
     <section className="grid gap-6 lg:grid-cols-[1.05fr_1fr]">
@@ -1966,19 +2208,35 @@ export function App() {
         </div>
       </div>
 
-      <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
-        <Input
-          label="Model"
-          value={selectedConfig.model}
-          onChange={(event) => updateProviderConfig({ model: event.target.value })}
-          placeholder={selectedDefinition.defaultModel}
-          helperText="Use the exact model id your provider expects."
-        />
+        <div className="space-y-4 rounded-[24px] border border-border bg-surface-primary p-5">
+          {selectedProvider === 'openai' ? (
+            <Select
+              id="openai-login-method"
+              label="Login method"
+              value={normalizeOpenAIAuthChoiceId(selectedConfig.authChoiceId)}
+              onChange={(event) =>
+                updateProviderConfig({ authChoiceId: normalizeOpenAIAuthChoiceId(event.target.value) })
+              }
+              options={getProviderAuthChoices('openai').map((choice) => ({
+                value: choice.id,
+                label: choice.label,
+              }))}
+              helperText="OpenAI exposes exactly 2 login methods here. Readiness still comes from the background runtime, not from this form."
+            />
+          ) : null}
 
-        {selectedDefinition.supportsEndpoint ? (
           <Input
-            label={selectedDefinition.endpointLabel}
-            value={selectedConfig.customEndpoint ?? ''}
+            label="Model"
+            value={selectedConfig.model}
+            onChange={(event) => updateProviderConfig({ model: event.target.value })}
+            placeholder={selectedDefinition.defaultModel}
+            helperText="Use the exact model id your provider expects."
+          />
+
+          {selectedDefinition.supportsEndpoint && !selectedUsesBrowserAccountLane ? (
+            <Input
+              label={selectedDefinition.endpointLabel}
+              value={selectedConfig.customEndpoint ?? ''}
             onChange={(event) => updateProviderConfig({ customEndpoint: event.target.value })}
             placeholder={selectedDefinition.endpointPlaceholder}
             helperText={getProviderEndpointHelperText(selectedProvider)}
@@ -2076,7 +2334,7 @@ export function App() {
 
             {selectedDefinition.requiresCredential &&
             savedMetadata &&
-            !providerUsesAccountImport(selectedDefinition) ? (
+            !selectedUsesAccountSurface ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -2103,7 +2361,7 @@ export function App() {
           </div>
         </div>
 
-        {providerUsesApiKey(selectedDefinition) ? (
+        {selectedUsesApiKeyLane ? (
           <div className="space-y-3">
             <Input
               ref={apiKeyInputRef}
@@ -2131,7 +2389,7 @@ export function App() {
               </div>
             ) : null}
           </div>
-        ) : providerUsesOAuthToken(selectedDefinition) ? (
+        ) : selectedUsesOAuthLane ? (
           <div className="space-y-3">
             <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-4">
               <p className="text-sm font-medium text-content-primary">
@@ -2223,7 +2481,107 @@ export function App() {
               </div>
             ) : null}
           </div>
-        ) : providerUsesAccountImport(selectedDefinition) ? (
+        ) : selectedUsesBrowserAccountLane ? (
+          <div className="space-y-3">
+            <div className="overflow-hidden rounded-2xl border border-border bg-surface-elevated">
+              <div className="border-b border-border/80 bg-[linear-gradient(135deg,_rgb(var(--color-primary-500)/0.10),_transparent_55%)] px-4 py-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-medium text-content-primary">
+                        Browser-account authentication
+                      </p>
+                      <Badge variant="info">OpenAI only</Badge>
+                      <Badge variant="default">Background-owned trust</Badge>
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-content-secondary">
+                      Flux only shows sanitized browser-account status from the background. Raw helper payloads, auth artifacts, and runtime secrets never appear in Options.
+                    </p>
+                  </div>
+
+                  <Badge
+                    variant={
+                      accountAuthStatus?.browserLogin
+                        ? getBrowserLoginBadgeVariant(accountAuthStatus.browserLogin.status)
+                        : surfacedActiveProviderAccount
+                          ? getAccountBadgeVariant(surfacedActiveProviderAccount)
+                          : 'default'
+                    }
+                  >
+                    {credentialStatusLabel}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="space-y-4 px-4 py-4">
+                <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
+                  <div className="rounded-xl border border-border bg-surface-primary px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                      Browser lane status
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-content-primary">
+                      {getBrowserLoginStatusLabel(accountAuthStatus?.browserLogin)}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-content-secondary">
+                      {credentialHelperMessage}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-surface-primary px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-content-tertiary">
+                      Trusted account
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-content-primary">
+                      {surfacedActiveProviderAccount?.label ?? 'No trusted account yet'}
+                    </p>
+                    <p className="mt-1 text-xs text-content-secondary">
+                      {surfacedActiveProviderAccount?.maskedIdentifier ??
+                        surfacedActiveProviderAccount?.accountId ??
+                        'Connect through the helper once it exists, or validate previously trusted local artifacts.'}
+                    </p>
+                  </div>
+                </div>
+
+                {savedMetadata ? (
+                  <div className="rounded-lg border border-border bg-surface-primary px-4 py-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
+                      <KeyRound className="h-4 w-4 text-primary-600" />
+                      Stored browser-account artifact
+                    </div>
+                    <p className="mt-2 text-sm text-content-secondary">
+                      {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
+                    </p>
+                    <p className="mt-1 text-xs text-content-tertiary">
+                      Only masked metadata is shown here. The raw artifact and helper payload remain hidden.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className={`rounded-xl border px-4 py-3 text-sm ${accountTone}`}>
+                  {accountMessage ||
+                    'OpenAI browser-account readiness is owned by the background runtime. Connect asks for trusted status; Test connection validates the active stored account if one already exists.'}
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="lg"
+                    className="min-h-11"
+                    loading={accountActionKey === 'connect'}
+                    onClick={() => {
+                      void handleOpenAIBrowserConnect();
+                    }}
+                    iconLeft={<PlugZap className="h-4 w-4" />}
+                    disabled={!isReady}
+                  >
+                    Connect browser account
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : selectedUsesAccountImportLane ? (
           <div className="space-y-3">
             <div className="overflow-hidden rounded-2xl border border-border bg-surface-elevated">
               <div className="border-b border-border/80 bg-[linear-gradient(135deg,_rgb(var(--color-primary-500)/0.10),_transparent_55%)] px-4 py-4">
@@ -2625,7 +2983,9 @@ export function App() {
         theme={settings.theme}
         language={settings.language}
         providerSetupPanel={providerSetupPanel}
-        providerUsesAccountImport={providerUsesAccountImport(selectedDefinition)}
+        providerUsesAccountImport={selectedUsesAccountImportLane}
+        providerUsesBrowserAccount={selectedUsesBrowserAccountLane}
+        providerAuthChoiceLabel={selectedAuthChoice.label}
         providerRequiresEndpoint={selectedProvider === 'cliproxyapi'}
         providerStatusLabel={onboardingProviderStatusLabel}
         providerSetupHint={onboardingProviderSetupHint}
@@ -2635,7 +2995,7 @@ export function App() {
         onComplete={() => {
           void handleOnboardingComplete();
         }}
-        providerRequiresApiKey={providerUsesApiKey(selectedDefinition)}
+        providerRequiresApiKey={selectedUsesApiKeyLane}
         canComplete={isProviderReadyForOnboarding()}
         isBusy={isSaving || isTesting || isCompletingOnboarding}
         isCompleting={isCompletingOnboarding}

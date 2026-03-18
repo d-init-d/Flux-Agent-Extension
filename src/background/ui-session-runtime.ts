@@ -16,6 +16,7 @@ import {
   createDefaultProviderConfigs,
   evaluateProviderEndpointPolicy,
   normalizeProviderEndpointConfig,
+  providerSupportsAccountBackedAuth,
 } from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
@@ -64,6 +65,7 @@ import type {
   TabState,
   FillAction,
   ProviderAccountRecord,
+  ProviderBrowserLoginState,
   ProviderCredentialRecord,
   VaultState,
 } from '@shared/types';
@@ -1145,7 +1147,7 @@ export class UISessionRuntime {
   private async handleApiKeyValidate(
     payload: RequestPayloadMap['API_KEY_VALIDATE'],
   ): RuntimeHandlerResponse<'API_KEY_VALIDATE'> {
-    if (this.supportsAccountBackedAuth(payload.provider)) {
+    if (payload.provider === 'codex') {
       const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
       if (snapshot.vault.lockState !== 'unlocked') {
         throw new ExtensionError(
@@ -1249,7 +1251,9 @@ export class UISessionRuntime {
         provider: payload.provider,
         authFamily: 'account-backed',
         status,
-        availableTransports: ['artifact-import'],
+        availableTransports:
+          payload.provider === 'openai' ? ['browser-helper'] : ['artifact-import'],
+        browserLogin: snapshot.browserLogin,
         credential: snapshot.credential,
         accounts: snapshot.accounts,
         activeAccountId: snapshot.activeAccountId,
@@ -1266,6 +1270,54 @@ export class UISessionRuntime {
         'ACCOUNT_AUTH_CONNECT_START',
         payload.provider,
       );
+    }
+
+    if (payload.provider === 'openai') {
+      if (payload.transport !== 'browser-helper') {
+        throw new ExtensionError(
+          ErrorCode.ACTION_INVALID,
+          `Unsupported account auth transport "${payload.transport}"`,
+          true,
+        );
+      }
+
+      const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+      if (snapshot.browserLogin?.status === 'success' && snapshot.activeAccountId) {
+        return {
+          success: true,
+          data: {
+            provider: payload.provider,
+            transport: payload.transport,
+            accepted: false,
+            nextStep: 'validate',
+            message:
+              'OpenAI browser-account already has trusted local artifacts. Validate the current account again if you need to refresh readiness.',
+            browserLogin: snapshot.browserLogin,
+          },
+        };
+      }
+
+      const helperMissingState = await this.credentialVault.setBrowserLoginResult('openai', {
+        status: 'helper-missing',
+        updatedAt: Date.now(),
+        lastAttemptAt: Date.now(),
+        lastCompletedAt: undefined,
+        lastErrorCode: 'OPENAI_BROWSER_HELPER_MISSING',
+        retryable: true,
+      });
+
+      return {
+        success: true,
+        data: {
+          provider: payload.provider,
+          transport: payload.transport,
+          accepted: false,
+          nextStep: 'manual-action',
+          message:
+            'OpenAI browser-account helper is not available in this build. Flux kept the status explicit instead of pretending browser login succeeded.',
+          browserLogin: helperMissingState.browserLogins?.openai,
+        },
+      };
     }
 
     this.assertAccountArtifactTransport(payload.transport);
@@ -1411,7 +1463,8 @@ export class UISessionRuntime {
     });
     await this.credentialVault.markValidated(payload.provider);
 
-    const sessionSnapshot = await this.codexAccountSessionManager.ensureSession({
+    const accountProvider = payload.provider as Extract<SessionConfig['provider'], 'codex' | 'openai'>;
+    const sessionSnapshot = await this.getAccountSessionManager(accountProvider).ensureSession({
       accountId: imported.derived.accountId,
       purpose: 'validate',
       forceRefresh: payload.forceRefresh,
@@ -1567,7 +1620,8 @@ export class UISessionRuntime {
     const vault = await this.credentialVault.getState();
     const accountId = payload.accountId ?? vault.activeAccounts[payload.provider];
     if (accountId) {
-      await this.codexAccountSessionManager.ensureSession({
+      const accountProvider = payload.provider as Extract<SessionConfig['provider'], 'codex' | 'openai'>;
+      await this.getAccountSessionManager(accountProvider).ensureSession({
         accountId,
         purpose: 'quota-refresh',
       });
@@ -2302,7 +2356,15 @@ export class UISessionRuntime {
   }
 
   private supportsAccountBackedAuth(provider: SessionConfig['provider']): boolean {
-    return PROVIDER_LOOKUP[provider].authFamily === 'account-backed';
+    return providerSupportsAccountBackedAuth(provider);
+  }
+
+  private getAccountSessionManager(
+    provider: Extract<SessionConfig['provider'], 'codex' | 'openai'>,
+  ): CodexAccountSessionManager {
+    return provider === 'openai'
+      ? this.openAIBrowserAccountSessionManager
+      : this.codexAccountSessionManager;
   }
 
   private assertAccountArtifactTransport(
@@ -2319,17 +2381,20 @@ export class UISessionRuntime {
 
   private async getAccountSurfaceSnapshot(provider: SessionConfig['provider']): Promise<{
     vault: VaultState;
+    browserLogin?: ProviderBrowserLoginState;
     credential?: ProviderCredentialRecord;
     accounts: ProviderAccountRecord[];
     activeAccountId?: string;
   }> {
-    const [vault, accounts] = await Promise.all([
+    const [vault, accounts, browserLogin] = await Promise.all([
       this.credentialVault.getState(),
       this.credentialVault.listAccounts(provider),
+      provider === 'openai' ? this.credentialVault.getBrowserLoginState(provider) : undefined,
     ]);
 
     return {
       vault,
+      browserLogin,
       credential: vault.credentials[provider],
       accounts: accounts.map((account) => this.cloneAccountRecord(account)),
       activeAccountId: vault.activeAccounts[provider],
@@ -4316,6 +4381,7 @@ ${script}
 
     return (
       left.enabled === right.enabled &&
+      (left.authChoiceId ?? '') === (right.authChoiceId ?? '') &&
       left.model === right.model &&
       left.maxTokens === right.maxTokens &&
       left.temperature === right.temperature &&

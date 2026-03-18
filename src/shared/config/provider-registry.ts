@@ -385,6 +385,23 @@ export function getPrimaryProviderAuthChoice(
   );
 }
 
+export function getProviderAuthChoiceById(
+  provider: ProviderDefinition | AIProviderType,
+  choiceId: string | undefined,
+): ProviderAuthChoiceDefinition {
+  const definition = resolveProviderDefinition(provider);
+  const normalizedChoiceId = choiceId?.trim();
+
+  if (!normalizedChoiceId) {
+    return getPrimaryProviderAuthChoice(definition);
+  }
+
+  return (
+    getProviderAuthChoices(definition).find((choice) => choice.id === normalizedChoiceId) ??
+    getPrimaryProviderAuthChoice(definition)
+  );
+}
+
 export function providerSupportsMultipleAuthChoices(
   provider: ProviderDefinition | AIProviderType,
 ): boolean {
@@ -397,6 +414,16 @@ export function providerUsesOAuthToken(provider: ProviderDefinition | AIProvider
 
 export function providerUsesAccountImport(provider: ProviderDefinition | AIProviderType): boolean {
   return resolveProviderDefinition(provider).authMethod === 'account-import';
+}
+
+export function providerSupportsAccountBackedAuth(
+  provider: ProviderDefinition | AIProviderType,
+): boolean {
+  const definition = resolveProviderDefinition(provider);
+  return (
+    definition.authFamily === 'account-backed' ||
+    getProviderAuthChoices(definition).some((choice) => choice.authFamily === 'account-backed')
+  );
 }
 
 export function providerRequiresConnectionValidation(
@@ -416,6 +443,8 @@ export function createDefaultProviderConfigs(): Record<AIProviderType, ProviderC
       provider.type,
       {
         enabled: provider.type !== 'custom',
+        authChoiceId:
+          provider.type === 'openai' ? getPrimaryProviderAuthChoice(provider).id : undefined,
         model: provider.defaultModel,
         maxTokens: 4096,
         temperature: 0.3,

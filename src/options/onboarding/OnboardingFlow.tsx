@@ -21,6 +21,8 @@ interface OnboardingFlowProps {
   providerRequiresApiKey: boolean;
   providerRequiresEndpoint?: boolean;
   providerUsesAccountImport?: boolean;
+  providerUsesBrowserAccount?: boolean;
+  providerAuthChoiceLabel?: string;
   providerStatusLabel?: string;
   providerSetupHint?: string;
   providerReadyHint?: string;
@@ -63,6 +65,8 @@ export function OnboardingFlow({
   providerRequiresApiKey,
   providerRequiresEndpoint = false,
   providerUsesAccountImport = false,
+  providerUsesBrowserAccount = false,
+  providerAuthChoiceLabel,
   providerStatusLabel,
   providerSetupHint,
   providerReadyHint,
@@ -198,7 +202,9 @@ export function OnboardingFlow({
                     Start with the provider you trust for your first run.
                   </h2>
                     <p className="mt-3 max-w-3xl text-sm leading-7 text-content-secondary sm:text-base">
-                      {providerUsesAccountImport
+                      {providerUsesBrowserAccount
+                        ? `This onboarding step reuses the live provider setup controls. For OpenAI with ${providerAuthChoiceLabel ?? 'browser-account'} selected, save the provider, unlock the vault, use Connect browser account, then run Test connection only after trusted background artifacts exist. If the helper is unavailable, Flux will show helper-missing rather than pretending success.`
+                        : providerUsesAccountImport
                         ? 'This onboarding step reuses the live provider setup controls. For Codex, save the provider, unlock the vault, import an official artifact, then validate the active account before you finish onboarding.'
                         : providerRequiresEndpoint
                           ? 'This onboarding step reuses the live provider setup controls. For CLIProxyAPI, the endpoint is mandatory: save the endpoint, keep the API key in the vault, then run Test connection before Flux marks it ready.'
@@ -221,7 +227,7 @@ export function OnboardingFlow({
                           </p>
                         </div>
                         {providerStatusLabel ? (
-                          <Badge variant={providerUsesAccountImport ? 'warning' : 'info'}>
+                          <Badge variant={providerUsesAccountImport || providerUsesBrowserAccount ? 'warning' : 'info'}>
                             {providerStatusLabel}
                           </Badge>
                         ) : null}
@@ -309,7 +315,11 @@ export function OnboardingFlow({
                         ? 'The dashboard already knows your current provider and appearance profile, and it carries the current default permission profile forward until you refine the toggles.'
                         : 'Go back to the provider step to finish saving and validating the selected connection before you unlock the full dashboard.'}
                     </p>
-                    {providerRequiresApiKey ? (
+                    {providerUsesBrowserAccount ? (
+                      <p className="mt-3 text-sm leading-6 text-content-secondary">
+                        OpenAI browser-account is only considered ready after the background reports trusted browser-account state and Test connection validates the active stored account-backed artifact. The UI never decides trust on its own.
+                      </p>
+                    ) : providerRequiresApiKey ? (
                       <p className="mt-3 text-sm leading-6 text-content-secondary">
                         {providerRequiresEndpoint
                           ? 'CLIProxyAPI is only considered ready after the saved endpoint and vault-backed API key pass Test connection. Unlock the vault once per browser session before validating or running it.'

@@ -4273,6 +4273,187 @@ describe('UI session runtime', () => {
     });
   });
 
+  it('surfaces sanitized OpenAI browser-account status through account auth messages', async () => {
+    const observedAt = Date.UTC(2026, 2, 18, 9, 0, 0);
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {
+          openai: {
+            version: 1,
+            provider: 'openai',
+            providerFamily: 'default',
+            authFamily: 'account-backed',
+            authKind: 'account-artifact',
+            maskedValue: 'acct_****5678',
+            updatedAt: observedAt,
+            validatedAt: observedAt,
+          },
+        },
+        accounts: {
+          openai: [
+            {
+              version: 1,
+              provider: 'openai',
+              providerFamily: 'default',
+              authFamily: 'account-backed',
+              accountId: 'acct_openai_browser_surface',
+              label: 'Browser Seat',
+              maskedIdentifier: 'br***@example.com',
+              status: 'active',
+              isActive: true,
+              updatedAt: observedAt,
+              validatedAt: observedAt,
+            },
+          ],
+        },
+        activeAccounts: {
+          openai: 'acct_openai_browser_surface',
+        },
+        browserLogins: {
+          openai: {
+            authMethod: 'browser-account',
+            status: 'success',
+            updatedAt: observedAt,
+            lastAttemptAt: observedAt,
+            lastCompletedAt: observedAt,
+            accountId: 'acct_openai_browser_surface',
+            accountLabel: 'Browser Seat',
+            helper: {
+              id: 'openai-helper',
+              version: '0.0.0-test',
+            },
+          },
+        },
+      },
+    });
+    await chrome.storage.session.set({
+      __flux_vault_session__: {
+        passphrase: 'test-passphrase',
+        unlockedAt: observedAt,
+      },
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({ actionId: action.id, success: true, duration: 5 })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const authStatus = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_STATUS_GET', { provider: 'openai' }),
+    );
+
+    expect(authStatus.success).toBe(true);
+    expect(authStatus.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        authFamily: 'account-backed',
+        status: 'ready',
+        availableTransports: ['browser-helper'],
+        activeAccountId: 'acct_openai_browser_surface',
+        browserLogin: expect.objectContaining({
+          status: 'success',
+          accountId: 'acct_openai_browser_surface',
+          helper: expect.objectContaining({ id: 'openai-helper', version: '0.0.0-test' }),
+        }),
+      }),
+    );
+  });
+
+  it('validates an existing trusted OpenAI browser-account artifact through the account-backed runtime path', async () => {
+    await chrome.storage.local.clear();
+    await chrome.storage.session.clear();
+    await seedUnlockedOpenAiBrowserAccountVaultFixture();
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({ actionId: action.id, success: true, duration: 5 })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const validateResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_VALIDATE', {
+        provider: 'openai',
+        accountId: 'acct_openai_browser_runtime',
+      }),
+    );
+
+    expect(validateResponse.success).toBe(true);
+    expect(validateResponse.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        valid: true,
+        account: expect.objectContaining({
+          accountId: 'acct_openai_browser_runtime',
+          provider: 'openai',
+        }),
+        message: expect.stringContaining('Validated stored OpenAI browser account artifact'),
+      }),
+    );
+  });
+
+  it('fails closed with helper-missing when starting OpenAI browser-account connect without a helper', async () => {
+    const observedAt = Date.UTC(2026, 2, 18, 9, 30, 0);
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {},
+        accounts: {},
+        activeAccounts: {},
+        browserLogins: {},
+      },
+    });
+    await chrome.storage.session.set({
+      __flux_vault_session__: {
+        passphrase: 'test-passphrase',
+        unlockedAt: observedAt,
+      },
+    });
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({ actionId: action.id, success: true, duration: 5 })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: createAIManager('{"summary":"noop","actions":[]}').manager,
+    });
+
+    const connectResponse = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_CONNECT_START', {
+        provider: 'openai',
+        transport: 'browser-helper',
+        browserLogin: { uiContext: 'options' },
+      }),
+    );
+
+    expect(connectResponse.success).toBe(true);
+    expect(connectResponse.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        transport: 'browser-helper',
+        accepted: false,
+        nextStep: 'manual-action',
+        message: expect.stringContaining('helper is not available in this build'),
+        browserLogin: expect.objectContaining({ status: 'helper-missing' }),
+      }),
+    );
+
+    const authStatus = await runtime.handleMessage(
+      createExtensionMessage('ACCOUNT_AUTH_STATUS_GET', { provider: 'openai' }),
+    );
+
+    expect(authStatus.success).toBe(true);
+    expect(authStatus.data).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        status: 'needs-auth',
+        availableTransports: ['browser-helper'],
+        browserLogin: expect.objectContaining({ status: 'helper-missing' }),
+      }),
+    );
+  });
+
   it('executes baseline codex account-store mutations while keeping auth exchange deferred', async () => {
     const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
     const idToken = createJwt({

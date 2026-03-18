@@ -1,7 +1,11 @@
 import { vi } from 'vitest';
 import * as providerLoader from '../../core/ai-client/provider-loader';
 import { importCodexAccountArtifact } from '../../core/auth/codex-account-import';
-import { PROVIDER_LOOKUP, createDefaultProviderConfigs } from '../../shared/config';
+import {
+  PROVIDER_LOOKUP,
+  createDefaultProviderConfigs,
+  providerSupportsAccountBackedAuth,
+} from '../../shared/config';
 import {
   evaluateProviderEndpointPolicy,
   normalizeProviderEndpointConfig,
@@ -58,6 +62,7 @@ function createDefaultVaultState(): VaultState {
     credentials: {},
     accounts: {},
     activeAccounts: {},
+    browserLogins: {},
   };
 }
 
@@ -107,7 +112,7 @@ function buildCredentialRecord(
 }
 
 function supportsAccountBackedAuth(provider: AIProviderType): boolean {
-  return PROVIDER_LOOKUP[provider].authFamily === 'account-backed';
+  return providerSupportsAccountBackedAuth(provider);
 }
 
 function cloneAccountRecord(account: ProviderAccountRecord): ProviderAccountRecord {
@@ -283,6 +288,7 @@ async function getSettingsState() {
     vault.credentials = storedVault.credentials ?? {};
     vault.accounts = storedVault.accounts ?? {};
     vault.activeAccounts = storedVault.activeAccounts ?? {};
+    vault.browserLogins = storedVault.browserLogins ?? {};
   }
 
   const providerKeyMetadata = stored.providerKeyMetadata as
@@ -513,7 +519,7 @@ export function installOptionsRuntimeMock(): void {
       }
       case 'API_KEY_VALIDATE': {
         const request = payload as RequestPayloadMap['API_KEY_VALIDATE'];
-        if (supportsAccountBackedAuth(request.provider)) {
+        if (request.provider === 'codex') {
           const accounts = [...(state.vault.accounts[request.provider] ?? [])].map(
             cloneAccountRecord,
           );
@@ -613,6 +619,7 @@ export function installOptionsRuntimeMock(): void {
         const accounts = (state.vault.accounts[request.provider] ?? []).map(cloneAccountRecord);
         const credential = state.vault.credentials[request.provider];
         const activeAccountId = state.vault.activeAccounts[request.provider];
+        const browserLogin = state.vault.browserLogins?.[request.provider];
 
         return success({
           provider: request.provider,
@@ -623,7 +630,8 @@ export function installOptionsRuntimeMock(): void {
               : accounts.length > 0 || credential
                 ? 'ready'
                 : 'needs-auth',
-          availableTransports: ['artifact-import'],
+          availableTransports: request.provider === 'openai' ? ['browser-helper'] : ['artifact-import'],
+          browserLogin,
           credential,
           accounts,
           activeAccountId,
@@ -680,6 +688,52 @@ export function installOptionsRuntimeMock(): void {
         const request = payload as RequestPayloadMap['ACCOUNT_AUTH_CONNECT_START'];
         if (!supportsAccountBackedAuth(request.provider)) {
           return createUnsupportedAccountProviderResponse(request.provider);
+        }
+
+        if (request.provider === 'openai') {
+          if (request.transport !== 'browser-helper') {
+            throw new Error(`Unsupported account auth transport ${request.transport}`);
+          }
+
+          const existingBrowserLogin = state.vault.browserLogins?.openai;
+          if (existingBrowserLogin?.status === 'success' && state.vault.activeAccounts.openai) {
+            return success({
+              provider: request.provider,
+              transport: request.transport,
+              accepted: false,
+              nextStep: 'validate',
+              message:
+                'OpenAI browser-account already has trusted local artifacts. Validate the current account again if you need to refresh readiness.',
+              browserLogin: existingBrowserLogin,
+            });
+          }
+
+          const browserLogin = {
+            authMethod: 'browser-account' as const,
+            status: 'helper-missing' as const,
+            updatedAt: Date.now(),
+            lastAttemptAt: Date.now(),
+            lastErrorCode: 'OPENAI_BROWSER_HELPER_MISSING',
+            retryable: true,
+          };
+          const nextVault = {
+            ...state.vault,
+            browserLogins: {
+              ...(state.vault.browserLogins ?? {}),
+              openai: browserLogin,
+            },
+          };
+          await saveVault(nextVault);
+
+          return success({
+            provider: request.provider,
+            transport: request.transport,
+            accepted: false,
+            nextStep: 'manual-action',
+            message:
+              'OpenAI browser-account helper is not available in this build. Flux kept the status explicit instead of pretending browser login succeeded.',
+            browserLogin,
+          });
         }
 
         if (request.transport !== 'artifact-import') {

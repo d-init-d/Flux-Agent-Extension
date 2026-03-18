@@ -233,6 +233,107 @@ describe('Options App', () => {
     expect(screen.getByLabelText('API key')).toHaveValue('');
   });
 
+  it('shows exactly two OpenAI login methods and swaps the setup panel by lane', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    const loginMethod = screen.getByLabelText('Login method');
+    const loginOptions = Array.from(loginMethod.querySelectorAll('option')).map((option) => option.textContent);
+
+    expect(loginOptions).toEqual(['ChatGPT Pro/Plus (browser)', 'Manually enter API Key']);
+    expect(screen.getByLabelText('API key')).toBeInTheDocument();
+
+    await user.selectOptions(loginMethod, 'browser-account');
+
+    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /connect browser account/i })).toBeInTheDocument();
+    expect(screen.getByText(/browser-account authentication/i)).toBeInTheDocument();
+  });
+
+  it('persists the selected OpenAI auth choice through reloads', async () => {
+    const user = userEvent.setup();
+    const view = renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Login method'), 'browser-account');
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('providers')).resolves.toEqual(
+        expect.objectContaining({
+          openai: expect.objectContaining({ authChoiceId: 'browser-account' }),
+        }),
+      );
+    });
+
+    view.unmount();
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    expect(screen.getByLabelText('Login method')).toHaveValue('browser-account');
+    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
+  });
+
+  it('surfaces helper-missing for the OpenAI browser lane without falling back to API key validation', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Login method'), 'browser-account');
+    await user.click(screen.getByRole('button', { name: /connect browser account/i }));
+
+    expect(
+      await screen.findByText(/flux kept the status explicit instead of pretending browser login succeeded/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findAllByText(/browser helper is not available in this build/i)).not.toHaveLength(0);
+
+    const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
+      const message = call[0] as { type?: string };
+      return message.type;
+    });
+
+    expect(messageTypes).toContain('ACCOUNT_AUTH_CONNECT_START');
+    expect(messageTypes).toContain('ACCOUNT_AUTH_STATUS_GET');
+    expect(messageTypes).not.toContain('API_KEY_VALIDATE');
+  });
+
+  it('updates onboarding copy for the selected OpenAI browser lane', async () => {
+    await seedStorage({
+      onboarding: createDefaultOnboardingState(),
+      providers: {
+        openai: {
+          enabled: true,
+          authChoiceId: 'browser-account',
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.3,
+          customEndpoint: 'https://api.openai.com',
+        },
+      },
+      activeProvider: 'openai',
+      settings: {
+        defaultProvider: 'openai',
+      },
+    });
+
+    renderOptionsApp();
+
+    expect(await screen.findByTestId('onboarding-root')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: /continue/i }));
+
+    expect(
+      await screen.findByText(/helper is unavailable, flux will show helper-missing rather than pretending success/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Login method')).toHaveValue('browser-account');
+  });
+
   it('shows a clear account-backed empty state for codex when no account is imported', async () => {
     const user = userEvent.setup();
 

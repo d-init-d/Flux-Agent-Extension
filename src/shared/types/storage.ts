@@ -254,6 +254,7 @@ export interface OnboardingState {
  */
 export interface ProviderConfig {
   enabled: boolean;
+  authChoiceId?: string;
   model: string;
   maxTokens: number;
   temperature: number;
