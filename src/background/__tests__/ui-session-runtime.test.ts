@@ -203,6 +203,47 @@ async function seedUnlockedOpenAiVaultFixture(): Promise<void> {
   await vault.markValidated('openai');
 }
 
+async function seedUnlockedOpenAiBrowserAccountVaultFixture(): Promise<void> {
+  const vault = new CredentialVault();
+  await vault.init('test-passphrase');
+  const now = Date.UTC(2026, 2, 18, 9, 30, 0);
+  const idToken = createJwt({
+    email: 'browser-runtime@example.com',
+    'https://api.openai.com/auth': {
+      chatgpt_plan_type: 'pro',
+      chatgpt_user_id: 'user_openai_browser_runtime',
+    },
+  });
+
+  await vault.saveAccount('openai', {
+    accountId: 'acct_openai_browser_runtime',
+    label: 'OpenAI Browser Runtime',
+    isActive: true,
+    status: 'active',
+    artifact: {
+      format: 'json',
+      value: JSON.stringify({
+        auth_mode: 'chatgpt',
+        last_refresh: new Date(now).toISOString(),
+        tokens: {
+          access_token: 'access-openai-browser-runtime',
+          id_token: idToken,
+          refresh_token: 'refresh-openai-browser-runtime',
+          account_id: 'acct_openai_browser_runtime',
+        },
+      }),
+    },
+  });
+  await vault.setBrowserLoginResult('openai', {
+    status: 'success',
+    updatedAt: now,
+    lastAttemptAt: now,
+    lastCompletedAt: now,
+    accountId: 'acct_openai_browser_runtime',
+    accountLabel: 'OpenAI Browser Runtime',
+  });
+}
+
 function createLazyLoadedProvider(
   type: IAIProvider['name'],
   responseText = '{"summary":"noop","actions":[]}',
@@ -836,6 +877,150 @@ describe('UI session runtime', () => {
     );
     expect(switchProviderSpy).not.toHaveBeenCalled();
     expect(getCredentialSpy).not.toHaveBeenCalledWith('cliproxyapi');
+  });
+
+  it('routes openai browser-account runtime through the internal codex adapter', async () => {
+    await chrome.storage.local.clear();
+    await chrome.storage.session.clear();
+    await seedUnlockedOpenAiBrowserAccountVaultFixture();
+    await chrome.storage.local.set({
+      providers: {
+        openai: {
+          enabled: true,
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.2,
+          customEndpoint: 'https://api.openai.com/v1',
+        },
+      },
+    });
+
+    const manager = new AIClientManager({ autoFallback: false });
+    manager.registerProvider(createLazyLoadedProvider('codex', '{"summary":"noop","actions":[]}'));
+    const switchProviderSpy = vi.spyOn(manager, 'switchProvider');
+    const getCredentialSpy = vi.spyOn(CredentialVault.prototype, 'getCredential');
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Use the browser-account lane',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(true);
+    expect(switchProviderSpy).toHaveBeenCalledWith(
+      'codex',
+      expect.objectContaining({
+        provider: 'codex',
+        apiKey: 'access-openai-browser-runtime',
+        model: 'codex-mini-latest',
+      }),
+    );
+    const browserAccountCall = switchProviderSpy.mock.calls.find(([type]) => type === 'codex');
+    expect(browserAccountCall?.[1]).not.toHaveProperty('baseUrl');
+    expect(getCredentialSpy).not.toHaveBeenCalledWith('openai');
+  });
+
+  it('fails closed for non-ready openai browser-account state without falling back to the api-key lane', async () => {
+    await chrome.storage.local.clear();
+    await chrome.storage.session.clear();
+
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.setCredential('openai', 'sk-openai-should-not-fallback');
+    await vault.markValidated('openai');
+    await vault.saveAccount('openai', {
+      accountId: 'acct_openai_pending_runtime',
+      label: 'Pending OpenAI Browser Runtime',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          artifact_version: 1,
+          refresh_token: 'refresh-openai-pending-runtime',
+          account_id: 'acct_openai_pending_runtime',
+        }),
+      },
+    });
+    await vault.setBrowserLoginResult('openai', {
+      status: 'stale',
+      updatedAt: Date.UTC(2026, 2, 18, 11, 0, 0),
+      lastAttemptAt: Date.UTC(2026, 2, 18, 11, 0, 0),
+      lastCompletedAt: Date.UTC(2026, 2, 18, 11, 5, 0),
+      accountId: 'acct_openai_pending_runtime',
+      accountLabel: 'Pending OpenAI Browser Runtime',
+      lastErrorCode: 'BROWSER_LOGIN_STALE',
+      retryable: true,
+    });
+
+    await chrome.storage.local.set({
+      providers: {
+        openai: {
+          enabled: true,
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.2,
+        },
+      },
+    });
+
+    const manager = new AIClientManager({ autoFallback: false });
+    manager.registerProvider(createLazyLoadedProvider('openai', '{"summary":"noop","actions":[]}'));
+    manager.registerProvider(createLazyLoadedProvider('codex', '{"summary":"noop","actions":[]}'));
+    const switchProviderSpy = vi.spyOn(manager, 'switchProvider');
+    const getCredentialSpy = vi.spyOn(CredentialVault.prototype, 'getCredential');
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'openai', model: 'gpt-4o-mini' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'This must fail closed',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(false);
+    expect(sendResponse.error).toEqual(
+      expect.objectContaining({
+        code: 'ACTION_FAILED',
+        message: expect.stringContaining('browser-account auth is not ready yet'),
+      }),
+    );
+    expect(switchProviderSpy).not.toHaveBeenCalled();
+    expect(getCredentialSpy).not.toHaveBeenCalledWith('openai');
   });
 
   it('creates and lists sessions through the runtime', async () => {

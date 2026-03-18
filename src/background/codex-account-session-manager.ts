@@ -67,6 +67,11 @@ type ImportedSessionState = {
   errorCode?: string;
 };
 
+interface CodexAccountSessionManagerOptions {
+  sourceProvider?: 'codex' | 'openai';
+  sourceLabel?: string;
+}
+
 function cloneAccountMetadata(metadata: ProviderAccountMetadata | undefined): ProviderAccountMetadata | undefined {
   if (!metadata) {
     return undefined;
@@ -90,12 +95,17 @@ export class CodexAccountSessionManager {
   private readonly logger: Logger;
   private readonly cachedSessions = new Map<string, CachedCodexAccountSession>();
   private readonly inflightResolutions = new Map<string, Promise<CodexAccountSessionSnapshot>>();
+  private readonly sourceProvider: 'codex' | 'openai';
+  private readonly sourceLabel: string;
 
   constructor(
     private readonly credentialVault: CredentialVault,
     logger: Logger,
+    options: CodexAccountSessionManagerOptions = {},
   ) {
     this.logger = logger.child('CodexAccountSessionManager');
+    this.sourceProvider = options.sourceProvider ?? 'codex';
+    this.sourceLabel = options.sourceLabel?.trim() || (this.sourceProvider === 'openai' ? 'OpenAI browser account' : 'Codex');
   }
 
   async ensureSession(
@@ -128,7 +138,7 @@ export class CodexAccountSessionManager {
     if (!snapshot.sessionAvailable || !cachedSession?.accessToken) {
       throw new ExtensionError(
         ErrorCode.AI_INVALID_KEY,
-        `${snapshot.message} Re-import the official Codex auth artifact before starting a chat session.`,
+        `${snapshot.message} Re-auth the ${this.sourceLabel} before starting a chat session.`,
         false,
       );
     }
@@ -156,7 +166,7 @@ export class CodexAccountSessionManager {
         checkedAt,
         reauthRequired: true,
         errorCode: ARTIFACT_INVALID_ERROR_CODE,
-        message: 'Account is revoked and requires a new auth artifact.',
+        message: `${this.sourceLabel} is revoked and requires a new auth artifact.`,
       });
       return {
         account: patchedAccount,
@@ -166,7 +176,7 @@ export class CodexAccountSessionManager {
         refreshDeferred: false,
         reauthRequired: true,
         checkedAt,
-        message: 'Account is revoked and requires a new auth artifact.',
+        message: `${this.sourceLabel} is revoked and requires a new auth artifact.`,
       };
     }
 
@@ -178,7 +188,7 @@ export class CodexAccountSessionManager {
         lastIssuedAt: cachedSession.lastRefreshAt,
         refreshAfter: cachedSession.refreshAfter,
         lastUsedAt: options.purpose === 'quota-refresh' ? checkedAt : undefined,
-        message: 'Using cached in-memory Codex session derived from the stored auth artifact.',
+          message: `Using cached in-memory ${this.sourceLabel} session derived from the stored auth artifact.`,
       });
       return {
         account: patchedAccount,
@@ -188,11 +198,11 @@ export class CodexAccountSessionManager {
         refreshDeferred: false,
         reauthRequired: false,
         checkedAt,
-        message: 'Using cached in-memory Codex session derived from the stored auth artifact.',
+        message: `Using cached in-memory ${this.sourceLabel} session derived from the stored auth artifact.`,
       };
     }
 
-    const artifact = await this.credentialVault.getAccountArtifact('codex', account.accountId);
+    const artifact = await this.credentialVault.getAccountArtifact(this.sourceProvider, account.accountId);
     if (!artifact) {
       this.clearSession(account.accountId);
       const patchedAccount = await this.persistAccountObservation(account, {
@@ -200,7 +210,7 @@ export class CodexAccountSessionManager {
         checkedAt,
         reauthRequired: true,
         errorCode: ARTIFACT_MISSING_ERROR_CODE,
-        message: 'Stored Codex auth artifact is missing. Re-auth is required.',
+        message: `Stored ${this.sourceLabel} auth artifact is missing. Re-auth is required.`,
       });
       return {
         account: patchedAccount,
@@ -210,7 +220,7 @@ export class CodexAccountSessionManager {
         refreshDeferred: false,
         reauthRequired: true,
         checkedAt,
-        message: 'Stored Codex auth artifact is missing. Re-auth is required.',
+        message: `Stored ${this.sourceLabel} auth artifact is missing. Re-auth is required.`,
       };
     }
 
@@ -233,10 +243,11 @@ export class CodexAccountSessionManager {
         checkedAt,
         reauthRequired: true,
         errorCode: ARTIFACT_INVALID_ERROR_CODE,
-        message: 'Stored Codex auth artifact is no longer valid. Re-auth is required.',
+        message: `Stored ${this.sourceLabel} auth artifact is no longer valid. Re-auth is required.`,
       });
-      this.logger.warn('Failed to hydrate Codex account artifact', {
+      this.logger.warn('Failed to hydrate account artifact', {
         accountId: account.accountId,
+        provider: this.sourceProvider,
         reason: error instanceof Error ? error.message : String(error),
       });
       return {
@@ -247,7 +258,7 @@ export class CodexAccountSessionManager {
         refreshDeferred: false,
         reauthRequired: true,
         checkedAt,
-        message: 'Stored Codex auth artifact is no longer valid. Re-auth is required.',
+        message: `Stored ${this.sourceLabel} auth artifact is no longer valid. Re-auth is required.`,
       };
     }
 
@@ -309,7 +320,7 @@ export class CodexAccountSessionManager {
         reauthRequired: false,
         refreshAfter,
         lastIssuedAt,
-        message: 'Validated stored Codex artifact and hydrated an in-memory runtime session.',
+        message: `Validated stored ${this.sourceLabel} artifact and hydrated an in-memory runtime session.`,
       };
     }
 
@@ -322,8 +333,7 @@ export class CodexAccountSessionManager {
         reauthRequired: false,
         refreshAfter,
         lastIssuedAt,
-        message:
-          'Validated artifact shape, but live refresh is deferred because OpenAI documents Codex-managed refresh through the official client rather than direct token exchange.',
+        message: `Validated artifact shape, but live refresh is deferred because ${this.sourceLabel} refresh is client-managed rather than exposed through a direct token exchange.`,
         errorCode: REFRESH_DEFERRED_ERROR_CODE,
       };
     }
@@ -336,8 +346,7 @@ export class CodexAccountSessionManager {
       reauthRequired: true,
       refreshAfter,
       lastIssuedAt,
-      message:
-        'Stored artifact needs a fresh Codex-managed login. Online refresh is intentionally deferred because the official flow is client-managed.',
+      message: `Stored artifact needs a fresh ${this.sourceLabel} login. Online refresh is intentionally deferred because the official flow is client-managed.`,
       errorCode: REFRESH_UNSUPPORTED_ERROR_CODE,
     };
   }
@@ -396,7 +405,7 @@ export class CodexAccountSessionManager {
             : account.status
         : account.status;
 
-    const patchedAccount = await this.credentialVault.patchAccount('codex', account.accountId, {
+    const patchedAccount = await this.credentialVault.patchAccount(this.sourceProvider, account.accountId, {
       status: nextStatus,
       validatedAt: observation.sessionStatus === 'active' ? observation.checkedAt : account.validatedAt,
       lastUsedAt: observation.lastUsedAt,
@@ -412,8 +421,9 @@ export class CodexAccountSessionManager {
       );
     }
 
-    this.logger.debug('Updated Codex account session metadata', {
+    this.logger.debug('Updated account session metadata', {
       accountId: patchedAccount.accountId,
+      provider: this.sourceProvider,
       sessionStatus: observation.sessionStatus,
       reauthRequired: observation.reauthRequired ?? false,
     });
@@ -427,7 +437,7 @@ export class CodexAccountSessionManager {
       throw new ExtensionError(ErrorCode.ACTION_INVALID, 'Account id is required', true);
     }
 
-    const account = await this.credentialVault.getAccount('codex', normalizedAccountId);
+    const account = await this.credentialVault.getAccount(this.sourceProvider, normalizedAccountId);
     if (!account) {
       throw new ExtensionError(
         ErrorCode.ACTION_INVALID,

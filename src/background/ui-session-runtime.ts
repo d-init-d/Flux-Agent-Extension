@@ -80,6 +80,7 @@ import { buildSessionRecordingExportArtifact } from './session-recording-export'
 import { CredentialVault } from './credential-vault';
 import { importCodexAccountArtifact } from '@core/auth/codex-account-import';
 import { CodexAccountSessionManager } from './codex-account-session-manager';
+import { OpenAIRuntimeAuthCoordinator } from './openai-runtime-auth-coordinator';
 
 const STREAM_CHUNK_INTERVAL_MS = 20;
 const PLAYBACK_SPEEDS: readonly SessionPlaybackSpeed[] = [0.5, 1, 2];
@@ -177,6 +178,8 @@ export class UISessionRuntime {
   private readonly debuggerAdapter: DebuggerAdapter;
   private readonly credentialVault = new CredentialVault();
   private readonly codexAccountSessionManager: CodexAccountSessionManager;
+  private readonly openAIBrowserAccountSessionManager: CodexAccountSessionManager;
+  private readonly openAIRuntimeAuthCoordinator: OpenAIRuntimeAuthCoordinator;
   private readonly orchestrator: ActionOrchestrator;
   private readonly networkInterceptionManager: INetworkInterceptionManager;
   private readonly deviceEmulationManager: IDeviceEmulationManager;
@@ -229,6 +232,18 @@ export class UISessionRuntime {
     this.codexAccountSessionManager = new CodexAccountSessionManager(
       this.credentialVault,
       this.logger,
+    );
+    this.openAIBrowserAccountSessionManager = new CodexAccountSessionManager(
+      this.credentialVault,
+      this.logger,
+      {
+        sourceProvider: 'openai',
+        sourceLabel: 'OpenAI browser account',
+      },
+    );
+    this.openAIRuntimeAuthCoordinator = new OpenAIRuntimeAuthCoordinator(
+      this.credentialVault,
+      this.openAIBrowserAccountSessionManager,
     );
     this.orchestrator = new ActionOrchestrator({
       execute: (action, context) => this.executeAutomationAction(action, context.sessionId),
@@ -2495,19 +2510,25 @@ export class UISessionRuntime {
     }
 
     const providerConfig = this.resolveProviderConfig(session.config.provider, runtimeState);
-    const providerCredential = await this.resolveProviderCredential(
+    const runtimeBinding = await this.resolveProviderRuntimeBinding(
       session.config.provider,
+      session.config.model,
       runtimeState,
     );
-    await this.ensureDefaultProviderRegistered(session.config.provider);
-    await this.aiClientManager.switchProvider(session.config.provider, {
-      provider: session.config.provider,
-      model: session.config.model,
-      apiKey: providerCredential,
-      baseUrl: providerConfig.customEndpoint?.trim() || undefined,
+    const runtimeBaseUrl =
+      runtimeBinding.baseUrl ??
+      (runtimeBinding.runtimeProvider === session.config.provider
+        ? providerConfig.customEndpoint?.trim() || undefined
+        : undefined);
+    await this.ensureDefaultProviderRegistered(runtimeBinding.runtimeProvider);
+    await this.aiClientManager.switchProvider(runtimeBinding.runtimeProvider, {
+      provider: runtimeBinding.runtimeProvider,
+      model: runtimeBinding.model,
+      apiKey: runtimeBinding.credential,
       maxTokens: providerConfig.maxTokens,
       temperature: providerConfig.temperature,
       systemPrompt: session.config.systemPrompt,
+      ...(runtimeBaseUrl ? { baseUrl: runtimeBaseUrl } : {}),
     });
 
     let responseText = '';
@@ -2556,6 +2577,32 @@ export class UISessionRuntime {
     }
 
     return responseText;
+  }
+
+  private async resolveProviderRuntimeBinding(
+    provider: SessionConfig['provider'],
+    model: string,
+    runtimeState: RuntimeState,
+  ): Promise<{
+    runtimeProvider: SessionConfig['provider'];
+    credential?: string;
+    model: string;
+    baseUrl?: string;
+  }> {
+    if (provider === 'openai') {
+      const resolution = await this.openAIRuntimeAuthCoordinator.resolve(runtimeState, model);
+      return {
+        runtimeProvider: resolution.runtimeProvider,
+        credential: resolution.credential,
+        model: resolution.model,
+      };
+    }
+
+    return {
+      runtimeProvider: provider,
+      credential: await this.resolveProviderCredential(provider, runtimeState),
+      model,
+    };
   }
 
   private async executeParsedActions(
