@@ -69,7 +69,7 @@ describe('Provider key extraction resistance', () => {
     vi.spyOn(providerLoader, 'createProvider').mockResolvedValue({
       initialize,
       validateApiKey,
-    } as Awaited<ReturnType<typeof providerLoader.createProvider>>);
+    } as unknown as Awaited<ReturnType<typeof providerLoader.createProvider>>);
 
     const { container } = renderOptionsApp();
 
@@ -85,19 +85,52 @@ describe('Provider key extraction resistance', () => {
     expectNoRecoverableSecrets(container, rawKey);
   });
 
-  it('does not leave recoverable raw keys behind after a blocked save attempt', async () => {
+  it('keeps raw cliproxyapi keys out of storage snapshots and status text after validation', async () => {
     const user = userEvent.setup();
-    const rawKey = 'sk-openai-blocked-save-4321';
+    const rawKey = 'sk-cliproxyapi-validation-success-4321';
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    const validateApiKey = vi.fn().mockResolvedValue(true);
+
+    vi.spyOn(providerLoader, 'createProvider').mockResolvedValue({
+      initialize,
+      validateApiKey,
+    } as unknown as Awaited<ReturnType<typeof providerLoader.createProvider>>);
+
     const { container } = renderOptionsApp();
 
     await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
-    await user.clear(screen.getByLabelText('Base URL override'));
-    await user.type(screen.getByLabelText('Base URL override'), 'http://example.com/v1');
+    await user.selectOptions(screen.getByLabelText('Provider'), 'cliproxyapi');
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: rawKey } });
+    fireEvent.change(screen.getByLabelText('CLIProxyAPI endpoint'), {
+      target: { value: 'https://proxy.example.com/v1/chat/completions' },
+    });
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findByText(/cliproxyapi responded successfully/i)).toBeInTheDocument();
+    expect(validateApiKey).toHaveBeenCalledWith(rawKey);
+    expect(screen.getByLabelText('API key')).toHaveValue('');
+    expect(screen.getByDisplayValue('https://proxy.example.com/v1')).toBeInTheDocument();
+    await expect(readStorage('providerKeyMetadata')).resolves.toBeUndefined();
+    await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();
+    expectNoRecoverableSecrets(container, rawKey);
+  });
+
+  it('does not leave recoverable raw keys behind after a blocked save attempt', async () => {
+    const user = userEvent.setup();
+    const rawKey = 'sk-cliproxyapi-blocked-save-4321';
+    const { container } = renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'cliproxyapi');
+    await user.clear(screen.getByLabelText('CLIProxyAPI endpoint'));
+    await user.type(screen.getByLabelText('CLIProxyAPI endpoint'), 'http://example.com/v1');
     await user.type(screen.getByLabelText('API key'), rawKey);
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
     expect(
-      await screen.findByText(/save blocked: remote provider endpoints must use https/i),
+      await screen.findByText(
+        /save blocked: use https for hosted cliproxyapi endpoints, or http only on localhost/i,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByLabelText('API key')).toHaveValue('');
     await expect(readStorage('activeProvider')).resolves.toBeUndefined();
@@ -114,7 +147,7 @@ describe('Provider key extraction resistance', () => {
     vi.spyOn(providerLoader, 'createProvider').mockResolvedValue({
       initialize,
       validateApiKey: vi.fn(),
-    } as Awaited<ReturnType<typeof providerLoader.createProvider>>);
+    } as unknown as Awaited<ReturnType<typeof providerLoader.createProvider>>);
 
     const { container } = renderOptionsApp();
 

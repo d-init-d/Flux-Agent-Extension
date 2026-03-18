@@ -1,7 +1,6 @@
 import type { BadgeVariant } from '@/ui/components';
 import {
   PROVIDER_LOOKUP,
-  providerUsesApiKey,
   providerUsesOAuthToken,
 } from '@shared/config';
 import { evaluateProviderEndpointPolicy } from '@shared/provider-endpoints';

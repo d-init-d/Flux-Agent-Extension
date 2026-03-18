@@ -65,7 +65,7 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | CP-06 - Options endpoint validation and quick connect UX | DONE | `pnpm exec vitest run src/options/__tests__/App.test.tsx`; `pnpm typecheck` | Options and runtime mock now reuse the shared policy, normalize `/v1...` inputs, and show provider-specific helper/error copy |
 | CP-07 - Background validation and runtime enforcement | DONE | `pnpm exec vitest run src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "cliproxyapi"`; `pnpm typecheck` | Background save/validate/runtime paths now enforce the same policy and keep normalized base URLs through credential checks and live session sends |
 | CP-08 - Popup, onboarding, and sidepanel alignment | DONE | `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck` | Popup, onboarding/options, sidepanel, and session defaults now surface real CLIProxyAPI readiness instead of generic OpenAI-biased states |
-| CP-09 - Test sweep and security regression coverage | TODO | - | Cover registry, loader, provider, options, runtime, and secret-handling regressions |
+| CP-09 - Test sweep and security regression coverage | DONE | `pnpm exec vitest run src/shared/ui/__tests__/key-based-provider-ux.test.ts src/options/__tests__/provider-key-extraction.test.tsx src/background/__tests__/ui-session-runtime.test.ts`; `pnpm typecheck` | Added CLIProxyAPI-focused readiness/unit/security regressions plus a stable OpenAI vault fixture for the full runtime harness |
 | CP-10 - Docs and closeout | TODO | - | Update README/testing guidance and close the roadmap initiative cleanly |
 
 ### Execution Notes
@@ -97,6 +97,10 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
   - Popup, sidepanel, and onboarding/options now distinguish missing endpoint vs saved-but-unvalidated vs ready for `cliproxyapi`, while Codex account-backed guidance stays intact.
   - Session creation defaults now prefer the active provider/model from settings so new sidepanel sessions no longer fall back to OpenAI-biased defaults when CLIProxyAPI is selected.
   - Next step: move to CP-09 for the broader regression/security sweep over provider readiness, runtime gating, and secret-handling edges.
+- [2026-03-18] CP-09 DONE
+  - Added unit coverage for key-based readiness states, provider-key extraction regressions for CLIProxyAPI, and narrow runtime gating so stale or unvalidated CLIProxyAPI credentials cannot back live sends.
+  - The full `ui-session-runtime` suite now boots with a stable unlocked OpenAI vault fixture, so unrelated runtime tests no longer fail en masse on missing credential state.
+  - Next step: move to CP-10 for docs/closeout only.
 
 ### Decision Notes
 

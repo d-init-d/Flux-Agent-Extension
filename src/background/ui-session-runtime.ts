@@ -4309,6 +4309,25 @@ ${script}
       return runtimeSession.accessToken;
     }
 
+    if (provider === 'cliproxyapi') {
+      const credentialRecord = runtimeState.vault.credentials.cliproxyapi;
+      if (credentialRecord?.stale) {
+        throw new ExtensionError(
+          ErrorCode.AI_INVALID_KEY,
+          'CLIProxyAPI settings changed after validation. Run Test connection again before using sidepanel chat or popup quick actions.',
+          true,
+        );
+      }
+
+      if (!credentialRecord?.validatedAt) {
+        throw new ExtensionError(
+          ErrorCode.AI_INVALID_KEY,
+          'CLIProxyAPI is saved but not validated yet. Run Test connection before using sidepanel chat or popup quick actions.',
+          true,
+        );
+      }
+    }
+
     const credential = await this.credentialVault.getCredential(provider);
     if (!credential) {
       throw new ExtensionError(

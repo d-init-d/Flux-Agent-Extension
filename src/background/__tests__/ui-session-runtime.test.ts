@@ -196,6 +196,13 @@ function createAIManager(responseText: string | string[]): {
   return { manager, provider };
 }
 
+async function seedUnlockedOpenAiVaultFixture(): Promise<void> {
+  const vault = new CredentialVault();
+  await vault.init('test-passphrase');
+  await vault.setCredential('openai', 'sk-openai-test');
+  await vault.markValidated('openai');
+}
+
 function createLazyLoadedProvider(
   type: IAIProvider['name'],
   responseText = '{"summary":"noop","actions":[]}',
@@ -501,6 +508,7 @@ describe('UI session runtime', () => {
         },
       },
     });
+    await seedUnlockedOpenAiVaultFixture();
   });
 
   it('normalizes cliproxyapi endpoints when saving provider settings', async () => {
@@ -614,31 +622,46 @@ describe('UI session runtime', () => {
   });
 
   it('uses the normalized cliproxyapi endpoint when streaming a session message', async () => {
-    const observedAt = Date.UTC(2026, 2, 18, 13, 30, 0);
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.setCredential('cliproxyapi', 'sk-cliproxyapi-test');
+    await vault.markValidated('cliproxyapi');
     await chrome.storage.local.set({
-      vault: {
-        version: 1,
-        initialized: true,
-        credentials: {
-          cliproxyapi: {
-            version: 1,
-            provider: 'cliproxyapi',
-            providerFamily: 'default',
-            authFamily: 'api-key',
-            authKind: 'api-key',
-            maskedValue: '********',
-            updatedAt: observedAt,
-            validatedAt: observedAt,
-          },
+      providers: {
+        openai: {
+          enabled: true,
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.2,
         },
-        accounts: {},
-        activeAccounts: {},
+        cliproxyapi: {
+          enabled: true,
+          model: 'gpt-5',
+          maxTokens: 4096,
+          temperature: 0.3,
+          customEndpoint: 'https://proxy.example.com/v1',
+        },
       },
-    });
-    await chrome.storage.session.set({
-      __flux_vault_session__: {
-        passphrase: 'test-passphrase',
-        unlockedAt: observedAt,
+      activeProvider: 'cliproxyapi',
+      settings: {
+        defaultProvider: 'cliproxyapi',
+        streamResponses: false,
+        includeScreenshotsInContext: false,
+        maxContextLength: 32_000,
+        defaultTimeout: 30_000,
+        autoRetryOnFailure: true,
+        maxRetries: 1,
+        screenshotOnError: true,
+        allowCustomScripts: false,
+        allowedDomains: [],
+        blockedDomains: [],
+        showFloatingBar: true,
+        highlightElements: true,
+        soundNotifications: false,
+        debugMode: false,
+        logNetworkRequests: false,
+        language: 'auto',
+        theme: 'system',
       },
     });
 
@@ -647,9 +670,7 @@ describe('UI session runtime', () => {
       createLazyLoadedProvider('cliproxyapi', '{"summary":"noop","actions":[]}'),
     );
     const switchProviderSpy = vi.spyOn(manager, 'switchProvider');
-    const getCredentialSpy = vi
-      .spyOn(CredentialVault.prototype, 'getCredential')
-      .mockResolvedValue('sk-cliproxyapi-test');
+    const getCredentialSpy = vi.spyOn(CredentialVault.prototype, 'getCredential');
 
     const runtime = new UISessionRuntime({
       bridge: createBridge(async (action) => ({
@@ -660,21 +681,6 @@ describe('UI session runtime', () => {
       logger: new Logger('FluxSW:test', 'debug'),
       aiClientManager: manager,
     });
-
-    const providerSetResponse = await runtime.handleMessage(
-      createExtensionMessage('PROVIDER_SET', {
-        provider: 'cliproxyapi',
-        config: {
-          enabled: true,
-          model: 'gpt-5',
-          maxTokens: 4096,
-          temperature: 0.3,
-          customEndpoint: 'https://proxy.example.com/v1/chat/completions',
-        },
-        makeDefault: true,
-      }),
-    );
-    expect(providerSetResponse.success).toBe(true);
 
     const createResponse = await runtime.handleMessage(
       createExtensionMessage('SESSION_CREATE', {
@@ -700,6 +706,136 @@ describe('UI session runtime', () => {
     );
 
     getCredentialSpy.mockRestore();
+  });
+
+  it('blocks cliproxyapi session sends until the stored credential has been validated', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.setCredential('cliproxyapi', 'sk-cliproxyapi-unvalidated');
+    await chrome.storage.local.set({
+      providers: {
+        openai: {
+          enabled: true,
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.2,
+        },
+        cliproxyapi: {
+          enabled: true,
+          model: 'gpt-5',
+          maxTokens: 4096,
+          temperature: 0.3,
+          customEndpoint: 'https://proxy.example.com/v1',
+        },
+      },
+    });
+
+    const manager = new AIClientManager({ autoFallback: false });
+    manager.registerProvider(
+      createLazyLoadedProvider('cliproxyapi', '{"summary":"noop","actions":[]}'),
+    );
+    const switchProviderSpy = vi.spyOn(manager, 'switchProvider');
+    const getCredentialSpy = vi.spyOn(CredentialVault.prototype, 'getCredential');
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'cliproxyapi', model: 'gpt-5' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Say hello from CLIProxyAPI',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(false);
+    expect(sendResponse.error).toEqual(
+      expect.objectContaining({
+        code: 'ACTION_FAILED',
+        message: expect.stringContaining('CLIProxyAPI is saved but not validated yet'),
+      }),
+    );
+    expect(switchProviderSpy).not.toHaveBeenCalled();
+    expect(getCredentialSpy).not.toHaveBeenCalledWith('cliproxyapi');
+  });
+
+  it('blocks cliproxyapi session sends when the stored credential is stale', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.setCredential('cliproxyapi', 'sk-cliproxyapi-stale');
+    await vault.markValidated('cliproxyapi');
+    await vault.markCredentialStale('cliproxyapi');
+    await chrome.storage.local.set({
+      providers: {
+        openai: {
+          enabled: true,
+          model: 'gpt-4o-mini',
+          maxTokens: 4096,
+          temperature: 0.2,
+        },
+        cliproxyapi: {
+          enabled: true,
+          model: 'gpt-5',
+          maxTokens: 4096,
+          temperature: 0.3,
+          customEndpoint: 'https://proxy.example.com/v1',
+        },
+      },
+    });
+
+    const manager = new AIClientManager({ autoFallback: false });
+    manager.registerProvider(
+      createLazyLoadedProvider('cliproxyapi', '{"summary":"noop","actions":[]}'),
+    );
+    const switchProviderSpy = vi.spyOn(manager, 'switchProvider');
+    const getCredentialSpy = vi.spyOn(CredentialVault.prototype, 'getCredential');
+
+    const runtime = new UISessionRuntime({
+      bridge: createBridge(async (action) => ({
+        actionId: action.id,
+        success: true,
+        duration: 5,
+      })),
+      logger: new Logger('FluxSW:test', 'debug'),
+      aiClientManager: manager,
+    });
+
+    const createResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_CREATE', {
+        config: { provider: 'cliproxyapi', model: 'gpt-5' },
+      }),
+    );
+    const sessionId = createResponse.data?.session.config.id;
+
+    const sendResponse = await runtime.handleMessage(
+      createExtensionMessage('SESSION_SEND_MESSAGE', {
+        sessionId: sessionId!,
+        message: 'Say hello from CLIProxyAPI',
+      }),
+    );
+
+    expect(sendResponse.success).toBe(false);
+    expect(sendResponse.error).toEqual(
+      expect.objectContaining({
+        code: 'ACTION_FAILED',
+        message: expect.stringContaining('CLIProxyAPI settings changed after validation'),
+      }),
+    );
+    expect(switchProviderSpy).not.toHaveBeenCalled();
+    expect(getCredentialSpy).not.toHaveBeenCalledWith('cliproxyapi');
   });
 
   it('creates and lists sessions through the runtime', async () => {
