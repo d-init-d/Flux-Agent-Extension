@@ -1,4 +1,7 @@
-import { DEFAULT_PROVIDER_MODELS } from '@shared/config';
+import {
+  normalizeOpenAIAuthChoiceId,
+  resolveOpenAIRuntimeRoute,
+} from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import type {
   ExtensionSettings,
@@ -36,21 +39,29 @@ export class OpenAIRuntimeAuthCoordinator {
     runtimeState: OpenAIRuntimeCoordinatorState,
     requestedModel: string,
   ): Promise<OpenAIRuntimeResolution> {
-    const credentialRecord = runtimeState.vault.credentials.openai;
-    const activeAccountId = runtimeState.vault.activeAccounts.openai?.trim();
-    const browserState = runtimeState.vault.browserLogins?.openai;
-    const shouldUseBrowserAccountLane =
-      credentialRecord?.authFamily === 'account-backed' || Boolean(activeAccountId) || Boolean(browserState);
+    const configuredLane = this.resolveConfiguredLane(runtimeState);
+    const route = resolveOpenAIRuntimeRoute(configuredLane, requestedModel);
+    if (route.mismatch) {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        `OpenAI model "${route.mismatch.model}" belongs to the ${route.mismatch.actualLane} lane, but the selected login method requires the ${route.mismatch.expectedLane} lane. Switch lanes or keep a manual override model id for the chosen lane.`,
+        false,
+      );
+    }
 
-    if (!shouldUseBrowserAccountLane) {
+    if (configuredLane === 'api-key') {
       const credential = await this.requireApiKeyCredential(runtimeState);
       return {
         lane: 'api-key',
         runtimeProvider: 'openai',
         credential,
-        model: requestedModel,
+        model: route.model,
       };
     }
+
+    const credentialRecord = runtimeState.vault.credentials.openai;
+    const activeAccountId = runtimeState.vault.activeAccounts.openai?.trim();
+    const browserState = runtimeState.vault.browserLogins?.openai;
 
     this.assertVaultUnlocked(runtimeState);
 
@@ -109,10 +120,25 @@ export class OpenAIRuntimeAuthCoordinator {
 
     return {
       lane: 'browser-account',
-      runtimeProvider: 'codex',
+      runtimeProvider: route.runtimeProvider,
       credential: runtimeSession.accessToken,
-      model: DEFAULT_PROVIDER_MODELS.codex,
+      model: route.model,
     };
+  }
+
+  private resolveConfiguredLane(runtimeState: OpenAIRuntimeCoordinatorState): 'api-key' | 'browser-account' {
+    const configuredAuthChoiceId = runtimeState.providers.openai?.authChoiceId;
+    if (typeof configuredAuthChoiceId === 'string' && configuredAuthChoiceId.trim().length > 0) {
+      return normalizeOpenAIAuthChoiceId(configuredAuthChoiceId);
+    }
+
+    const credentialRecord = runtimeState.vault.credentials.openai;
+    const activeAccountId = runtimeState.vault.activeAccounts.openai?.trim();
+    const browserState = runtimeState.vault.browserLogins?.openai;
+
+    return credentialRecord?.authFamily === 'account-backed' || Boolean(activeAccountId) || Boolean(browserState)
+      ? 'browser-account'
+      : 'api-key';
   }
 
   private assertVaultUnlocked(runtimeState: OpenAIRuntimeCoordinatorState): void {

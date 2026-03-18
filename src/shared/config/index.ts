@@ -15,6 +15,19 @@ export {
   providerUsesApiKey,
   providerUsesOAuthToken,
 } from './provider-registry';
+export {
+  detectOpenAICrossLaneMismatch,
+  getOpenAIDefaultModel,
+  getOpenAIShippedModelLane,
+  getOpenAISuggestedModels,
+  normalizeOpenAIAuthChoiceId,
+  resolveOpenAIRuntimeRoute,
+} from './openai-model-catalog';
+export type {
+  OpenAIAuthChoiceId,
+  OpenAIModelCatalogEntry,
+  OpenAIRuntimeRouteResolution,
+} from './openai-model-catalog';
 export type {
   ProviderAuthChoiceDefinition,
   ProviderAuthMethod,

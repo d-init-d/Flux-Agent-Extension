@@ -276,6 +276,43 @@ describe('Options App', () => {
     expect(screen.queryByLabelText('API key')).not.toBeInTheDocument();
   });
 
+  it('updates the recommended default and suggested OpenAI models by auth lane', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    expect(screen.getAllByText('gpt-4o-mini').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'gpt-4.1-mini' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'gpt-5' })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText('Login method'), 'browser-account');
+
+    expect(screen.getAllByText('codex-mini-latest').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'codex-latest' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'gpt-4.1-mini' })).not.toBeInTheDocument();
+  });
+
+  it('resets shipped OpenAI models across auth lanes but preserves unknown manual overrides', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    const modelInput = screen.getByLabelText('Model');
+
+    await user.clear(modelInput);
+    await user.type(modelInput, 'gpt-4.1-mini');
+    await user.selectOptions(screen.getByLabelText('Login method'), 'browser-account');
+    expect(screen.getByLabelText('Model')).toHaveValue('codex-mini-latest');
+
+    await user.clear(screen.getByLabelText('Model'));
+    await user.type(screen.getByLabelText('Model'), 'my-manual-openai-model');
+    await user.selectOptions(screen.getByLabelText('Login method'), 'api-key');
+    expect(screen.getByLabelText('Model')).toHaveValue('my-manual-openai-model');
+    expect(screen.getAllByText(/manual override/i).length).toBeGreaterThan(0);
+  });
+
   it('surfaces helper-missing for the OpenAI browser lane without falling back to API key validation', async () => {
     const user = userEvent.setup();
 

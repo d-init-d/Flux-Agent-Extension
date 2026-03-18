@@ -122,8 +122,15 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
     );
 
     const resolution = await coordinator.resolve(
-      await createRuntimeState(vault),
-      'gpt-4o-mini',
+      {
+        ...(await createRuntimeState(vault)),
+        providers: {
+          openai: {
+            authChoiceId: 'browser-account',
+          },
+        },
+      },
+      'codex-mini-latest',
     );
 
     expect(resolution).toEqual({
@@ -131,6 +138,230 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
       runtimeProvider: 'codex',
       credential: 'access-openai-browser',
       model: 'codex-mini-latest',
+    });
+  });
+
+  it('prefers persisted authChoiceId over vault inference when choosing the OpenAI lane', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.setCredential('openai', 'sk-openai-runtime-key');
+    await vault.markValidated('openai');
+    const now = Date.UTC(2026, 2, 18, 12, 0, 0);
+    const idToken = createJwt({
+      email: 'browser@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'pro',
+        chatgpt_user_id: 'user_openai_browser',
+      },
+    });
+
+    await vault.saveAccount('openai', {
+      accountId: 'acct_openai_browser',
+      label: 'OpenAI Browser Account',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            access_token: 'access-openai-browser',
+            id_token: idToken,
+            refresh_token: 'refresh-openai-browser',
+            account_id: 'acct_openai_browser',
+          },
+        }),
+      },
+    });
+    await vault.setBrowserLoginResult('openai', {
+      status: 'success',
+      updatedAt: now,
+      lastAttemptAt: now,
+      lastCompletedAt: now,
+      accountId: 'acct_openai_browser',
+      accountLabel: 'OpenAI Browser Account',
+    });
+
+    const coordinator = new OpenAIRuntimeAuthCoordinator(
+      vault,
+      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
+        sourceProvider: 'openai',
+        sourceLabel: 'OpenAI browser account',
+      }),
+    );
+
+    const runtimeState = await createRuntimeState(vault);
+    runtimeState.providers = {
+      openai: {
+        authChoiceId: 'api-key',
+      },
+    };
+
+    const resolution = await coordinator.resolve(runtimeState, 'gpt-4o-mini');
+
+    expect(resolution).toEqual({
+      lane: 'api-key',
+      runtimeProvider: 'openai',
+      credential: 'sk-openai-runtime-key',
+      model: 'gpt-4o-mini',
+    });
+  });
+
+  it('keeps lane-aware browser-account model routing instead of forcing codex-mini-latest', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    const now = Date.UTC(2026, 2, 18, 9, 0, 0);
+    const idToken = createJwt({
+      email: 'browser@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'pro',
+        chatgpt_user_id: 'user_openai_browser',
+      },
+    });
+
+    await vault.saveAccount('openai', {
+      accountId: 'acct_openai_browser',
+      label: 'OpenAI Browser Account',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            access_token: 'access-openai-browser',
+            id_token: idToken,
+            refresh_token: 'refresh-openai-browser',
+            account_id: 'acct_openai_browser',
+          },
+        }),
+      },
+    });
+    await vault.setBrowserLoginResult('openai', {
+      status: 'success',
+      updatedAt: now,
+      lastAttemptAt: now,
+      lastCompletedAt: now,
+      accountId: 'acct_openai_browser',
+      accountLabel: 'OpenAI Browser Account',
+    });
+
+    const coordinator = new OpenAIRuntimeAuthCoordinator(
+      vault,
+      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
+        sourceProvider: 'openai',
+        sourceLabel: 'OpenAI browser account',
+      }),
+    );
+
+    const runtimeState = await createRuntimeState(vault);
+    runtimeState.providers = {
+      openai: {
+        authChoiceId: 'browser-account',
+      },
+    };
+
+    const resolution = await coordinator.resolve(runtimeState, 'codex-latest');
+
+    expect(resolution).toEqual({
+      lane: 'browser-account',
+      runtimeProvider: 'codex',
+      credential: 'access-openai-browser',
+      model: 'codex-latest',
+    });
+  });
+
+  it('fails closed for known cross-lane model mismatches before requesting live runtime material', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    await vault.setCredential('openai', 'sk-openai-runtime-key');
+    await vault.markValidated('openai');
+
+    const coordinator = new OpenAIRuntimeAuthCoordinator(
+      vault,
+      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
+        sourceProvider: 'openai',
+        sourceLabel: 'OpenAI browser account',
+      }),
+    );
+
+    const runtimeState = await createRuntimeState(vault);
+    runtimeState.providers = {
+      openai: {
+        authChoiceId: 'api-key',
+      },
+    };
+
+    await expect(coordinator.resolve(runtimeState, 'codex-mini-latest')).rejects.toMatchObject({
+      code: 'AI_INVALID_KEY',
+      message: expect.stringContaining('belongs to the browser-account lane'),
+    });
+  });
+
+  it('keeps unknown model ids as manual overrides in the selected browser-account lane', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+    const now = Date.UTC(2026, 2, 18, 9, 0, 0);
+    const idToken = createJwt({
+      email: 'browser@example.com',
+      'https://api.openai.com/auth': {
+        chatgpt_plan_type: 'pro',
+        chatgpt_user_id: 'user_openai_browser',
+      },
+    });
+
+    await vault.saveAccount('openai', {
+      accountId: 'acct_openai_browser',
+      label: 'OpenAI Browser Account',
+      isActive: true,
+      status: 'active',
+      artifact: {
+        format: 'json',
+        value: JSON.stringify({
+          auth_mode: 'chatgpt',
+          last_refresh: new Date(now).toISOString(),
+          tokens: {
+            access_token: 'access-openai-browser',
+            id_token: idToken,
+            refresh_token: 'refresh-openai-browser',
+            account_id: 'acct_openai_browser',
+          },
+        }),
+      },
+    });
+    await vault.setBrowserLoginResult('openai', {
+      status: 'success',
+      updatedAt: now,
+      lastAttemptAt: now,
+      lastCompletedAt: now,
+      accountId: 'acct_openai_browser',
+      accountLabel: 'OpenAI Browser Account',
+    });
+
+    const coordinator = new OpenAIRuntimeAuthCoordinator(
+      vault,
+      new CodexAccountSessionManager(vault, new Logger('FluxSW:test', 'debug'), {
+        sourceProvider: 'openai',
+        sourceLabel: 'OpenAI browser account',
+      }),
+    );
+
+    const runtimeState = await createRuntimeState(vault);
+    runtimeState.providers = {
+      openai: {
+        authChoiceId: 'browser-account',
+      },
+    };
+
+    const resolution = await coordinator.resolve(runtimeState, 'custom-browser-model');
+
+    expect(resolution).toEqual({
+      lane: 'browser-account',
+      runtimeProvider: 'codex',
+      credential: 'access-openai-browser',
+      model: 'custom-browser-model',
     });
   });
 
@@ -171,7 +402,17 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
     );
 
     await expect(
-      coordinator.resolve(await createRuntimeState(vault), 'gpt-4o-mini'),
+      coordinator.resolve(
+        {
+          ...(await createRuntimeState(vault)),
+          providers: {
+            openai: {
+              authChoiceId: 'browser-account',
+            },
+          },
+        },
+        'codex-mini-latest',
+      ),
     ).rejects.toMatchObject({
       code: 'AI_INVALID_KEY',
       message: expect.stringContaining('browser-account auth is not ready yet'),
@@ -201,7 +442,17 @@ describe('OpenAIRuntimeAuthCoordinator', () => {
     );
 
     await expect(
-      coordinator.resolve(await createRuntimeState(vault), 'gpt-4o-mini'),
+      coordinator.resolve(
+        {
+          ...(await createRuntimeState(vault)),
+          providers: {
+            openai: {
+              authChoiceId: 'browser-account',
+            },
+          },
+        },
+        'codex-mini-latest',
+      ),
     ).rejects.toMatchObject({
       code: 'AI_INVALID_KEY',
       message: expect.stringContaining('browser-account auth is not ready yet'),

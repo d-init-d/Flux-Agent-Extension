@@ -15,13 +15,17 @@ import {
 } from 'lucide-react';
 import {
   createDefaultProviderConfigs as createRegistryDefaultProviderConfigs,
+  getOpenAIDefaultModel,
+  getOpenAIShippedModelLane,
+  getOpenAISuggestedModels,
   getProviderAuthChoiceById,
   getProviderAuthChoices,
+  normalizeOpenAIAuthChoiceId,
   PROVIDER_LOOKUP,
   PROVIDER_REGISTRY,
   providerRequiresConnectionValidation,
 } from '@shared/config';
-import type { ProviderDefinition } from '@shared/config';
+import type { OpenAIAuthChoiceId, ProviderDefinition } from '@shared/config';
 import {
   evaluateProviderEndpointPolicy,
   getProviderEndpointHelperText,
@@ -66,8 +70,6 @@ import { OnboardingFlow } from './onboarding';
 
 type SaveState = 'idle' | 'success' | 'error';
 type ValidationState = 'idle' | 'success' | 'error';
-type OpenAIAuthChoiceId = 'api-key' | 'browser-account';
-
 interface ApiKeyMetadata {
   maskedValue: string;
   updatedAt: number;
@@ -104,7 +106,6 @@ const STORAGE_KEYS = {
 } as const;
 
 const DEFAULT_PROVIDER: AIProviderType = 'openai';
-const DEFAULT_OPENAI_AUTH_CHOICE_ID: OpenAIAuthChoiceId = 'api-key';
 const GENERIC_MASK = '••••••••••••';
 
 const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
@@ -164,36 +165,11 @@ function resolveProviderAuthChoice(
   return getProviderAuthChoiceById(provider, config.authChoiceId);
 }
 
-function usesProviderApiKeyLane(
-  provider: AIProviderType,
-  config: Pick<ProviderConfig, 'authChoiceId'>,
-): boolean {
-  return resolveProviderAuthChoice(provider, config).authMethod === 'api-key';
-}
-
-function usesProviderBrowserAccountLane(
-  provider: AIProviderType,
-  config: Pick<ProviderConfig, 'authChoiceId'>,
-): boolean {
-  return resolveProviderAuthChoice(provider, config).authMethod === 'browser-login';
-}
-
-function usesProviderAccountImportLane(
-  provider: AIProviderType,
-  config: Pick<ProviderConfig, 'authChoiceId'>,
-): boolean {
-  return resolveProviderAuthChoice(provider, config).authMethod === 'account-import';
-}
-
 function usesProviderAccountSurface(
   provider: AIProviderType,
   config: Pick<ProviderConfig, 'authChoiceId'>,
 ): boolean {
   return resolveProviderAuthChoice(provider, config).authFamily === 'account-backed';
-}
-
-function normalizeOpenAIAuthChoiceId(value: unknown): OpenAIAuthChoiceId {
-  return value === 'browser-account' ? 'browser-account' : DEFAULT_OPENAI_AUTH_CHOICE_ID;
 }
 
 function createDefaultSettings(): ExtensionSettings {
@@ -1244,6 +1220,16 @@ export function App() {
     }
   }
 
+  function handleOpenAIAuthChoiceChange(nextAuthChoiceId: OpenAIAuthChoiceId): void {
+    const currentModelLane = getOpenAIShippedModelLane(providerConfigs.openai.model);
+    const shouldResetModel = currentModelLane !== null && currentModelLane !== nextAuthChoiceId;
+
+    updateProviderConfig({
+      authChoiceId: nextAuthChoiceId,
+      ...(shouldResetModel ? { model: getOpenAIDefaultModel(nextAuthChoiceId) } : {}),
+    });
+  }
+
   async function handleOpenAIBrowserConnect(): Promise<void> {
     if (
       !ensureUnlockedVaultForAccounts(
@@ -1912,6 +1898,20 @@ export function App() {
   const selectedDefinition = PROVIDER_LOOKUP[selectedProvider];
   const selectedConfig = providerConfigs[selectedProvider];
   const selectedAuthChoice = resolveProviderAuthChoice(selectedProvider, selectedConfig);
+  const selectedOpenAIAuthChoiceId =
+    selectedProvider === 'openai' ? normalizeOpenAIAuthChoiceId(selectedConfig.authChoiceId) : null;
+  const selectedOpenAIDefaultModel = selectedOpenAIAuthChoiceId
+    ? getOpenAIDefaultModel(selectedOpenAIAuthChoiceId)
+    : selectedDefinition.defaultModel;
+  const selectedOpenAISuggestedModels = selectedOpenAIAuthChoiceId
+    ? getOpenAISuggestedModels(selectedOpenAIAuthChoiceId)
+    : [];
+  const selectedOpenAIModelLane =
+    selectedProvider === 'openai' ? getOpenAIShippedModelLane(selectedConfig.model) : null;
+  const selectedOpenAIUsesManualModelOverride =
+    selectedProvider === 'openai' &&
+    selectedConfig.model.trim().length > 0 &&
+    selectedOpenAIModelLane === null;
   const selectedUsesApiKeyLane = selectedAuthChoice.authMethod === 'api-key';
   const selectedUsesOAuthLane = selectedAuthChoice.authMethod === 'oauth-github';
   const selectedUsesAccountImportLane = selectedAuthChoice.authMethod === 'account-import';
@@ -2200,10 +2200,14 @@ export function App() {
             Recommended default
           </p>
           <p className="mt-2 text-lg font-semibold tracking-tight text-content-primary">
-            {selectedDefinition.defaultModel}
+            {selectedOpenAIDefaultModel}
           </p>
           <p className="mt-2 text-sm leading-6 text-content-secondary">
-            Keep this as the starting point unless your account requires a different model id.
+            {selectedProvider === 'openai'
+              ? selectedUsesBrowserAccountLane
+                ? 'Browser-account uses account-backed model ids routed through the internal Codex path.'
+                : 'API-key uses OpenAI platform model ids routed directly to the OpenAI API.'
+              : 'Keep this as the starting point unless your account requires a different model id.'}
           </p>
         </div>
       </div>
@@ -2213,10 +2217,8 @@ export function App() {
             <Select
               id="openai-login-method"
               label="Login method"
-              value={normalizeOpenAIAuthChoiceId(selectedConfig.authChoiceId)}
-              onChange={(event) =>
-                updateProviderConfig({ authChoiceId: normalizeOpenAIAuthChoiceId(event.target.value) })
-              }
+              value={selectedOpenAIAuthChoiceId ?? 'api-key'}
+              onChange={(event) => handleOpenAIAuthChoiceChange(normalizeOpenAIAuthChoiceId(event.target.value))}
               options={getProviderAuthChoices('openai').map((choice) => ({
                 value: choice.id,
                 label: choice.label,
@@ -2229,9 +2231,46 @@ export function App() {
             label="Model"
             value={selectedConfig.model}
             onChange={(event) => updateProviderConfig({ model: event.target.value })}
-            placeholder={selectedDefinition.defaultModel}
-            helperText="Use the exact model id your provider expects."
+            placeholder={selectedOpenAIDefaultModel}
+            helperText={
+              selectedProvider === 'openai'
+                ? 'Suggested models follow the selected login method. You can still type any exact model id as a manual override.'
+                : 'Use the exact model id your provider expects.'
+            }
           />
+
+          {selectedProvider === 'openai' ? (
+            <div className="space-y-3 rounded-2xl border border-border bg-surface-elevated px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-content-primary">Suggested models</p>
+                  <p className="mt-1 text-xs leading-5 text-content-secondary">
+                    {selectedUsesBrowserAccountLane
+                      ? 'These account-backed suggestions route through the internal Codex adapter.'
+                      : 'These platform suggestions route through the direct OpenAI API lane.'}
+                  </p>
+                </div>
+                {selectedOpenAIUsesManualModelOverride ? (
+                  <Badge variant="info">Manual override</Badge>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {selectedOpenAISuggestedModels.map((model) => (
+                  <Button
+                    key={model.id}
+                    type="button"
+                    variant={selectedConfig.model === model.id ? 'secondary' : 'ghost'}
+                    onClick={() => updateProviderConfig({ model: model.id })}
+                  >
+                    {model.label}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs leading-5 text-content-tertiary">
+                Unknown model ids remain allowed as manual overrides in the currently selected lane.
+              </p>
+            </div>
+          ) : null}
 
           {selectedDefinition.supportsEndpoint && !selectedUsesBrowserAccountLane ? (
             <Input

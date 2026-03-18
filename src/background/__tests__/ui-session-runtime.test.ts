@@ -671,7 +671,8 @@ describe('UI session runtime', () => {
       providers: {
         openai: {
           enabled: true,
-          model: 'gpt-4o-mini',
+          authChoiceId: 'browser-account',
+          model: 'codex-mini-latest',
           maxTokens: 4096,
           temperature: 0.2,
         },
@@ -887,7 +888,8 @@ describe('UI session runtime', () => {
       providers: {
         openai: {
           enabled: true,
-          model: 'gpt-4o-mini',
+          authChoiceId: 'browser-account',
+          model: 'codex-latest',
           maxTokens: 4096,
           temperature: 0.2,
           customEndpoint: 'https://api.openai.com/v1',
@@ -912,7 +914,7 @@ describe('UI session runtime', () => {
 
     const createResponse = await runtime.handleMessage(
       createExtensionMessage('SESSION_CREATE', {
-        config: { provider: 'openai', model: 'gpt-4o-mini' },
+        config: { provider: 'openai', model: 'codex-latest' },
       }),
     );
     const sessionId = createResponse.data?.session.config.id;
@@ -930,7 +932,7 @@ describe('UI session runtime', () => {
       expect.objectContaining({
         provider: 'codex',
         apiKey: 'access-openai-browser-runtime',
-        model: 'codex-mini-latest',
+        model: 'codex-latest',
       }),
     );
     const browserAccountCall = switchProviderSpy.mock.calls.find(([type]) => type === 'codex');
@@ -1000,7 +1002,7 @@ describe('UI session runtime', () => {
 
     const createResponse = await runtime.handleMessage(
       createExtensionMessage('SESSION_CREATE', {
-        config: { provider: 'openai', model: 'gpt-4o-mini' },
+        config: { provider: 'openai', model: 'codex-mini-latest' },
       }),
     );
     const sessionId = createResponse.data?.session.config.id;
