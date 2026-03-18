@@ -24,6 +24,7 @@ import { resetChatStore } from '../../sidepanel/store/chatStore';
 import { resetSessionStore } from '../../sidepanel/store/sessionStore';
 import { ThemeProvider } from '../../ui/theme';
 import { Logger } from '@shared/utils';
+import { seedReadyOpenAiVaultFixture } from './seed-ready-openai';
 
 const extensionListeners = new Set<(message: ExtensionMessage) => void>();
 const pendingExtensionRequests = new Set<Promise<unknown>>();
@@ -993,6 +994,7 @@ describe('P-02e scenario-matrix E2E expansion', () => {
         },
       },
     });
+    await seedReadyOpenAiVaultFixture();
   });
 
   afterEach(() => {

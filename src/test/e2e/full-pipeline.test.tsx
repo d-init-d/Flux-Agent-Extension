@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../ui/theme';
 import { App } from '../../sidepanel/App';
+import { seedReadyOpenAiVaultFixture } from './seed-ready-openai';
 import { resetActionLogStore } from '../../sidepanel/store/actionLogStore';
 import { resetChatStore } from '../../sidepanel/store/chatStore';
 import { resetSessionStore } from '../../sidepanel/store/sessionStore';
@@ -505,6 +506,7 @@ describe('Full pipeline E2E (U-16)', () => {
         },
       },
     });
+    await seedReadyOpenAiVaultFixture();
   });
 
   afterEach(() => {

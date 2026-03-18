@@ -325,19 +325,6 @@ function normalizeVaultMetadata(value: unknown): VaultMetadata {
   };
 }
 
-function cloneBrowserLoginMetadata(
-  browserLogin: ProviderBrowserLoginMetadata | undefined,
-): ProviderBrowserLoginMetadata | undefined {
-  if (!browserLogin) {
-    return undefined;
-  }
-
-  return {
-    ...browserLogin,
-    helper: browserLogin.helper ? { ...browserLogin.helper } : undefined,
-  };
-}
-
 function cloneBrowserLoginState(
   browserLogin: ProviderBrowserLoginState | undefined,
 ): ProviderBrowserLoginState | undefined {

@@ -139,7 +139,7 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 | OA-07 - Model catalog and routing policy                              | DONE   | `pnpm exec vitest run src/shared/config/__tests__/openai-model-catalog.test.ts src/options/__tests__/App.test.tsx src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "openai model|OpenAIRuntimeAuthCoordinator|openai browser-account runtime|recommended default and suggested OpenAI models|resets shipped OpenAI models"`; `pnpm typecheck`; `pnpm build` | Added a shared OpenAI lane-aware model catalog, auth-aware Options suggestions/defaults, cross-lane runtime blocking, and explicit manual override behavior without touching OA-08/OA-09 scope |
 | OA-08 - Legacy Codex migration bridge                                 | DONE   | `pnpm exec vitest run src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/App.test.tsx`; `pnpm typecheck`; `pnpm build` | Added a non-destructive read-path bridge so legacy `codex` state surfaces under `openai + browser-account` without rewriting encrypted vault secrets or disturbing the API-key lane        |
 | OA-09 - Popup/sidepanel/onboarding alignment plus regression coverage | DONE   | `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck`; `pnpm build` | Popup and sidepanel now share auth-aware OpenAI readiness mapping, block browser-account non-ready states, and keep legacy codex bridge UX surfaced as OpenAI browser-account without leaking raw artifacts |
-| OA-10 - Docs, manual QA, and closeout                                 | DONE   | `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`                                                                                                      | README/testing/manual-QA now describe the OpenAI dual-auth surface truthfully, keep helper availability honest for this repo/build, and close the initiative without re-promoting Codex UX |
+| OA-10 - Docs, manual QA, and closeout                                 | DONE   | `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`; `pnpm audit --audit-level=high`                                                                    | README/testing/manual-QA now describe the OpenAI dual-auth surface truthfully, keep helper availability honest for this repo/build, and close the initiative without re-promoting Codex UX |
 
 ### UX Contract
 
@@ -218,7 +218,8 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 - [2026-03-19] OA-10 DONE
   - Updated `README.md`, `TESTING.md`, and `docs/task-15-manual-qa-checklist.md` so the tester-facing story now matches the shipped product: `OpenAI` is the primary surface with exactly 2 login methods, popup/options/sidepanel are auth-choice-aware, and `codex` is legacy/internal compatibility only.
   - Kept helper availability honest: the helper/deep-link contract exists, but this repo/build still commonly surfaces `helper-missing` unless trusted helper artifacts or legacy bridge state already exist.
-  - Verify: `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`
+  - Final closeout also greened the remaining lint/test gates and restored the deterministic E2E suites by seeding a vault-backed OpenAI API-key fixture in the E2E harness before sidepanel sends run.
+  - Verify: `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`; `pnpm audit --audit-level=high`
 
 ### Initial Todo Seed
 

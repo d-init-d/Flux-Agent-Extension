@@ -40,12 +40,14 @@ The detailed `50`-scenario accounting lives in [E2E_SCENARIO_MATRIX.md](/D:/Open
 - Real-site-style, SPA-style, edge-case, and error-recovery planning flows
 - Deterministic scenario matrix coverage for common workflow shapes used in Phase 5 hardening
 
-## Codex manual QA
+## OpenAI manual QA
 
-- Manual QA for the account-backed Codex provider lives in `docs/task-15-manual-qa-checklist.md`.
+- Manual QA for the unified OpenAI auth surface lives in `docs/task-15-manual-qa-checklist.md`.
 - Treat that checklist as the current source of truth for tester steps across `Options`, `Popup`, and `Sidepanel`.
-- The provider under test is `ChatGPT Plus / Codex (Experimental)`.
-- Test with a real official auth artifact exported from an eligible ChatGPT/Codex account; this is not the normal API-key path used by other providers.
+- The primary provider under test is `OpenAI`.
+- Test both shipped OpenAI login methods:
+  1. `ChatGPT Pro/Plus (browser)`
+  2. `Manually enter API Key`
 
 ## CLIProxyAPI manual QA
 
@@ -69,22 +71,23 @@ The detailed `50`-scenario accounting lives in [E2E_SCENARIO_MATRIX.md](/D:/Open
 - Confirm changing the CLIProxyAPI endpoint after validation marks the credential as stale and re-locks readiness until validation is rerun.
 - Confirm raw CLIProxyAPI API keys never appear in regular storage snapshots, UI text, or blocked-save error states.
 
-## Codex-specific checks
+## OpenAI browser-account checks
 
-- Confirm the vault is initialized and unlocked before validation or live prompt tests.
-- Confirm artifact import clears the raw payload from the form immediately after submission.
-- Confirm validation runs against the account-backed flow and not an API-key flow.
-- Confirm popup quick actions and sidepanel send stay blocked for `Vault locked`, `Account missing`, `Refresh required`, `Revoked`, `Session expired`, or other degraded account states.
-- Confirm account switching, revoke, remove, and re-import flows update all three surfaces consistently.
+- Confirm `OpenAI` shows exactly 2 login methods and that browser-account is selected through `ChatGPT Pro/Plus (browser)` rather than through `codex` first-run UX.
+- Confirm the vault is initialized and unlocked before validation or live prompt tests for the browser-account lane.
+- Confirm browser-account status is background-owned and surfaced to UI as sanitized readiness/health data only.
+- Confirm popup quick actions and sidepanel send stay blocked for `Vault locked`, `Helper missing`, `Account missing`, `Refresh required`, `Revoked`, `Session expired`, or other degraded browser-account states.
+- Confirm auth-choice-aware copy and readiness stay consistent across `Options`, `Popup`, and `Sidepanel` when switching between OpenAI login methods.
 
-## Current Codex limitations and recovery
+## OpenAI browser-account limitations and legacy bridge
 
-- Codex is still `experimental`.
-- Runtime auth is hydrated from an imported official artifact and cached in background memory; it is not refreshed through an extension-owned OAuth or API-key exchange.
-- No manifest change is part of the current flow. The shipped implementation still uses the existing `src/manifest.json`; see `docs/task-08-manifest-auth-wiring.md`.
-- Refresh is intentionally deferred to the official client flow. If a session becomes stale, expired, revoked, or refresh-required, recover by importing a fresh official artifact and validating again.
-- Validation can succeed for artifact shape while still surfacing `refresh-required` when a fresh Codex-managed login is needed.
-- Current adapter coverage is text-only prompts for Codex; image input is not supported.
+- The browser-account lane is still helper/deep-link based and background-owned.
+- This repo/build does not ship a usable helper binary on its own, so clean local builds commonly surface `helper-missing` unless trusted helper artifacts or a legacy Codex bridge state already exist.
+- Runtime auth is memory-only once hydrated; this repo/build does not add headless login, scraping, or extension-owned OAuth callback handling.
+- No manifest change is part of this flow. The shipped implementation still uses the existing `src/manifest.json`; see `docs/task-08-manifest-auth-wiring.md`.
+- Refresh is intentionally deferred to the official client/helper flow. If a browser-account session becomes stale, expired, revoked, or refresh-required, recover through the supported account-backed path rather than an extension-owned OAuth exchange.
+- Legacy bridge coverage matters: when legacy trusted Codex artifacts/state already exist, the product may surface that readiness under `OpenAI + ChatGPT Pro/Plus (browser)` without requiring users to start from the legacy Codex UX.
+- Current account-backed adapter coverage is text-only; image input is not supported.
 
 ## Release gates
 

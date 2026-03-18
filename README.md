@@ -34,10 +34,12 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 ## Provider Auth Notes
 
 - Most providers still use the existing API-key or OAuth-backed setup paths in `Options`.
-- `cliproxyapi` is a first-class API-key provider with explicit endpoint setup and readiness gating across `Options`, `Popup`, and `Sidepanel`.
-- `codex` is currently `experimental` and uses an account-backed flow instead of a normal API key.
-- The shipped Codex path imports an official ChatGPT/Codex auth artifact into the background-owned vault, validates it, and hydrates an in-memory runtime session from that artifact.
-- The current flow does not add manifest permissions, callback pages, `chrome.identity`, or extension-owned OAuth handling. See `docs/task-08-manifest-auth-wiring.md`.
+- `OpenAI` is now the primary product surface for OpenAI-family usage.
+- The `OpenAI` surface exposes exactly 2 login methods:
+  1. `ChatGPT Pro/Plus (browser)`
+  2. `Manually enter API Key`
+- `cliproxyapi` remains a first-class API-key provider with explicit endpoint setup and readiness gating across `Options`, `Popup`, and `Sidepanel`.
+- `codex` is no longer the primary first-run UX. It remains a legacy/internal compatibility lane that can still back the `OpenAI + ChatGPT Pro/Plus (browser)` runtime through the migration bridge.
 
 ## CLIProxyAPI Current Status
 
@@ -50,13 +52,16 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 - Readiness rule: Flux only treats CLIProxyAPI as ready after a valid endpoint is saved and `Test connection` succeeds.
 - Runtime guard: popup quick actions and sidepanel sends stay blocked when the CLIProxyAPI credential is missing, locked, stale, or not validated yet.
 
-## Codex Current Status
+## OpenAI Current Status
 
-- Provider label in-product: `ChatGPT Plus / Codex (Experimental)`.
-- Auth model: account-backed artifact import only; do not document it as a normal API-key provider.
-- Secret boundary: raw artifact material stays in the vault/background path; normal settings storage keeps masked metadata and health state only.
-- Runtime boundary: popup, options, and sidepanel talk to background messages; they do not persist raw Codex artifacts in UI-local state.
-- Known limitation: live refresh is intentionally deferred to the official client flow, so stale or expired sessions require importing a fresh official artifact.
+- Primary provider label in-product: `OpenAI`.
+- Login methods in-product: exactly `ChatGPT Pro/Plus (browser)` and `Manually enter API Key`.
+- Browser-account lane ownership: background-owned and account-backed. UI surfaces only consume sanitized status and readiness state.
+- Secret boundary: long-lived account artifacts stay encrypted in the vault/background path; normal settings storage keeps masked metadata and health state only.
+- Runtime boundary: popup, options, and sidepanel are auth-choice-aware and talk to background messages; they do not persist raw browser-login artifacts or runtime tokens in UI-local state.
+- Browser-login implementation boundary: no headless login, no scraping, and no extension-owned OAuth callback handling in this repo/build. See `docs/task-08-manifest-auth-wiring.md` and `docs/task-oa-03-browser-helper-deep-link-auth-contract.md`.
+- Helper/deep-link contract exists, but this repo/build still surfaces `helper-missing` unless trusted helper artifacts or the legacy Codex bridge are already present.
+- Legacy compatibility: `codex` remains available only as an internal/legacy compatibility path during migration; it should not be documented as the primary setup route.
 - Manual QA checklist: `docs/task-15-manual-qa-checklist.md`.
 
 ## Permissions
@@ -163,10 +168,10 @@ Release packaging is handled by `.github/workflows/release.yml` on tags matching
 - Provider credentials now flow through the background-owned credential vault. Secrets are encrypted at rest, while regular settings storage keeps only masked metadata.
 - Unlocking the vault is a per-browser-session action. The unlock state lives in session storage and memory only; options and popup flows do not persist raw provider secrets.
 - CLIProxyAPI follows the same vault boundary. Its runtime path also requires a valid saved endpoint plus a non-stale validated credential before live requests can proceed.
-- Codex follows the same vault boundary, but with imported official auth artifacts rather than API keys. If the vault is locked, missing, revoked, stale, or refresh-required, Codex runtime flows stay blocked until the account is revalidated or re-imported.
+- OpenAI browser-account follows the same vault boundary, but with helper/deep-link account artifacts and legacy-bridge-compatible account state rather than an API key. If the vault is locked, helper is unavailable, the account is missing, revoked, stale, or refresh-required, browser-account runtime flows stay blocked until the account path is restored.
 - `evaluate` and custom scripts stay off by default. They require `Advanced mode` plus the explicit custom-scripts capability, and exported recordings/action logs mark `evaluate` as high risk.
 - See `SECURITY.md` for the threat model and current hardening posture.
-- See `TESTING.md` for the broader QA strategy and Codex-specific test/recovery guidance.
+- See `TESTING.md` for the broader QA strategy and OpenAI dual-auth / legacy-bridge test guidance.
 - See `ARCHITECTURE.md` for architecture context.
 - See `ROADMAP.md` and `DELIVERY_TRACKER.md` for live delivery status.
 

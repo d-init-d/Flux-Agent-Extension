@@ -20,7 +20,7 @@ import {
   CardTitle,
 } from '@/ui/components';
 import { sendExtensionRequest } from '@/shared/extension-client';
-import { PROVIDER_LOOKUP, providerUsesAccountImport } from '@/shared/config';
+import { PROVIDER_LOOKUP } from '@/shared/config';
 import { normalizeOnboardingState, ONBOARDING_STORAGE_KEY } from '@/shared/storage/onboarding';
 import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
 import { resolveKeyBasedProviderUx } from '@/shared/ui/key-based-provider-ux';

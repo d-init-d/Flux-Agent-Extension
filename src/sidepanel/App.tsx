@@ -13,11 +13,7 @@ import { Button } from '@/ui/components';
 import { createDefaultProviderConfigs } from '@/shared/config';
 import { resolveAccountBackedProviderUx } from '@/shared/ui/account-backed-provider-ux';
 import { resolveKeyBasedProviderUx } from '@/shared/ui/key-based-provider-ux';
-import {
-  resolveActiveProviderSurfaceState,
-  resolveProviderModelForSession,
-  resolveProviderSurfaceState,
-} from '@/shared/ui/provider-surface';
+import { resolveProviderSurfaceState } from '@/shared/ui/provider-surface';
 import { ThemeToggle } from '@/ui/theme';
 import type {
   AccountAuthStatusGetResponse,
@@ -678,7 +674,6 @@ export function App() {
     setSubmitError(null);
     let sessionId = activeSessionId;
     let nextProviderNotice = providerNotice;
-    let nextSettingsSnapshot = settingsSnapshot;
 
     try {
       let targetProvider = activeSession?.config.provider;
@@ -691,7 +686,7 @@ export function App() {
       }
 
       if (targetProvider) {
-        nextSettingsSnapshot = normalizeSettingsSnapshot(
+        const nextSettingsSnapshot = normalizeSettingsSnapshot(
           await sendExtensionRequest('SETTINGS_GET', undefined),
           targetProvider,
         );
