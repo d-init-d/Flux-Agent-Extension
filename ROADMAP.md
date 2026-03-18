@@ -1,7 +1,7 @@
 # AI Browser Controller - Detailed Roadmap
 
 > **Version:** 1.0.0
-> **Last Updated:** 2026-03-18
+> **Last Updated:** 2026-03-19
 > **Timeline:** 20 weeks (5 phases)
 > **Target Release:** v1.0.0 Chrome Web Store
 
@@ -115,7 +115,7 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 
 ---
 
-## Planned Initiative: OpenAI Unified Auth Surface
+## Closed Initiative: OpenAI Unified Auth Surface
 
 **Goal:** When users choose `OpenAI`, the product should show exactly 2 auth choices:
 
@@ -139,7 +139,7 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 | OA-07 - Model catalog and routing policy                              | DONE   | `pnpm exec vitest run src/shared/config/__tests__/openai-model-catalog.test.ts src/options/__tests__/App.test.tsx src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "openai model|OpenAIRuntimeAuthCoordinator|openai browser-account runtime|recommended default and suggested OpenAI models|resets shipped OpenAI models"`; `pnpm typecheck`; `pnpm build` | Added a shared OpenAI lane-aware model catalog, auth-aware Options suggestions/defaults, cross-lane runtime blocking, and explicit manual override behavior without touching OA-08/OA-09 scope |
 | OA-08 - Legacy Codex migration bridge                                 | DONE   | `pnpm exec vitest run src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/App.test.tsx`; `pnpm typecheck`; `pnpm build` | Added a non-destructive read-path bridge so legacy `codex` state surfaces under `openai + browser-account` without rewriting encrypted vault secrets or disturbing the API-key lane        |
 | OA-09 - Popup/sidepanel/onboarding alignment plus regression coverage | DONE   | `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck`; `pnpm build` | Popup and sidepanel now share auth-aware OpenAI readiness mapping, block browser-account non-ready states, and keep legacy codex bridge UX surfaced as OpenAI browser-account without leaking raw artifacts |
-| OA-10 - Docs, manual QA, and closeout                                 | TODO   | -                                                                                                                                                             | Update tester guidance, README, and close the initiative with full repo gates                                                                                                              |
+| OA-10 - Docs, manual QA, and closeout                                 | DONE   | `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`                                                                                                      | README/testing/manual-QA now describe the OpenAI dual-auth surface truthfully, keep helper availability honest for this repo/build, and close the initiative without re-promoting Codex UX |
 
 ### UX Contract
 
@@ -215,6 +215,10 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
   - Added regression coverage for popup, sidepanel, session defaults, and existing options bridge assertions; raw helper/artifact strings stay out of surfaced UI copy.
   - Verify: `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck`; `pnpm build`
   - Note: OA-10 is still docs/manual-QA closeout only; do not expand product behavior there.
+- [2026-03-19] OA-10 DONE
+  - Updated `README.md`, `TESTING.md`, and `docs/task-15-manual-qa-checklist.md` so the tester-facing story now matches the shipped product: `OpenAI` is the primary surface with exactly 2 login methods, popup/options/sidepanel are auth-choice-aware, and `codex` is legacy/internal compatibility only.
+  - Kept helper availability honest: the helper/deep-link contract exists, but this repo/build still commonly surfaces `helper-missing` unless trusted helper artifacts or legacy bridge state already exist.
+  - Verify: `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`
 
 ### Initial Todo Seed
 
