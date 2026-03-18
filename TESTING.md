@@ -1,6 +1,6 @@
 # Testing Guide
 
-Last updated: 2026-03-17
+Last updated: 2026-03-18
 
 This file is the current testing source of truth for the repo.
 
@@ -46,6 +46,28 @@ The detailed `50`-scenario accounting lives in [E2E_SCENARIO_MATRIX.md](/D:/Open
 - Treat that checklist as the current source of truth for tester steps across `Options`, `Popup`, and `Sidepanel`.
 - The provider under test is `ChatGPT Plus / Codex (Experimental)`.
 - Test with a real official auth artifact exported from an eligible ChatGPT/Codex account; this is not the normal API-key path used by other providers.
+
+## CLIProxyAPI manual QA
+
+- Treat `CLIProxyAPI` as the endpoint-first provider under test.
+- Use one real local or hosted endpoint plus a real vault-backed API key.
+- Canonical local examples:
+  - `http://127.0.0.1:8317`
+  - `http://127.0.0.1:8317/v1`
+- Canonical hosted example:
+  - `https://your-domain/v1`
+
+## CLIProxyAPI-specific checks
+
+- Confirm `Options` blocks `http://` endpoints that are not exact loopback hosts.
+- Confirm `Options` accepts loopback HTTP for CLIProxyAPI and normalizes `/v1`, `/v1/chat/completions`, and `/v1/models` to a stable base URL.
+- Confirm `Popup` shows the correct readiness state for CLIProxyAPI:
+  - `Endpoint required`
+  - `Test connection`
+  - `Ready`
+- Confirm `Sidepanel` blocks send until CLIProxyAPI has both a saved endpoint and a validated vault-backed API key.
+- Confirm changing the CLIProxyAPI endpoint after validation marks the credential as stale and re-locks readiness until validation is rerun.
+- Confirm raw CLIProxyAPI API keys never appear in regular storage snapshots, UI text, or blocked-save error states.
 
 ## Codex-specific checks
 

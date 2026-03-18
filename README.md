@@ -34,9 +34,21 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 ## Provider Auth Notes
 
 - Most providers still use the existing API-key or OAuth-backed setup paths in `Options`.
+- `cliproxyapi` is a first-class API-key provider with explicit endpoint setup and readiness gating across `Options`, `Popup`, and `Sidepanel`.
 - `codex` is currently `experimental` and uses an account-backed flow instead of a normal API key.
 - The shipped Codex path imports an official ChatGPT/Codex auth artifact into the background-owned vault, validates it, and hydrates an in-memory runtime session from that artifact.
 - The current flow does not add manifest permissions, callback pages, `chrome.identity`, or extension-owned OAuth handling. See `docs/task-08-manifest-auth-wiring.md`.
+
+## CLIProxyAPI Current Status
+
+- Provider label in-product: `CLIProxyAPI`.
+- Auth model: endpoint + API key stored in the background-owned vault.
+- Supported endpoint shapes:
+  - local loopback: `http://127.0.0.1:8317` or `http://127.0.0.1:8317/v1`
+  - hosted: `https://your-domain/v1`
+- Endpoint normalization: the setup flow accepts `/v1`, `/v1/chat/completions`, and `/v1/models`, then normalizes them to a stable base URL.
+- Readiness rule: Flux only treats CLIProxyAPI as ready after a valid endpoint is saved and `Test connection` succeeds.
+- Runtime guard: popup quick actions and sidepanel sends stay blocked when the CLIProxyAPI credential is missing, locked, stale, or not validated yet.
 
 ## Codex Current Status
 
@@ -150,6 +162,7 @@ Release packaging is handled by `.github/workflows/release.yml` on tags matching
 
 - Provider credentials now flow through the background-owned credential vault. Secrets are encrypted at rest, while regular settings storage keeps only masked metadata.
 - Unlocking the vault is a per-browser-session action. The unlock state lives in session storage and memory only; options and popup flows do not persist raw provider secrets.
+- CLIProxyAPI follows the same vault boundary. Its runtime path also requires a valid saved endpoint plus a non-stale validated credential before live requests can proceed.
 - Codex follows the same vault boundary, but with imported official auth artifacts rather than API keys. If the vault is locked, missing, revoked, stale, or refresh-required, Codex runtime flows stay blocked until the account is revalidated or re-imported.
 - `evaluate` and custom scripts stay off by default. They require `Advanced mode` plus the explicit custom-scripts capability, and exported recordings/action logs mark `evaluate` as high risk.
 - See `SECURITY.md` for the threat model and current hardening posture.

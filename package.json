@@ -28,7 +28,9 @@
   "pnpm": {
     "overrides": {
       "@crxjs/vite-plugin>rollup": "2.80.0",
-      "esbuild": "0.27.3"
+      "esbuild": "0.27.3",
+      "flatted": "3.4.0",
+      "undici": "7.24.0"
     },
     "onlyBuiltDependencies": [
       "esbuild"
