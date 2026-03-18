@@ -23,6 +23,11 @@ import {
   providerUsesOAuthToken,
 } from '@shared/config';
 import type { ProviderDefinition } from '@shared/config';
+import {
+  evaluateProviderEndpointPolicy,
+  getProviderEndpointHelperText,
+  normalizeProviderEndpointConfig,
+} from '@shared/provider-endpoints';
 import { runDeviceFlow } from '@core/auth/github-device-flow';
 import { sendExtensionRequest } from '@shared/extension-client';
 import {
@@ -210,7 +215,10 @@ function normalizeProviderConfigs(value: unknown): ProviderConfigMap {
           : defaults[provider.type].temperature,
       customEndpoint:
         typeof existingConfig.customEndpoint === 'string'
-          ? existingConfig.customEndpoint
+          ? normalizeProviderEndpointConfig(provider.type, {
+              ...defaults[provider.type],
+              ...existingConfig,
+            }).customEndpoint
           : defaults[provider.type].customEndpoint,
     };
   }
@@ -430,33 +438,6 @@ function getAccountStatusDetail(account: ProviderAccountRecord, vaultLocked: boo
   }
 
   return 'Imported and stored in the encrypted vault. Run validation before treating it as ready.';
-}
-
-function isLoopbackUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedEndpoint(providerType: AIProviderType, endpoint: string): boolean {
-  if (!endpoint) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(endpoint);
-
-    if (providerType === 'ollama') {
-      return parsed.protocol === 'http:' && isLoopbackUrl(endpoint);
-    }
-
-    return parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 const SECRET_ERROR_PATTERNS = [
@@ -791,9 +772,13 @@ export function App() {
     }
 
     if (selectedDefinition.supportsEndpoint) {
+      const endpointPolicy = evaluateProviderEndpointPolicy(
+        selectedProvider,
+        selectedConfig.customEndpoint,
+      );
       return (
         onboardingState.configuredProvider === selectedProvider &&
-        isAllowedEndpoint(selectedProvider, selectedConfig.customEndpoint?.trim() ?? '')
+        endpointPolicy.valid
       );
     }
 
@@ -1301,16 +1286,24 @@ export function App() {
     setValidationMessage('');
 
     try {
+      let nextConfig = selectedConfig;
       if (selectedDefinition.supportsEndpoint) {
-        const endpoint = selectedConfig.customEndpoint?.trim() ?? '';
-        if (!isAllowedEndpoint(selectedProvider, endpoint)) {
+        const endpointPolicy = evaluateProviderEndpointPolicy(
+          selectedProvider,
+          selectedConfig.customEndpoint,
+        );
+        if (!endpointPolicy.valid) {
           setSaveState('error');
-          setSaveMessage(
-            selectedProvider === 'ollama'
-              ? 'Save blocked: use an http://localhost or http://127.0.0.1 Ollama endpoint.'
-              : 'Save blocked: remote provider endpoints must use HTTPS.',
-          );
+          setSaveMessage(`Save blocked: ${endpointPolicy.errorMessage}`);
           return;
+        }
+
+        nextConfig = normalizeProviderEndpointConfig(selectedProvider, selectedConfig);
+        if (nextConfig.customEndpoint !== selectedConfig.customEndpoint) {
+          setProviderConfigs((current) => ({
+            ...current,
+            [selectedProvider]: nextConfig,
+          }));
         }
       }
 
@@ -1328,7 +1321,7 @@ export function App() {
         'PROVIDER_SET',
         {
           provider: selectedProvider,
-          config: selectedConfig,
+          config: nextConfig,
           makeDefault: true,
         },
         'options',
@@ -1654,16 +1647,24 @@ export function App() {
     }
 
     try {
+      let nextConfig = selectedConfig;
       if (selectedDefinition.supportsEndpoint) {
-        const endpoint = selectedConfig.customEndpoint?.trim() ?? '';
-        if (!isAllowedEndpoint(selectedProvider, endpoint)) {
+        const endpointPolicy = evaluateProviderEndpointPolicy(
+          selectedProvider,
+          selectedConfig.customEndpoint,
+        );
+        if (!endpointPolicy.valid) {
           setValidationState('error');
-          setValidationMessage(
-            selectedProvider === 'ollama'
-              ? 'Use an http://localhost or http://127.0.0.1 Ollama endpoint.'
-              : 'Use a valid https:// endpoint before testing this provider.',
-          );
+          setValidationMessage(endpointPolicy.errorMessage ?? 'Connection test failed unexpectedly.');
           return;
+        }
+
+        nextConfig = normalizeProviderEndpointConfig(selectedProvider, selectedConfig);
+        if (nextConfig.customEndpoint !== selectedConfig.customEndpoint) {
+          setProviderConfigs((current) => ({
+            ...current,
+            [selectedProvider]: nextConfig,
+          }));
         }
       }
 
@@ -1676,15 +1677,15 @@ export function App() {
         {
           provider: selectedProvider,
           apiKey: rawApiKey || undefined,
-          authKind: providerUsesOAuthToken(selectedDefinition)
-            ? 'oauth-token'
-            : providerUsesApiKey(selectedDefinition)
-              ? 'api-key'
-              : undefined,
-          config: selectedConfig,
-        },
-        'options',
-      );
+           authKind: providerUsesOAuthToken(selectedDefinition)
+             ? 'oauth-token'
+             : providerUsesApiKey(selectedDefinition)
+               ? 'api-key'
+               : undefined,
+           config: nextConfig,
+         },
+         'options',
+       );
 
       syncVaultState(response.vault);
       setValidationState(response.valid ? 'success' : 'error');
@@ -1953,11 +1954,7 @@ export function App() {
             value={selectedConfig.customEndpoint ?? ''}
             onChange={(event) => updateProviderConfig({ customEndpoint: event.target.value })}
             placeholder={selectedDefinition.endpointPlaceholder}
-            helperText={
-              selectedProvider === 'ollama'
-                ? 'Only loopback URLs are allowed for local runtime testing.'
-                : 'Remote custom endpoints must use HTTPS.'
-            }
+            helperText={getProviderEndpointHelperText(selectedProvider)}
           />
         ) : null}
 

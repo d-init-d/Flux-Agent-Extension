@@ -83,6 +83,7 @@ describe('token-counter', () => {
     it('falls back to provider defaults for unknown models', () => {
       expect(getModelMaxTokens('claude', 'unknown-claude-model')).toBe(200000);
       expect(getModelMaxTokens('openai', 'unknown-openai-model')).toBe(128000);
+      expect(getModelMaxTokens('cliproxyapi', 'unknown-cliproxy-model')).toBe(128000);
       expect(getModelMaxTokens('gemini', 'unknown-gemini-model')).toBe(1000000);
       expect(getModelMaxTokens('ollama', 'mystery-local-model')).toBe(8192);
       expect(getModelMaxTokens('openrouter', 'mystery-openrouter-model')).toBe(128000);

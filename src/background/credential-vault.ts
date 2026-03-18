@@ -1,7 +1,11 @@
 import { createProvider } from '@core/ai-client/provider-loader';
 import { SecureStorage } from '@shared/crypto/secure-storage';
 import { ErrorCode, ExtensionError } from '@shared/errors';
-import { PROVIDER_LOOKUP } from '@shared/config';
+import {
+  PROVIDER_LOOKUP,
+  evaluateProviderEndpointPolicy,
+  normalizeProviderEndpointConfig,
+} from '@shared/config';
 import type {
   AIProviderType,
   ProviderAccountRecord,
@@ -958,20 +962,30 @@ export class CredentialVault {
     credential?: string | null,
   ): Promise<boolean> {
     const providerDefinition = PROVIDER_LOOKUP[provider];
+    const normalizedConfig = providerDefinition.supportsEndpoint
+      ? normalizeProviderEndpointConfig(provider, config)
+      : config;
+    const endpointPolicy = providerDefinition.supportsEndpoint
+      ? evaluateProviderEndpointPolicy(provider, normalizedConfig.customEndpoint)
+      : { valid: true };
+
+    if (!endpointPolicy.valid) {
+      return false;
+    }
 
     if (!providerDefinition.requiresCredential) {
       if (provider === 'custom') {
-        return Boolean(config.customEndpoint?.trim());
+        return true;
       }
 
       if (provider === 'ollama') {
         const client = await createProvider('ollama');
         await client.initialize({
           provider,
-          model: config.model,
-          baseUrl: config.customEndpoint?.trim() || undefined,
-          maxTokens: config.maxTokens,
-          temperature: config.temperature,
+          model: normalizedConfig.model,
+          baseUrl: normalizedConfig.customEndpoint,
+          maxTokens: normalizedConfig.maxTokens,
+          temperature: normalizedConfig.temperature,
         });
         return client.validateApiKey('');
       }
@@ -990,16 +1004,16 @@ export class CredentialVault {
 
     const client = provider === 'custom' ? null : await createProvider(provider as Exclude<AIProviderType, 'custom'>);
     if (!client) {
-      return Boolean(config.customEndpoint?.trim());
+      return true;
     }
 
     await client.initialize({
       provider,
-      model: config.model,
+      model: normalizedConfig.model,
       apiKey: secret,
-      baseUrl: config.customEndpoint?.trim() || undefined,
-      maxTokens: config.maxTokens,
-      temperature: config.temperature,
+      baseUrl: normalizedConfig.customEndpoint,
+      maxTokens: normalizedConfig.maxTokens,
+      temperature: normalizedConfig.temperature,
     });
 
     return client.validateApiKey(secret);

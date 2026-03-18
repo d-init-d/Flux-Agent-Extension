@@ -14,6 +14,7 @@ describe('rate-limiter', () => {
     it.each([
       ['claude', { maxRequestsPerMinute: 50, maxTokensPerMinute: 40000 }],
       ['openai', { maxRequestsPerMinute: 60, maxTokensPerMinute: 60000 }],
+      ['cliproxyapi', { maxRequestsPerMinute: 60, maxTokensPerMinute: 60000 }],
       ['gemini', { maxRequestsPerMinute: 15, maxTokensPerMinute: 1000000 }],
       ['ollama', { maxRequestsPerMinute: 120, maxTokensPerMinute: 500000 }],
       ['openrouter', { maxRequestsPerMinute: 60, maxTokensPerMinute: 100000 }],

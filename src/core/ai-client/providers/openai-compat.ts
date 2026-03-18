@@ -22,8 +22,27 @@ interface OpenAICompatPreset {
   defaultBaseUrl: string;
   chatPath: string;
   modelsPath: string | null;
+  allowVersionedBasePath?: boolean;
   supportsVision: boolean;
   supportsFunctionCalling: boolean;
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '');
+}
+
+function buildCompatUrl(
+  baseUrl: string,
+  path: string,
+  allowVersionedBasePath: boolean,
+): string {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+
+  if (allowVersionedBasePath && /\/v1$/i.test(normalizedBaseUrl) && path.startsWith('/v1/')) {
+    return `${normalizedBaseUrl}${path.slice(3)}`;
+  }
+
+  return `${normalizedBaseUrl}${path}`;
 }
 
 const PRESETS: Record<string, OpenAICompatPreset> = {
@@ -33,6 +52,16 @@ const PRESETS: Record<string, OpenAICompatPreset> = {
     defaultBaseUrl: 'https://api.groq.com/openai',
     chatPath: '/v1/chat/completions',
     modelsPath: '/openai/v1/models',
+    supportsVision: true,
+    supportsFunctionCalling: true,
+  },
+  cliproxyapi: {
+    type: 'cliproxyapi',
+    displayName: 'CLIProxyAPI',
+    defaultBaseUrl: 'http://127.0.0.1:8317',
+    chatPath: '/v1/chat/completions',
+    modelsPath: '/v1/models',
+    allowVersionedBasePath: true,
     supportsVision: true,
     supportsFunctionCalling: true,
   },
@@ -115,7 +144,14 @@ const PRESETS: Record<string, OpenAICompatPreset> = {
 // ---------------------------------------------------------------------------
 
 function createOpenAICompatClass(preset: OpenAICompatPreset) {
-  const { type, displayName, defaultBaseUrl, chatPath, modelsPath } = preset;
+  const {
+    type,
+    displayName,
+    defaultBaseUrl,
+    chatPath,
+    modelsPath,
+    allowVersionedBasePath = false,
+  } = preset;
 
   return class OpenAICompatProvider extends OpenAIProvider {
     override readonly name: AIProviderType = type;
@@ -124,7 +160,7 @@ function createOpenAICompatClass(preset: OpenAICompatPreset) {
 
     protected override getEndpoint(): string {
       const base = this.getBaseUrl(defaultBaseUrl);
-      return `${base}${chatPath}`;
+      return buildCompatUrl(base, chatPath, allowVersionedBasePath);
     }
 
     override async validateApiKey(apiKey: string): Promise<boolean> {
@@ -151,7 +187,7 @@ function createOpenAICompatClass(preset: OpenAICompatPreset) {
       try {
         const base =
           this.config ? this.getBaseUrl(defaultBaseUrl) : defaultBaseUrl;
-        const response = await fetch(`${base}${modelsPath}`, {
+        const response = await fetch(buildCompatUrl(base, modelsPath, allowVersionedBasePath), {
           method: 'GET',
           headers: { Authorization: `Bearer ${apiKey}` },
         });
@@ -215,6 +251,7 @@ function createOpenAICompatClass(preset: OpenAICompatPreset) {
 // ---------------------------------------------------------------------------
 
 export const GroqProvider = createOpenAICompatClass(PRESETS.groq);
+export const CLIProxyAPIProvider = createOpenAICompatClass(PRESETS.cliproxyapi);
 export const DeepSeekProvider = createOpenAICompatClass(PRESETS.deepseek);
 export const XAIProvider = createOpenAICompatClass(PRESETS.xai);
 export const TogetherProvider = createOpenAICompatClass(PRESETS.together);
@@ -235,6 +272,7 @@ const PROVIDER_CLASSES: Record<
   ReturnType<typeof createOpenAICompatClass>
 > = {
   groq: GroqProvider,
+  cliproxyapi: CLIProxyAPIProvider,
   deepseek: DeepSeekProvider,
   xai: XAIProvider,
   together: TogetherProvider,

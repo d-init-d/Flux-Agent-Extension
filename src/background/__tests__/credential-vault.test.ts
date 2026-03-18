@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as providerLoader from '../../core/ai-client/provider-loader';
 import { CredentialVault } from '../credential-vault';
 
 function encodeBase64UrlJson(payload: Record<string, unknown>): string {
@@ -140,5 +141,64 @@ describe('CredentialVault account store', () => {
         }),
       }),
     ]);
+  });
+
+  it('normalizes cliproxyapi endpoints before validating credentials', async () => {
+    const vault = new CredentialVault();
+    const initialize = vi.fn().mockResolvedValue(undefined);
+    const validateApiKey = vi.fn().mockResolvedValue(true);
+    vi.spyOn(providerLoader, 'createProvider').mockResolvedValue({
+      name: 'cliproxyapi',
+      supportsVision: true,
+      supportsStreaming: true,
+      supportsFunctionCalling: true,
+      initialize,
+      validateApiKey,
+      // eslint-disable-next-line require-yield
+      chat: async function* () {
+        return;
+      },
+      abort: vi.fn(),
+    });
+
+    const valid = await vault.validateCredential(
+      'cliproxyapi',
+      {
+        enabled: true,
+        model: 'gpt-5',
+        maxTokens: 4096,
+        temperature: 0.3,
+        customEndpoint: 'http://127.0.0.1:8317/v1/chat/completions',
+      },
+      'sk-cliproxyapi-test',
+    );
+
+    expect(valid).toBe(true);
+    expect(initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: 'http://127.0.0.1:8317/v1',
+      }),
+    );
+    expect(validateApiKey).toHaveBeenCalledWith('sk-cliproxyapi-test');
+  });
+
+  it('rejects invalid cliproxyapi endpoints during credential validation', async () => {
+    const vault = new CredentialVault();
+    const createProviderSpy = vi.spyOn(providerLoader, 'createProvider');
+
+    const valid = await vault.validateCredential(
+      'cliproxyapi',
+      {
+        enabled: true,
+        model: 'gpt-5',
+        maxTokens: 4096,
+        temperature: 0.3,
+        customEndpoint: 'http://example.com/v1',
+      },
+      'sk-cliproxyapi-test',
+    );
+
+    expect(valid).toBe(false);
+    expect(createProviderSpy).not.toHaveBeenCalled();
   });
 });

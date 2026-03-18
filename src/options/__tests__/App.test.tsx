@@ -605,6 +605,114 @@ describe('Options App', () => {
     expect(apiKeyInput).toHaveValue('');
   });
 
+  it('normalizes cliproxyapi endpoints on save and test', async () => {
+    const user = userEvent.setup();
+    const { createProviderSpy, initialize, validateApiKey } = mockSuccessfulProviderValidation();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'cliproxyapi');
+
+    const endpointInput = screen.getByLabelText('CLIProxyAPI endpoint');
+    await user.type(endpointInput, 'http://127.0.0.1:8317/v1/chat/completions');
+    await user.type(screen.getByLabelText('API key'), 'sk-cliproxyapi-test');
+
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('providers')).resolves.toEqual(
+        expect.objectContaining({
+          cliproxyapi: expect.objectContaining({
+            customEndpoint: 'http://127.0.0.1:8317/v1',
+          }),
+        }),
+      );
+    });
+
+    expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('http://127.0.0.1:8317/v1')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('API key'), 'sk-cliproxyapi-test');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findByText(/cliproxyapi responded successfully/i)).toBeInTheDocument();
+    expect(createProviderSpy).toHaveBeenCalledWith('cliproxyapi');
+    expect(initialize).toHaveBeenCalledOnce();
+    expect(validateApiKey).toHaveBeenCalledWith('sk-cliproxyapi-test');
+    expect(screen.getByDisplayValue('http://127.0.0.1:8317/v1')).toBeInTheDocument();
+  });
+
+  it('normalizes https provider endpoints to /v1 on save', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+
+    const endpointInput = screen.getByLabelText('Base URL override');
+    await user.clear(endpointInput);
+    await user.type(endpointInput, 'https://api.openai.com/v1/chat/completions');
+    await user.type(screen.getByLabelText('API key'), 'sk-openai-normalize');
+
+    await user.click(screen.getByRole('button', { name: /save provider/i }));
+
+    await waitFor(async () => {
+      await expect(readStorage('providers')).resolves.toEqual(
+        expect.objectContaining({
+          openai: expect.objectContaining({
+            customEndpoint: 'https://api.openai.com/v1',
+          }),
+        }),
+      );
+    });
+
+    expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://api.openai.com/v1')).toBeInTheDocument();
+  });
+
+  it('normalizes ollama loopback endpoints before connection tests', async () => {
+    const user = userEvent.setup();
+    const { createProviderSpy, initialize, validateApiKey } = mockSuccessfulProviderValidation();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'ollama');
+    const endpointInput = screen.getByLabelText('Ollama server URL');
+    await user.clear(endpointInput);
+    await user.type(endpointInput, 'http://localhost:11434/v1/models');
+
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(await screen.findByText(/ollama responded successfully/i)).toBeInTheDocument();
+    expect(createProviderSpy).toHaveBeenCalledWith('ollama');
+    expect(initialize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'ollama',
+        baseUrl: 'http://localhost:11434/v1',
+      }),
+    );
+    expect(validateApiKey).toHaveBeenCalledWith('');
+    expect(screen.getByDisplayValue('http://localhost:11434/v1')).toBeInTheDocument();
+  });
+
+  it('blocks non-loopback http cliproxyapi endpoints with provider-specific guidance', async () => {
+    const user = userEvent.setup();
+
+    renderOptionsApp();
+
+    await screen.findByRole('heading', { name: /configure providers and capability boundaries/i });
+    await user.selectOptions(screen.getByLabelText('Provider'), 'cliproxyapi');
+    await user.type(screen.getByLabelText('API key'), 'sk-cliproxyapi-test');
+    await user.type(screen.getByLabelText('CLIProxyAPI endpoint'), 'http://example.com/v1');
+    await user.click(screen.getByRole('button', { name: /test connection/i }));
+
+    expect(
+      await screen.findByText(/use https for hosted cliproxyapi endpoints, or http only on localhost/i),
+    ).toBeInTheDocument();
+  });
+
   it('clears raw API key input after a blocked save attempt', async () => {
     const user = userEvent.setup();
 
@@ -622,7 +730,7 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
     expect(
-      await screen.findByText(/save blocked: remote provider endpoints must use https/i),
+      await screen.findByText(/save blocked: use a valid https:\/\//i),
     ).toBeInTheDocument();
     expect(apiKeyInput).toHaveValue('');
   });
@@ -653,7 +761,7 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
     expect(
-      await screen.findByText(/save blocked: remote provider endpoints must use https/i),
+      await screen.findByText(/save blocked: use a valid https:\/\//i),
     ).toBeInTheDocument();
     await expect(readStorage('activeProvider')).resolves.toBeUndefined();
   });
@@ -679,10 +787,10 @@ describe('Options App', () => {
 
     renderOptionsApp();
 
-    expect(await screen.findByDisplayValue('http://legacy.example.com/v1')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Provider endpoint')).toHaveValue('');
     await user.click(screen.getByRole('button', { name: /test connection/i }));
 
-    expect(await screen.findByText(/use a valid https:\/\//i)).toBeInTheDocument();
+    expect(await screen.findByText(/enter a valid provider endpoint before continuing/i)).toBeInTheDocument();
   });
 
   it('loads saved permission toggle states', async () => {

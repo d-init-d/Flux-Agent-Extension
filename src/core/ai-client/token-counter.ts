@@ -196,6 +196,7 @@ const MODEL_MAX_TOKENS: Record<string, number> = {
 const PROVIDER_DEFAULTS: Record<AIProviderType, number> = {
   claude: 200_000,
   openai: 128_000,
+  cliproxyapi: 128_000,
   gemini: 1_000_000,
   ollama: 8_192,
   openrouter: 128_000,

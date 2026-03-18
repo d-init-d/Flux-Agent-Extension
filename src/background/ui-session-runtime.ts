@@ -14,6 +14,8 @@ import {
   DEFAULT_PROVIDER_MODELS,
   PROVIDER_LOOKUP,
   createDefaultProviderConfigs,
+  evaluateProviderEndpointPolicy,
+  normalizeProviderEndpointConfig,
 } from '@shared/config';
 import { ErrorCode, ExtensionError } from '@shared/errors';
 import { getSavedWorkflows, setSavedWorkflows } from '@shared/storage/workflows';
@@ -996,11 +998,12 @@ export class UISessionRuntime {
     payload: RequestPayloadMap['PROVIDER_SET'],
   ): RuntimeHandlerResponse<'PROVIDER_SET'> {
     const runtimeState = await this.loadRuntimeState();
+    const nextProviderConfig = this.enforceProviderEndpointPolicy(payload.provider, payload.config);
     const currentConfig = this.resolveProviderConfig(payload.provider, runtimeState);
-    const configChanged = !this.providerConfigsEqual(currentConfig, payload.config);
+    const configChanged = !this.providerConfigsEqual(currentConfig, nextProviderConfig);
     const nextProviders = {
       ...runtimeState.providers,
-      [payload.provider]: payload.config,
+      [payload.provider]: nextProviderConfig,
     };
     const providerDefinition = PROVIDER_LOOKUP[payload.provider];
     const nextSettings = payload.makeDefault
@@ -1036,12 +1039,12 @@ export class UISessionRuntime {
     });
 
     return {
-      success: true,
-      data: {
-        activeProvider: payload.provider,
-        providerConfig: payload.config,
-      },
-    };
+        success: true,
+        data: {
+          activeProvider: payload.provider,
+          providerConfig: nextProviderConfig,
+        },
+      };
   }
 
   private async handleVaultInit(
@@ -1087,7 +1090,10 @@ export class UISessionRuntime {
 
     if (payload.validate) {
       const runtimeState = await this.loadRuntimeState();
-      const providerConfig = this.resolveProviderConfig(payload.provider, runtimeState);
+      const providerConfig = this.enforceProviderEndpointPolicy(
+        payload.provider,
+        this.resolveProviderConfig(payload.provider, runtimeState),
+      );
       const valid = await this.credentialVault.validateCredential(
         payload.provider,
         providerConfig,
@@ -1175,10 +1181,10 @@ export class UISessionRuntime {
 
     const runtimeState = await this.loadRuntimeState();
     const providerConfig = payload.config
-      ? {
+      ? this.enforceProviderEndpointPolicy(payload.provider, {
           ...this.resolveProviderConfig(payload.provider, runtimeState),
           ...payload.config,
-        }
+        })
       : this.resolveProviderConfig(payload.provider, runtimeState);
     const valid = await this.credentialVault.validateCredential(
       payload.provider,
@@ -4214,10 +4220,43 @@ ${script}
     provider: SessionConfig['provider'],
     runtimeState: RuntimeState,
   ): ProviderConfig {
-    return {
+    return this.enforceProviderEndpointPolicy(
+      provider,
+      {
       ...DEFAULT_PROVIDER_CONFIG[provider],
       ...(runtimeState.providers[provider] ?? {}),
-    };
+      },
+      true,
+    );
+  }
+
+  private enforceProviderEndpointPolicy(
+    provider: SessionConfig['provider'],
+    config: ProviderConfig,
+    allowEmpty = false,
+  ): ProviderConfig {
+    const providerDefinition = PROVIDER_LOOKUP[provider];
+    if (!providerDefinition.supportsEndpoint) {
+      return config;
+    }
+
+    if (allowEmpty && !config.customEndpoint?.trim()) {
+      return {
+        ...config,
+        customEndpoint: undefined,
+      };
+    }
+
+    const endpointPolicy = evaluateProviderEndpointPolicy(provider, config.customEndpoint);
+    if (!endpointPolicy.valid) {
+      throw new ExtensionError(
+        ErrorCode.AI_INVALID_KEY,
+        endpointPolicy.errorMessage ?? 'Provider endpoint is invalid.',
+        true,
+      );
+    }
+
+    return normalizeProviderEndpointConfig(provider, config);
   }
 
   private providerConfigsEqual(left: ProviderConfig, right: ProviderConfig): boolean {

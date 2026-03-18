@@ -58,12 +58,12 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 | Task | Status | Verify | Notes |
 | --- | --- | --- | --- |
 | CP-01 - Initiative scaffold in roadmap | DONE | Roadmap section reviewed locally | Added execution rule, task table, decision notes, and execution log scaffold for CLIProxyAPI work |
-| CP-02 - Shared provider surface | TODO | - | Add `cliproxyapi` to provider types, registry metadata, defaults, token/rate-limit maps |
-| CP-03 - Loader alignment | TODO | - | Make `cliproxyapi` lazy-loadable and runtime-registerable |
-| CP-04 - Provider plumbing | TODO | - | Reuse OpenAI-compatible provider flow for CLIProxyAPI |
-| CP-05 - Shared endpoint policy | TODO | - | Canonicalize and validate CLIProxyAPI endpoints in one shared module |
-| CP-06 - Options endpoint validation and quick connect UX | TODO | - | Allow hosted HTTPS and loopback HTTP only for CLIProxyAPI, with guided setup copy |
-| CP-07 - Background validation and runtime enforcement | TODO | - | Enforce normalized endpoint policy and runtime base URL pass-through in background paths |
+| CP-02 - Shared provider surface | DONE | `pnpm typecheck`; targeted Vitest on provider surface | Added `cliproxyapi` to shared provider types/registry plus endpoint metadata, token window, and rate-limit baselines |
+| CP-03 - Loader alignment | DONE | `pnpm exec vitest run src/core/ai-client/__tests__/provider-loader.test.ts src/shared/config/__tests__/surface-consistency.test.ts`; `pnpm typecheck` | `cliproxyapi` is now lazy-loadable and aligned with the runtime provider surface |
+| CP-04 - Provider plumbing | DONE | `pnpm exec vitest run src/core/ai-client/__tests__/provider-loader.test.ts`; `pnpm typecheck` | Reused the OpenAI-compatible preset/factory with the documented local default base URL (`http://127.0.0.1:8317`) and `/v1/...` API paths |
+| CP-05 - Shared endpoint policy | DONE | `pnpm exec vitest run src/shared/config/__tests__/provider-endpoint-policy.test.ts`; `pnpm typecheck` | Added a shared endpoint policy/normalization module for CLIProxyAPI, Ollama, and HTTPS-only providers |
+| CP-06 - Options endpoint validation and quick connect UX | DONE | `pnpm exec vitest run src/options/__tests__/App.test.tsx`; `pnpm typecheck` | Options and runtime mock now reuse the shared policy, normalize `/v1...` inputs, and show provider-specific helper/error copy |
+| CP-07 - Background validation and runtime enforcement | DONE | `pnpm exec vitest run src/background/__tests__/credential-vault.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "cliproxyapi"`; `pnpm typecheck` | Background save/validate/runtime paths now enforce the same policy and keep normalized base URLs through credential checks and live session sends |
 | CP-08 - Popup, onboarding, and sidepanel alignment | TODO | - | Keep provider naming and ready-state UX consistent across surfaces |
 | CP-09 - Test sweep and security regression coverage | TODO | - | Cover registry, loader, provider, options, runtime, and secret-handling regressions |
 | CP-10 - Docs and closeout | TODO | - | Update README/testing guidance and close the roadmap initiative cleanly |
@@ -73,6 +73,26 @@ Week  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
 - [2026-03-18] CP-01 DONE
   - Roadmap scaffold created for the CLIProxyAPI initiative.
   - Next step: start CP-02 and land the shared provider surface before touching runtime or UI policy.
+- [2026-03-18] CP-02 DONE
+  - Added `cliproxyapi` as a first-class shared provider with API-key auth, endpoint metadata, default model, and compile-safe token/rate-limit defaults.
+  - Next step: start CP-03 to align the lazy loader/runtime registration surface without expanding endpoint policy yet.
+- [2026-03-18] CP-03 DONE
+  - Added `cliproxyapi` to the lazy provider loader so runtime/provider creation stays aligned with the shared registry surface.
+  - Next step: land CP-04 by wiring `cliproxyapi` through the OpenAI-compatible provider preset/factory only.
+- [2026-03-18] CP-04 DONE
+  - Wired `cliproxyapi` through the OpenAI-compatible preset/factory with the documented local default base URL `http://127.0.0.1:8317` and `/v1/...` API paths.
+  - Added minimal loader/provider regression coverage, including a guard against duplicating `/v1` when a hosted endpoint is already versioned.
+  - Next step: start CP-05 to centralize endpoint normalization/validation in a shared policy module.
+- [2026-03-18] CP-05 DONE
+  - Added a shared CLIProxyAPI/Ollama/HTTPS endpoint policy that normalizes `/v1`, `/v1/chat/completions`, and `/v1/models` inputs.
+  - Next step: land CP-06 by reusing that policy in the Options UX and test runtime mock.
+- [2026-03-18] CP-06 DONE
+  - Options provider setup now reuses the shared endpoint policy, accepts CLIProxyAPI loopback HTTP, normalizes saved/tested endpoints, and shows provider-specific guidance.
+  - Next step: land CP-07 so the background runtime enforces the same endpoint policy instead of trusting the UI alone.
+- [2026-03-18] CP-07 DONE
+  - Background provider save, credential validation, and live session runtime now enforce the shared endpoint policy and preserve normalized base URLs for CLIProxyAPI.
+  - Added targeted runtime coverage to prove `cliproxyapi` session sends switch providers with the normalized `/v1` base URL.
+  - Next step: move to CP-08 for popup/onboarding/sidepanel alignment and then CP-09 for a broader regression sweep.
 
 ### Decision Notes
 

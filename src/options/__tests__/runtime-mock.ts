@@ -2,6 +2,10 @@ import { vi } from 'vitest';
 import * as providerLoader from '../../core/ai-client/provider-loader';
 import { importCodexAccountArtifact } from '../../core/auth/codex-account-import';
 import { PROVIDER_LOOKUP, createDefaultProviderConfigs } from '../../shared/config';
+import {
+  evaluateProviderEndpointPolicy,
+  normalizeProviderEndpointConfig,
+} from '../../shared/provider-endpoints';
 import type {
   AIProviderType,
   ExtensionMessage,
@@ -79,26 +83,6 @@ function getMaskedCredentialValue(provider: AIProviderType, secret: string): str
   }
 
   return GENERIC_MASK;
-}
-
-function isAllowedEndpoint(providerType: AIProviderType, endpoint: string): boolean {
-  if (!endpoint) {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(endpoint);
-    if (providerType === 'ollama') {
-      return (
-        parsed.protocol === 'http:' &&
-        (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
-      );
-    }
-
-    return parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 function buildCredentialRecord(
@@ -374,17 +358,18 @@ async function validateProvider(
 
   if (!definition.requiresCredential) {
     if (provider === 'custom') {
-      return isAllowedEndpoint(provider, config.customEndpoint?.trim() ?? '');
+      return evaluateProviderEndpointPolicy(provider, config.customEndpoint).valid;
     }
 
     if (provider === 'ollama') {
+      const normalizedConfig = normalizeProviderEndpointConfig(provider, config);
       const client = await providerLoader.createProvider('ollama');
       await client.initialize({
         provider,
-        model: config.model,
-        baseUrl: config.customEndpoint?.trim() || undefined,
-        maxTokens: config.maxTokens,
-        temperature: config.temperature,
+        model: normalizedConfig.model,
+        baseUrl: normalizedConfig.customEndpoint,
+        maxTokens: normalizedConfig.maxTokens,
+        temperature: normalizedConfig.temperature,
       });
       return client.validateApiKey('');
     }
@@ -401,14 +386,22 @@ async function validateProvider(
     return true;
   }
 
+  const endpointPolicy = PROVIDER_LOOKUP[provider].supportsEndpoint
+    ? evaluateProviderEndpointPolicy(provider, config.customEndpoint)
+    : { valid: true };
+  if (!endpointPolicy.valid) {
+    return false;
+  }
+
+  const normalizedConfig = normalizeProviderEndpointConfig(provider, config);
   const client = await providerLoader.createProvider(provider as Exclude<AIProviderType, 'custom'>);
   await client.initialize({
     provider,
-    model: config.model,
+    model: normalizedConfig.model,
     apiKey: credential,
-    baseUrl: config.customEndpoint?.trim() || undefined,
-    maxTokens: config.maxTokens,
-    temperature: config.temperature,
+    baseUrl: normalizedConfig.customEndpoint,
+    maxTokens: normalizedConfig.maxTokens,
+    temperature: normalizedConfig.temperature,
   });
 
   return client.validateApiKey(credential);
@@ -447,9 +440,17 @@ export function installOptionsRuntimeMock(): void {
       }
       case 'PROVIDER_SET': {
         const request = payload as RequestPayloadMap['PROVIDER_SET'];
+        const endpointPolicy = PROVIDER_LOOKUP[request.provider].supportsEndpoint
+          ? evaluateProviderEndpointPolicy(request.provider, request.config.customEndpoint)
+          : { valid: true };
+        if (!endpointPolicy.valid) {
+          throw new Error(endpointPolicy.errorMessage ?? 'Invalid provider endpoint');
+        }
+
+        const normalizedConfig = normalizeProviderEndpointConfig(request.provider, request.config);
         const nextProviders = {
           ...state.providers,
-          [request.provider]: request.config,
+          [request.provider]: normalizedConfig,
         };
         const nextSettings = request.makeDefault
           ? { ...state.settings, defaultProvider: request.provider }
@@ -474,7 +475,7 @@ export function installOptionsRuntimeMock(): void {
         });
         return success({
           activeProvider: request.provider,
-          providerConfig: request.config,
+          providerConfig: normalizedConfig,
         });
       }
       case 'API_KEY_SET': {
@@ -570,10 +571,18 @@ export function installOptionsRuntimeMock(): void {
         }
 
         const providerConfig = request.config ?? state.providers[request.provider];
+        const endpointPolicy = PROVIDER_LOOKUP[request.provider].supportsEndpoint
+          ? evaluateProviderEndpointPolicy(request.provider, providerConfig.customEndpoint)
+          : { valid: true };
+        if (!endpointPolicy.valid) {
+          throw new Error(endpointPolicy.errorMessage ?? 'Invalid provider endpoint');
+        }
+
+        const normalizedConfig = normalizeProviderEndpointConfig(request.provider, providerConfig);
         const storedRecord = state.vault.credentials[request.provider];
         const valid = await validateProvider(
           request.provider,
-          providerConfig,
+          normalizedConfig,
           request.apiKey,
           Boolean(storedRecord),
         );

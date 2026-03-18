@@ -49,6 +49,21 @@ describe('shared surface consistency', () => {
     expect(providerRequiresConnectionValidation('codex')).toBe(true);
   });
 
+  it('keeps cliproxyapi metadata aligned with the OpenAI-compatible local default', () => {
+    const cliproxyapi = PROVIDER_REGISTRY.find((provider) => provider.type === 'cliproxyapi');
+
+    expect(cliproxyapi).toMatchObject({
+      family: 'default',
+      tier: 'core',
+      authFamily: 'api-key',
+      authMethod: 'api-key',
+      requiresCredential: true,
+      supportsEndpoint: true,
+      endpointPlaceholder: 'http://127.0.0.1:8317 or https://your-domain/v1',
+    });
+    expect(providerRequiresConnectionValidation('cliproxyapi')).toBe(true);
+  });
+
   it('keeps the README permission list aligned with the manifest', () => {
     const repoRoot = resolve(__dirname, '../../../../');
     const manifest = JSON.parse(readFileSync(resolve(repoRoot, 'src/manifest.json'), 'utf-8')) as {

@@ -39,6 +39,7 @@ export async function createProvider(type: LazyLoadableProviderType): Promise<IA
       return new CodexProvider();
     }
     case 'groq':
+    case 'cliproxyapi':
     case 'deepseek':
     case 'xai':
     case 'together':

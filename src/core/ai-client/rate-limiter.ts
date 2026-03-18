@@ -63,6 +63,10 @@ export function getDefaultRateLimits(provider: AIProviderType): RateLimiterConfi
       // OpenAI Tier 1: 60 RPM, 60K tokens/min
       return { maxRequestsPerMinute: 60, maxTokensPerMinute: 60_000 };
 
+    case 'cliproxyapi':
+      // OpenAI-compatible hosted proxy; start with the same conservative defaults as OpenAI
+      return { maxRequestsPerMinute: 60, maxTokensPerMinute: 60_000 };
+
     case 'gemini':
       // Gemini free tier: 15 RPM; paid tier: 360 RPM
       return { maxRequestsPerMinute: 15, maxTokensPerMinute: 1_000_000 };

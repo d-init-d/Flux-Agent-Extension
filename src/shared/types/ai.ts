@@ -6,6 +6,7 @@ export type AIProviderFamily = 'default' | 'chatgpt-account';
 export type AIProviderType =
   | 'claude' // Anthropic Claude
   | 'openai' // OpenAI GPT
+  | 'cliproxyapi' // CLIProxyAPI (OpenAI-compatible)
   | 'gemini' // Google Gemini
   | 'ollama' // Local Ollama
   | 'openrouter' // OpenRouter (multi-provider)
