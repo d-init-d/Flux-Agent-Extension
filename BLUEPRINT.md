@@ -180,9 +180,9 @@ This phase does **not** include headless login and does **not** move to full ext
 
 - `Provider = OpenAI`
 - `Login method = ChatGPT Pro/Plus (browser)`
-  - helper/deep-link initiated
+  - UI-initiated but background-owned helper/deep-link flow
   - account-backed runtime state
-  - readiness depends on a successful helper/deep-link handoff plus a validated account session
+  - readiness depends on a background-validated helper/deep-link result plus a healthy account session
 - `Login method = Manually enter API Key`
   - existing API-key path
   - readiness depends on saved key + connection validation
@@ -205,10 +205,11 @@ The UI should treat this as one provider surface, but the background runtime sti
 Options UI
   -> user selects OpenAI
   -> user selects ChatGPT Pro/Plus (browser)
-  -> extension launches helper/deep-link flow
+  -> background launches helper/deep-link flow for the UI-triggered request
   -> helper opens official browser login flow
-  -> helper returns official artifact/minimal account material to background
-  -> background validates and stores encrypted long-lived state in vault
+  -> helper returns callback/deep-link result envelope to background
+  -> background validates requestId/state/nonce + provenance before vault persistence
+  -> background stores encrypted long-lived state in vault
   -> runtime resolves short-lived session/token in memory only
   -> popup/sidepanel unlock when account-backed OpenAI is healthy
 ```
@@ -242,7 +243,7 @@ Options UI
 - no headless flow in this phase
 - no persistence of short-lived runtime session tokens
 - no raw helper payloads or tokens exposed to the UI
-- no helper/deep-link payload may enter the vault until the background verifies provenance and matches it to an extension-issued request `state`/nonce
+- no helper/deep-link payload may enter the vault until the background verifies provenance and matches it to an extension-issued request `requestId` / `state` / `nonce`
 
 #### Expected file touchpoints for this phase
 
