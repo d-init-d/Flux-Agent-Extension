@@ -128,18 +128,18 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 
 **Execution Rule:** one task at a time -> implement -> verify -> PASS -> commit -> push -> update roadmap/blueprint -> move next.
 
-| Task                                                                  | Status | Verify                                                                                                                                                        | Notes                                                                                                                                                                                      |
-| --------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| OA-01 - ADR and UX contract lock                                      | DONE   | `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-03-auth-strategy-adr.md docs/task-oa-01-openai-unified-auth-surface-adr.md` | Locked the initiative to one `OpenAI` surface with exactly 2 auth choices, helper/deep-link browser login, no headless, and legacy `codex -> openai + browser-account` migration semantics |
-| OA-02 - Multi-auth provider surface redesign                          | DONE   | `pnpm exec vitest run src/shared/config/__tests__/surface-consistency.test.ts`; `pnpm typecheck`                                                              | Added shared multi-auth choice metadata/helpers, exposed the ordered OpenAI dual-auth surface, and kept the legacy-safe top-level `openai` lane on API-key metadata                        |
-| OA-03 - Browser helper/deep-link auth contract                        | DONE   | `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-oa-03-browser-helper-deep-link-auth-contract.md`                            | Locked the launch direction, request/response payload semantics, provenance validation rules, trust boundary, persistence rules, and canonical browser-login result states                 |
-| OA-04 - Vault and message-surface expansion                           | DONE   | `pnpm exec vitest run src/background/__tests__/credential-vault.test.ts`; `pnpm typecheck`                                                                   | Added sanitized OpenAI browser-login state/message primitives, session-only pending attempt storage, and encrypted OpenAI account-artifact vault support without changing helper runtime yet |
-| OA-05 - Unified OpenAI runtime auth coordinator                       | DONE   | `pnpm exec vitest run src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/codex-account-session-manager.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "openai browser-account|OpenAIRuntimeAuthCoordinator|CodexAccountSessionManager"`; `pnpm typecheck` | Added a background-owned OpenAI auth coordinator that keeps the API-key lane unchanged, routes trusted browser-account state through an internal Codex runtime adapter, rejects non-ready account-backed state before chat, and keeps runtime session tokens memory-only |
-| OA-06 - Options/OpenAI auth-choice UX                                 | DONE   | `pnpm exec vitest run src/options/__tests__/App.test.tsx src/background/__tests__/ui-session-runtime.test.ts -t "OpenAI browser-account|OpenAI login methods|helper-missing|auth choice"`; `pnpm typecheck`; `pnpm build` | Options/onboarding now persist the OpenAI auth choice, show exactly 2 OpenAI login methods, keep API-key UX intact, and surface sanitized browser-account helper status from background only |
-| OA-07 - Model catalog and routing policy                              | DONE   | `pnpm exec vitest run src/shared/config/__tests__/openai-model-catalog.test.ts src/options/__tests__/App.test.tsx src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts -t "openai model|OpenAIRuntimeAuthCoordinator|openai browser-account runtime|recommended default and suggested OpenAI models|resets shipped OpenAI models"`; `pnpm typecheck`; `pnpm build` | Added a shared OpenAI lane-aware model catalog, auth-aware Options suggestions/defaults, cross-lane runtime blocking, and explicit manual override behavior without touching OA-08/OA-09 scope |
-| OA-08 - Legacy Codex migration bridge                                 | DONE   | `pnpm exec vitest run src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/App.test.tsx`; `pnpm typecheck`; `pnpm build` | Added a non-destructive read-path bridge so legacy `codex` state surfaces under `openai + browser-account` without rewriting encrypted vault secrets or disturbing the API-key lane        |
-| OA-09 - Popup/sidepanel/onboarding alignment plus regression coverage | DONE   | `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck`; `pnpm build` | Popup and sidepanel now share auth-aware OpenAI readiness mapping, block browser-account non-ready states, and keep legacy codex bridge UX surfaced as OpenAI browser-account without leaking raw artifacts |
-| OA-10 - Docs, manual QA, and closeout                                 | DONE   | `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`; `pnpm audit --audit-level=high`                                                                    | README/testing/manual-QA now describe the OpenAI dual-auth surface truthfully, keep helper availability honest for this repo/build, and close the initiative without re-promoting Codex UX |
+| Task                                                                  | Status | Verify                                                                                                                                                                                                                                                  | Notes                                                                                                                                                                                                       |
+| --------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OA-01 - ADR and UX contract lock                                      | DONE   | `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-03-auth-strategy-adr.md docs/task-oa-01-openai-unified-auth-surface-adr.md`                                                                                           | Locked the initiative to one `OpenAI` surface with exactly 2 auth choices, helper/deep-link browser login, no headless, and legacy `codex -> openai + browser-account` migration semantics                  |
+| OA-02 - Multi-auth provider surface redesign                          | DONE   | `pnpm exec vitest run src/shared/config/__tests__/surface-consistency.test.ts`; `pnpm typecheck`                                                                                                                                                        | Added shared multi-auth choice metadata/helpers, exposed the ordered OpenAI dual-auth surface, and kept the legacy-safe top-level `openai` lane on API-key metadata                                         |
+| OA-03 - Browser helper/deep-link auth contract                        | DONE   | `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-oa-03-browser-helper-deep-link-auth-contract.md`                                                                                                                      | Locked the launch direction, request/response payload semantics, provenance validation rules, trust boundary, persistence rules, and canonical browser-login result states                                  |
+| OA-04 - Vault and message-surface expansion                           | DONE   | `pnpm exec vitest run src/background/__tests__/credential-vault.test.ts`; `pnpm typecheck`                                                                                                                                                              | Added sanitized OpenAI browser-login state/message primitives, session-only pending attempt storage, and encrypted OpenAI account-artifact vault support without changing helper runtime yet                |
+| OA-05 - Unified OpenAI runtime auth coordinator                       | DONE   | `pnpm exec vitest run src/background/**tests**/openai-runtime-auth-coordinator.test.ts src/background/**tests**/codex-account-session-manager.test.ts src/background/**tests**/ui-session-runtime.test.ts -t "openai browser-account                    | OpenAIRuntimeAuthCoordinator                                                                                                                                                                                | CodexAccountSessionManager"`; `pnpm typecheck` | Added a background-owned OpenAI auth coordinator that keeps the API-key lane unchanged, routes trusted browser-account state through an internal Codex runtime adapter, rejects non-ready account-backed state before chat, and keeps runtime session tokens memory-only |
+| OA-06 - Options/OpenAI auth-choice UX                                 | DONE   | `pnpm exec vitest run src/options/**tests**/App.test.tsx src/background/**tests**/ui-session-runtime.test.ts -t "OpenAI browser-account                                                                                                                 | OpenAI login methods                                                                                                                                                                                        | helper-missing                                 | auth choice"`; `pnpm typecheck`; `pnpm build`                                                                                                                                                                                                                            | Options/onboarding now persist the OpenAI auth choice, show exactly 2 OpenAI login methods, keep API-key UX intact, and surface sanitized browser-account helper status from background only |
+| OA-07 - Model catalog and routing policy                              | DONE   | `pnpm exec vitest run src/shared/config/**tests**/openai-model-catalog.test.ts src/options/**tests**/App.test.tsx src/background/**tests**/openai-runtime-auth-coordinator.test.ts src/background/**tests**/ui-session-runtime.test.ts -t "openai model | OpenAIRuntimeAuthCoordinator                                                                                                                                                                                | openai browser-account runtime                 | recommended default and suggested OpenAI models                                                                                                                                                                                                                          | resets shipped OpenAI models"`; `pnpm typecheck`; `pnpm build`                                                                                                                               | Added a shared OpenAI lane-aware model catalog, auth-aware Options suggestions/defaults, cross-lane runtime blocking, and explicit manual override behavior without touching OA-08/OA-09 scope |
+| OA-08 - Legacy Codex migration bridge                                 | DONE   | `pnpm exec vitest run src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts src/options/__tests__/App.test.tsx`; `pnpm typecheck`; `pnpm build`                                          | Added a non-destructive read-path bridge so legacy `codex` state surfaces under `openai + browser-account` without rewriting encrypted vault secrets or disturbing the API-key lane                         |
+| OA-09 - Popup/sidepanel/onboarding alignment plus regression coverage | DONE   | `pnpm exec vitest run src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx src/options/__tests__/App.test.tsx src/sidepanel/store/__tests__/sessionStore.test.ts`; `pnpm typecheck`; `pnpm build`                                      | Popup and sidepanel now share auth-aware OpenAI readiness mapping, block browser-account non-ready states, and keep legacy codex bridge UX surfaced as OpenAI browser-account without leaking raw artifacts |
+| OA-10 - Docs, manual QA, and closeout                                 | DONE   | `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`; `pnpm audit --audit-level=high`                                                                                                                                                               | README/testing/manual-QA now describe the OpenAI dual-auth surface truthfully, keep helper availability honest for this repo/build, and close the initiative without re-promoting Codex UX                  |
 
 ### UX Contract
 
@@ -233,6 +233,98 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 - OA-08: migrate current Codex state into the new OpenAI browser-account surface.
 - OA-09: align popup/sidepanel/readiness and land regression/security coverage.
 - OA-10: update docs/manual QA and close the phase with full gates.
+
+---
+
+## Active Initiative: OpenCode-Style Auth Store Simplification
+
+**Goal:** Replace the current user-facing vault/passphrase UX with an OpenCode-style app-managed auth store so the extension feels simpler to use while keeping background-owned trust boundaries for secrets and browser-account flows.
+
+**Target product shape:**
+
+- No visible `Initialize vault` / `Unlock vault` / passphrase flow in the primary UX.
+- `OpenAI` keeps the 2 auth lanes already shipped:
+  1. `ChatGPT Pro/Plus (browser)`
+  2. `Manually enter API Key`
+- Long-lived auth material persists in extension-owned local storage, similar in spirit to OpenCode's local `auth.json` model.
+- Short-lived runtime session/access tokens remain memory-only or session-only.
+- `chrome.storage.sync` remains out of scope for secrets.
+
+**Execution Rule:** one task at a time -> implement -> verify -> PASS -> commit -> push -> update roadmap/blueprint -> move next.
+
+| Task                                          | Status | Verify                                                                                                                    | Notes                                                                                                                                                    |
+| --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OS-01 - ADR lock for app-managed auth store   | DONE   | `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-os-01-opencode-style-auth-store-adr.md` | Locked the app-managed auth-store decision, trust boundary, migration rule, and security trade-off in `docs/task-os-01-opencode-style-auth-store-adr.md` |
+| OS-02 - Auth store schema redesign            | TODO   | -                                                                                                                         | Design extension-owned persistent auth storage for API-key + browser-account lanes                                                                       |
+| OS-03 - Background secret-ownership contract  | TODO   | -                                                                                                                         | Keep background as the only secret owner; UI only receives masked metadata and status                                                                    |
+| OS-04 - Vault to app-store migration bridge   | TODO   | -                                                                                                                         | Dual-read, single-write migration plan from current vault metadata/secrets to the new auth store                                                         |
+| OS-05 - Runtime and readiness contract update | TODO   | -                                                                                                                         | Replace `vault-locked` semantics with app-managed auth-store readiness semantics                                                                         |
+| OS-06 - UX simplification spec                | TODO   | -                                                                                                                         | Remove vault UI and define the replacement Options/onboarding/popup/sidepanel UX                                                                         |
+| OS-07 - Regression, QA, and rollout plan      | TODO   | -                                                                                                                         | Extend tests, E2E fixtures, and rollout strategy before cleanup                                                                                          |
+| OS-08 - Legacy vault cleanup and closeout     | TODO   | -                                                                                                                         | Remove passphrase UX/code only after migration and regressions are proven stable                                                                         |
+
+### MVP Scope
+
+- Extension-owned persistent auth store using `chrome.storage.local`.
+- No user-facing vault/passphrase in the main auth flows.
+- OpenAI dual-auth UX remains intact.
+- Browser-account helper/deep-link flow stays background-owned.
+- API-key lane and browser-account lane continue to use auth-aware runtime/model routing.
+- Non-destructive migration path from current vault-backed data.
+
+### Explicitly Out of Scope
+
+- OS keychain / Windows Credential Manager / native secure enclave integration.
+- Full extension-owned OAuth callback redesign.
+- Headless login.
+- `chrome.storage.sync` for secrets.
+- Cookie scraping, localStorage scraping, sessionStorage scraping, or piggybacking on logged-in tabs.
+- Immediate hard deletion of all vault code before migration is stable.
+
+### Decision Notes
+
+- This initiative is primarily a UX simplification, not a claim of stronger at-rest security.
+- The closest extension equivalent to OpenCode's local auth file is `chrome.storage.local`, not an encrypted user-passphrase vault and not a native keychain.
+- Background remains the only trusted owner of secrets; UI surfaces must stay sanitized.
+- Short-lived runtime tokens remain memory-only or session-only.
+- Persist only the minimum long-lived auth material needed for revalidation/refresh.
+- Do not sync secrets through the browser account.
+- Do not silently claim security equivalence with the current passphrase-based vault; the trade-off must be documented honestly.
+
+### Migration Strategy
+
+- Schema-first: add the new auth store before removing the vault.
+- Dual-read bridge: read the new auth store first, then fall back to vault-backed records if the new store has no data.
+- Single-write cutover: all new writes go only to the new auth store once the bridge lands.
+- Lazy per-provider migration: convert provider records on demand, not through a destructive one-shot rewrite.
+- Cleanup only after migration is stable, idempotent, and regression coverage is green.
+
+### Security Guardrails
+
+- No raw API keys, helper payloads, refresh material, or runtime session tokens in Options/Popup/Sidepanel.
+- No persistence of short-lived runtime/session tokens.
+- No persistence of raw callback URLs, nonce/state payloads, or browser session blobs.
+- Revoke/remove must wipe durable auth material plus any in-memory runtime cache.
+- Helper/deep-link results must still pass provenance + request binding checks before persistence.
+
+### Initial Todo Seed
+
+- OS-01: write the ADR that replaces user-facing vault UX with an app-managed auth store and records the security trade-off.
+- OS-02: redesign storage types for persistent auth records without user passphrases.
+- OS-03: lock the background-only secret ownership contract.
+- OS-04: implement and verify a dual-read, single-write migration bridge from the vault.
+- OS-05: replace vault-lock readiness semantics in runtime/UI state.
+- OS-06: design the simplified auth UX for OpenAI and other provider lanes.
+- OS-07: expand regression tests, E2E fixtures, and rollout checks.
+- OS-08: remove legacy vault UX/code once migration is proven stable.
+
+### Execution Notes
+
+- [2026-03-19] OS-01 DONE
+  - Added `docs/task-os-01-opencode-style-auth-store-adr.md` to lock the move away from user-facing vault/passphrase UX and toward an OpenCode-style app-managed auth store.
+  - Synced `ROADMAP.md` and `BLUEPRINT.md` so the planned initiative now consistently states the trust boundary, migration rule, and honest security trade-off.
+  - Verify: `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-os-01-opencode-style-auth-store-adr.md`
+  - Next step: OS-02 redesigns the persistent auth-store schema before any migration, runtime, or UX changes land.
 
 ---
 

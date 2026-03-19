@@ -167,7 +167,7 @@ A Chrome Extension where users chat with AI to automate ANY browser task. No loc
 └────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.3 OpenAI Unified Auth Surface (Planned)
+### 2.3 OpenAI Unified Auth Surface (Current)
 
 **Product goal:** keep `OpenAI` as the single primary provider surface for the OpenAI ecosystem, but let users choose one of exactly 2 auth methods:
 
@@ -271,6 +271,94 @@ Options UI
 7. add auth-aware model routing
 8. land Codex migration bridge
 9. close with tests, docs, and manual QA
+
+### 2.4 OpenCode-Style Auth Store Simplification (Active)
+
+**Product goal:** keep the shipped OpenAI dual-auth surface, but remove the visible vault/passphrase UX so auth feels closer to OpenCode.
+
+#### Target UX shape
+
+- No primary `Initialize vault` / `Unlock vault` / passphrase steps in normal auth setup.
+- `OpenAI` still shows exactly:
+  1. `ChatGPT Pro/Plus (browser)`
+  2. `Manually enter API Key`
+- API keys and long-lived browser-account material persist in extension-owned local storage.
+- Helper availability stays honest: if no helper exists, the browser-account lane still shows `helper-missing` rather than pretending success.
+
+#### Architectural shift
+
+The current implementation uses a passphrase-backed `CredentialVault`. The next planned simplification replaces that user-facing vault UX with an app-managed auth store that behaves more like OpenCode's local `auth.json` model.
+
+| Layer                    | Current model                                      | Planned model                                              |
+| ------------------------ | -------------------------------------------------- | ---------------------------------------------------------- |
+| User UX                  | visible vault + passphrase                         | no visible vault/passphrase in primary flow                |
+| Durable store            | encrypted vault metadata + encrypted payload store | extension-owned local auth store in `chrome.storage.local` |
+| Runtime session material | memory-only                                        | memory-only                                                |
+| Secret owner             | background                                         | background                                                 |
+| Browser sync             | none for secrets                                   | none for secrets                                           |
+
+#### Chrome extension equivalent of OpenCode auth storage
+
+- OpenCode stores auth persistently in local app data.
+- For this extension, the closest equivalent is **extension-owned `chrome.storage.local`**, not `chrome.storage.sync`, not a content-script store, and not a native OS keychain.
+- This improves usability, but it is **not** equivalent to a user-held passphrase vault for at-rest protection.
+
+#### Planned auth-store rule
+
+```
+Options / Popup / Sidepanel
+  -> request auth state or auth actions from background
+  -> background reads/writes extension-owned auth store
+  -> only masked metadata/status returns to UI
+
+Background runtime
+  -> resolves API key or browser-account durable material
+  -> derives memory-only runtime session/access token
+  -> never exposes raw token/artifact/helper payload to UI
+```
+
+This direction is locked by `docs/task-os-01-opencode-style-auth-store-adr.md`.
+
+#### Migration rule
+
+- Add the new auth store first.
+- Read-path bridge from new auth store -> old vault.
+- New writes go only to the new auth store once the bridge lands.
+- Remove vault UX only after migration and regressions are stable.
+
+#### Guardrails
+
+- no `chrome.storage.sync` for secrets
+- no cookie/localStorage/sessionStorage scraping
+- no raw helper payloads, callback URLs, `state`, or `nonce` in UI-facing data
+- no persistence of short-lived runtime/session tokens
+- helper/deep-link results must still pass provenance + request binding validation before persistence
+- document clearly that this is a convenience-first model, not stronger at-rest security than a passphrase vault
+- keep the background as the only trusted owner of durable auth material during and after migration
+
+#### Expected file touchpoints for this phase
+
+- `src/shared/types/storage.ts`
+- `src/shared/types/messages.ts`
+- `src/background/credential-vault.ts` (transition/shim stage)
+- new app-managed auth store module under `src/background/` or `src/shared/`
+- `src/background/ui-session-runtime.ts`
+- `src/options/App.tsx`
+- `src/options/onboarding/OnboardingFlow.tsx`
+- `src/popup/App.tsx`
+- `src/sidepanel/App.tsx`
+- E2E harness/tests under `src/test/e2e/`
+
+#### Delivery order
+
+1. lock ADR and trade-off disclosure
+2. redesign durable auth schema
+3. lock background-only secret ownership
+4. implement vault -> auth-store migration bridge
+5. replace vault-lock readiness semantics
+6. simplify Options/onboarding/popup/sidepanel UX
+7. expand regression and E2E coverage
+8. remove legacy vault UX/code after rollout is stable
 
 ---
 
