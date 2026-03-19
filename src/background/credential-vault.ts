@@ -19,6 +19,8 @@ import type {
   VaultState,
 } from '@shared/types';
 
+import { AppManagedAuthStoreManager } from './app-managed-auth-store-manager';
+
 const VAULT_STORAGE_KEY = 'vault';
 const LEGACY_LOCAL_SECRET_KEY = 'encryptedKeys';
 const LEGACY_SESSION_SECRET_KEY = 'providerSessionApiKeys';
@@ -535,6 +537,7 @@ export class CredentialVault {
   private activePassphrase: string | null = null;
   private unlockedAt: number | undefined;
   private readonly browserLoginAttempts = new Map<AIProviderType, StoredBrowserLoginAttempt>();
+  private readonly authStoreManager = new AppManagedAuthStoreManager();
 
   async init(passphrase: string): Promise<VaultState> {
     return this.unlock(passphrase, true);
@@ -590,6 +593,7 @@ export class CredentialVault {
     const sessionState = await this.getSessionState();
     const hasLegacySecrets = await this.hasLegacySecrets();
     const reconciledAccounts = reconcileAccountSurface(metadata.accounts, metadata.activeAccounts);
+    const bridgedCredentials = await this.getBridgedCredentialSurface(metadata.credentials);
     const lockState = metadata.initialized
       ? sessionState
         ? 'unlocked'
@@ -607,7 +611,7 @@ export class CredentialVault {
       lockState,
       unlockedAt: lockState === 'unlocked' ? this.unlockedAt : undefined,
       hasLegacySecrets,
-      credentials: metadata.credentials,
+      credentials: bridgedCredentials,
       accounts: reconciledAccounts.accounts,
       activeAccounts: reconciledAccounts.activeAccounts,
       browserLogins: this.buildBrowserLoginSurfaceState(
@@ -743,6 +747,18 @@ export class CredentialVault {
       throw new ExtensionError(ErrorCode.AI_INVALID_KEY, 'Credential value is required', true);
     }
 
+    if (authKind === 'api-key') {
+      const updatedAt = Date.now();
+      const record = buildCredentialRecord(
+        provider,
+        authKind,
+        updatedAt,
+        maskedValue ?? buildMaskedValue(provider, secret),
+      );
+      await this.authStoreManager.setApiKey(provider, secret.trim(), record);
+      return record;
+    }
+
     const secureStorage = await this.requireUnlockedStorage();
     const metadata = await this.getMetadata();
     const updatedAt = Date.now();
@@ -770,6 +786,13 @@ export class CredentialVault {
   }
 
   async deleteCredential(provider: AIProviderType): Promise<VaultState> {
+    const authStoreProvider = await this.authStoreManager.getProviderStore(provider);
+    if (authStoreProvider) {
+      await this.authStoreManager.deleteApiKey(provider);
+      await this.removeLegacyApiKeyCredential(provider);
+      return this.getState();
+    }
+
     const secureStorage = await this.requireUnlockedStorage();
     const metadata = await this.getMetadata();
 
@@ -781,12 +804,28 @@ export class CredentialVault {
   }
 
   async getCredential(provider: AIProviderType): Promise<string | null> {
+    const authStoreProvider = await this.authStoreManager.getProviderStore(provider);
+    if (authStoreProvider) {
+      return authStoreProvider.apiKey?.secret ?? null;
+    }
+
     const secureStorage = await this.requireUnlockedStorage();
     const stored = await secureStorage.getEncrypted<StoredCredentialSecret>(
       this.getCredentialStorageKey(provider),
     );
 
-    return stored?.secret ?? null;
+    const secret = stored?.secret ?? null;
+    if (!secret) {
+      return null;
+    }
+
+    const metadata = await this.getMetadata();
+    const current = metadata.credentials[provider];
+    if (current?.authKind === 'api-key') {
+      await this.authStoreManager.setApiKey(provider, secret, current);
+    }
+
+    return secret;
   }
 
   async listAccounts(provider: AIProviderType): Promise<ProviderAccountRecord[]> {
@@ -1217,6 +1256,11 @@ export class CredentialVault {
   }
 
   async markValidated(provider: AIProviderType): Promise<ProviderCredentialRecord | undefined> {
+    const authStoreProvider = await this.authStoreManager.getProviderStore(provider);
+    if (authStoreProvider?.apiKey) {
+      return this.authStoreManager.markApiKeyValidated(provider);
+    }
+
     const metadata = await this.getMetadata();
     const current = metadata.credentials[provider];
     if (!current) {
@@ -1234,6 +1278,12 @@ export class CredentialVault {
   }
 
   async markCredentialStale(provider: AIProviderType): Promise<void> {
+    const authStoreProvider = await this.authStoreManager.getProviderStore(provider);
+    if (authStoreProvider?.apiKey) {
+      await this.authStoreManager.markApiKeyStale(provider);
+      return;
+    }
+
     const metadata = await this.getMetadata();
     const current = metadata.credentials[provider];
     if (!current) {
@@ -1341,6 +1391,45 @@ export class CredentialVault {
       passphrase: candidate.passphrase,
       unlockedAt: candidate.unlockedAt,
     };
+  }
+
+  private async getBridgedCredentialSurface(
+    credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>>,
+  ): Promise<Partial<Record<AIProviderType, ProviderCredentialRecord>>> {
+    const merged = { ...credentials };
+    const authStore = await this.authStoreManager.getStore();
+
+    for (const [provider, providerState] of Object.entries(authStore.providers)) {
+      if (!isProviderType(provider)) {
+        continue;
+      }
+
+      if (providerState.apiKey?.credential) {
+        merged[provider] = providerState.apiKey.credential;
+        continue;
+      }
+
+      if (merged[provider]?.authKind === 'api-key') {
+        delete merged[provider];
+      }
+    }
+
+    return merged;
+  }
+
+  private async removeLegacyApiKeyCredential(provider: AIProviderType): Promise<void> {
+    const metadata = await this.getMetadata();
+    if (metadata.credentials[provider]?.authKind === 'api-key') {
+      delete metadata.credentials[provider];
+      await this.saveMetadata(metadata);
+    }
+
+    if (!this.activePassphrase) {
+      return;
+    }
+
+    const secureStorage = await this.requireUnlockedStorage();
+    await secureStorage.removeEncrypted(this.getCredentialStorageKey(provider));
   }
 
   private getBrowserLoginAttempts(): Partial<Record<AIProviderType, StoredBrowserLoginAttempt>> {

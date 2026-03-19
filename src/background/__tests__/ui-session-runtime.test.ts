@@ -4366,6 +4366,8 @@ describe('UI session runtime', () => {
 
   it('bridges legacy codex settings and vault state onto the OpenAI browser-account surface', async () => {
     const observedAt = Date.UTC(2026, 2, 18, 10, 0, 0);
+    await chrome.storage.local.clear();
+    await chrome.storage.session.clear();
     await chrome.storage.local.set({
       settings: {
         defaultProvider: 'codex',
@@ -4702,6 +4704,8 @@ describe('UI session runtime', () => {
 
   it('fails closed with helper-missing when starting OpenAI browser-account connect without a helper', async () => {
     const observedAt = Date.UTC(2026, 2, 18, 9, 30, 0);
+    await chrome.storage.local.clear();
+    await chrome.storage.session.clear();
     await chrome.storage.local.set({
       vault: {
         version: 1,

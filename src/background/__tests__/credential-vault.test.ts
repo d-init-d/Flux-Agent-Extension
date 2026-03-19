@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as providerLoader from '../../core/ai-client/provider-loader';
+import { SecureStorage } from '../../shared/crypto/secure-storage';
 import { CredentialVault } from '../credential-vault';
 
 function encodeBase64UrlJson(payload: Record<string, unknown>): string {
@@ -200,6 +201,134 @@ describe('CredentialVault account store', () => {
 
     expect(valid).toBe(false);
     expect(createProviderSpy).not.toHaveBeenCalled();
+  });
+
+  it('writes new API-key credentials into the app-managed auth store without requiring vault unlock', async () => {
+    const vault = new CredentialVault();
+
+    const record = await vault.setCredential('openai', 'sk-openai-local', 'api-key');
+
+    expect(record).toEqual(
+      expect.objectContaining({
+        provider: 'openai',
+        authKind: 'api-key',
+        maskedValue: expect.stringContaining('****'),
+      }),
+    );
+
+    const stored = await chrome.storage.local.get(['authStore', 'vault']);
+    expect((stored.authStore as any).providers.openai.apiKey.secret).toBe('sk-openai-local');
+    expect((stored.vault as any)?.credentials?.openai).toBeUndefined();
+
+    const state = await vault.getState();
+    expect(state.credentials.openai).toEqual(
+      expect.objectContaining({
+        authKind: 'api-key',
+      }),
+    );
+    expect(state.lockState).toBe('uninitialized');
+  });
+
+  it('lazy-migrates legacy vault API keys into the app-managed auth store on read', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+
+    const secureStorage = new SecureStorage('test-passphrase');
+    await secureStorage.setEncrypted('credential::cliproxyapi', {
+      provider: 'cliproxyapi',
+      authKind: 'api-key',
+      secret: 'sk-legacy-cliproxy',
+      updatedAt: Date.UTC(2026, 2, 19, 16, 0, 0),
+    });
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {
+          cliproxyapi: {
+            version: 1,
+            provider: 'cliproxyapi',
+            providerFamily: 'default',
+            authFamily: 'api-key',
+            authKind: 'api-key',
+            maskedValue: 'sk-****proxy',
+            updatedAt: Date.UTC(2026, 2, 19, 16, 0, 0),
+            validatedAt: Date.UTC(2026, 2, 19, 16, 1, 0),
+          },
+        },
+        accounts: {},
+        activeAccounts: {},
+        browserLogins: {},
+      },
+    });
+
+    const secret = await vault.getCredential('cliproxyapi');
+    expect(secret).toBe('sk-legacy-cliproxy');
+
+    const stored = await chrome.storage.local.get('authStore');
+    expect((stored.authStore as any).providers.cliproxyapi.apiKey.secret).toBe('sk-legacy-cliproxy');
+  });
+
+  it('marks migrated API-key credentials validated and stale in the app-managed auth store', async () => {
+    const vault = new CredentialVault();
+    await vault.setCredential('openai', 'sk-openai-local', 'api-key');
+
+    const validated = await vault.markValidated('openai');
+    expect(validated).toEqual(
+      expect.objectContaining({
+        validatedAt: expect.any(Number),
+        stale: false,
+      }),
+    );
+
+    await vault.markCredentialStale('openai');
+    const stored = await chrome.storage.local.get('authStore');
+    expect((stored.authStore as any).providers.openai.apiKey.credential).toEqual(
+      expect.objectContaining({
+        stale: true,
+        validatedAt: undefined,
+      }),
+    );
+  });
+
+  it('deletes migrated API-key credentials without resurrecting legacy vault values', async () => {
+    const vault = new CredentialVault();
+    await vault.init('test-passphrase');
+
+    const secureStorage = new SecureStorage('test-passphrase');
+    await secureStorage.setEncrypted('credential::cliproxyapi', {
+      provider: 'cliproxyapi',
+      authKind: 'api-key',
+      secret: 'sk-legacy-cliproxy',
+      updatedAt: Date.UTC(2026, 2, 19, 17, 0, 0),
+    });
+    await chrome.storage.local.set({
+      vault: {
+        version: 1,
+        initialized: true,
+        credentials: {
+          cliproxyapi: {
+            version: 1,
+            provider: 'cliproxyapi',
+            providerFamily: 'default',
+            authFamily: 'api-key',
+            authKind: 'api-key',
+            maskedValue: 'sk-****proxy',
+            updatedAt: Date.UTC(2026, 2, 19, 17, 0, 0),
+          },
+        },
+        accounts: {},
+        activeAccounts: {},
+        browserLogins: {},
+      },
+    });
+
+    expect(await vault.getCredential('cliproxyapi')).toBe('sk-legacy-cliproxy');
+    await vault.deleteCredential('cliproxyapi');
+
+    expect(await vault.getCredential('cliproxyapi')).toBeNull();
+    const state = await vault.getState();
+    expect(state.credentials.cliproxyapi).toBeUndefined();
   });
 
   it('keeps openai browser-login pending state session-only and stores sanitized durable state plus encrypted artifacts', async () => {

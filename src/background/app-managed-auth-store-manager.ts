@@ -67,6 +67,14 @@ export class AppManagedAuthStoreManager {
     return normalizeAuthStore(stored[AUTH_STORE_STORAGE_KEY]);
   }
 
+  async getProviderStore(provider: AIProviderType) {
+    return (await this.getStore()).providers[provider];
+  }
+
+  async hasProviderStore(provider: AIProviderType): Promise<boolean> {
+    return Boolean((await this.getStore()).providers[provider]);
+  }
+
   async getState(): Promise<AppManagedAuthStoreState> {
     const state = toAuthStoreState(await this.getStore());
     const pendingAttempts = await this.getBrowserLoginAttempts();
@@ -163,6 +171,13 @@ export class AppManagedAuthStoreManager {
     const store = await this.getStore();
     const current = store.providers[provider];
     if (!current) {
+      store.providers[provider] = {
+        version: 1,
+        provider,
+        providerFamily: resolveProviderFamily(provider),
+        updatedAt: Date.now(),
+      };
+      await this.saveStore(store);
       return this.getState();
     }
 
@@ -170,13 +185,76 @@ export class AppManagedAuthStoreManager {
       store.providers[provider] = {
         ...current,
         apiKey: undefined,
+        updatedAt: Date.now(),
       };
     } else {
-      delete store.providers[provider];
+      store.providers[provider] = {
+        version: current.version,
+        provider,
+        providerFamily: current.providerFamily,
+        updatedAt: Date.now(),
+        migratedFromVaultAt: current.migratedFromVaultAt,
+      };
     }
 
     await this.saveStore(store);
     return this.getState();
+  }
+
+  async getApiKey(provider: AIProviderType): Promise<string | null> {
+    return (await this.getStore()).providers[provider]?.apiKey?.secret ?? null;
+  }
+
+  async getApiKeyRecord(provider: AIProviderType): Promise<ProviderCredentialRecord | undefined> {
+    return (await this.getStore()).providers[provider]?.apiKey?.credential;
+  }
+
+  async markApiKeyValidated(provider: AIProviderType): Promise<ProviderCredentialRecord | undefined> {
+    const store = await this.getStore();
+    const current = store.providers[provider]?.apiKey;
+    if (!current) {
+      return undefined;
+    }
+
+    const nextCredential: ProviderCredentialRecord = {
+      ...current.credential,
+      validatedAt: Date.now(),
+      stale: false,
+    };
+    store.providers[provider] = {
+      ...store.providers[provider]!,
+      updatedAt: nextCredential.updatedAt,
+      apiKey: {
+        ...current,
+        credential: nextCredential,
+      },
+    };
+    await this.saveStore(store);
+    return nextCredential;
+  }
+
+  async markApiKeyStale(provider: AIProviderType): Promise<ProviderCredentialRecord | undefined> {
+    const store = await this.getStore();
+    const current = store.providers[provider]?.apiKey;
+    if (!current) {
+      return undefined;
+    }
+
+    const nextCredential: ProviderCredentialRecord = {
+      ...current.credential,
+      validatedAt: undefined,
+      stale: true,
+    };
+    store.providers[provider] = {
+      ...store.providers[provider]!,
+      updatedAt: nextCredential.updatedAt,
+      apiKey: {
+        ...current,
+        credential: nextCredential,
+      },
+    };
+    await this.saveStore(store);
+    return nextCredential;
   }
 
   async saveBrowserAccount(
