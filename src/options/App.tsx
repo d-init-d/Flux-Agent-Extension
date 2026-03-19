@@ -451,14 +451,14 @@ function getAccountStatusDetail(account: ProviderAccountRecord, vaultLocked: boo
   }
 
   if (vaultLocked) {
-    return 'Unlock the vault to validate, activate, or refresh quota for this imported account.';
+    return 'This stored account is unavailable in the current session. Reconnect or re-import it before validating, activating, or refreshing quota.';
   }
 
   if (account.validatedAt && lastChecked) {
     return `Validated against the background runtime on ${lastChecked}.`;
   }
 
-  return 'Imported and stored in the encrypted vault. Run validation before treating it as ready.';
+  return 'Imported and stored locally. Run validation before treating it as ready.';
 }
 
 function getBrowserLoginBadgeVariant(
@@ -514,7 +514,7 @@ function getOpenAIBrowserLoginHelperText(
   vaultLocked: boolean,
 ): string {
   if (vaultLocked) {
-    return 'Unlock the vault before validating or using OpenAI browser-account artifacts.';
+    return 'A saved browser-account artifact exists, but it is unavailable in the current session.';
   }
 
   if (activeAccount?.validatedAt) {
@@ -614,11 +614,8 @@ export function App() {
   const [settings, setSettings] = useState<ExtensionSettings>(() => createDefaultSettings());
   const [vaultState, setVaultState] = useState<VaultState>(() => createDefaultVaultState());
   const [apiKeyMetadata, setApiKeyMetadata] = useState<ProviderMetadataMap>({});
-  const [vaultPassphrase, setVaultPassphrase] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveMessage, setSaveMessage] = useState('');
-  const [vaultNoticeState, setVaultNoticeState] = useState<SaveState>('idle');
-  const [vaultNotice, setVaultNotice] = useState('');
   const [permissionSaveState, setPermissionSaveState] = useState<SaveState>('idle');
   const [permissionMessage, setPermissionMessage] = useState('');
   const [appearanceSaveState, setAppearanceSaveState] = useState<SaveState>('idle');
@@ -629,6 +626,7 @@ export function App() {
   const [oauthState, setOauthState] = useState<
     'idle' | 'requesting' | 'waiting' | 'success' | 'error'
   >('idle');
+  const [legacyStoragePassphrase, setLegacyStoragePassphrase] = useState('');
   const [oauthUserCode, setOauthUserCode] = useState('');
   const [oauthVerifyUrl, setOauthVerifyUrl] = useState('');
   const [oauthError, setOauthError] = useState('');
@@ -663,6 +661,32 @@ export function App() {
     setAccountMessageState('idle');
     setAccountMessage('');
   }, []);
+
+  const runLegacyStorageAction = useCallback(
+    async (action: 'init' | 'unlock'): Promise<void> => {
+      const passphrase = legacyStoragePassphrase.trim();
+      if (!passphrase) {
+        setOauthError('Enter a local storage passphrase first.');
+        return;
+      }
+
+      setIsVaultBusy(true);
+      try {
+        const response = await sendExtensionRequest(
+          action === 'init' ? 'VAULT_INIT' : 'VAULT_UNLOCK',
+          { passphrase },
+          'options',
+        );
+        syncVaultState(response.vault);
+        setOauthError('');
+      } catch (error) {
+        setOauthError(getErrorMessage(error, 'Local storage could not be prepared.'));
+      } finally {
+        setIsVaultBusy(false);
+      }
+    },
+    [legacyStoragePassphrase, syncVaultState],
+  );
 
   const loadAccountSurface = useCallback(
     async (provider: AIProviderType): Promise<AccountAuthStatusGetResponse> => {
@@ -1008,8 +1032,6 @@ export function App() {
     setPermissionMessage('');
     setValidationState('idle');
     setValidationMessage('');
-    setVaultNoticeState('idle');
-    setVaultNotice('');
     setOauthState('idle');
     setOauthError('');
     setOauthUserCode('');
@@ -1021,63 +1043,10 @@ export function App() {
     clearApiKeyInputValue();
   }
 
-  async function runVaultAction(action: 'init' | 'unlock' | 'lock'): Promise<void> {
-    if (action !== 'lock' && !vaultPassphrase.trim()) {
-      setVaultNoticeState('error');
-      setVaultNotice('Enter a vault passphrase before continuing.');
-      return;
-    }
-
-    setIsVaultBusy(true);
-    setVaultNoticeState('idle');
-    setVaultNotice('');
-
-    try {
-      const response =
-        action === 'init'
-          ? await sendExtensionRequest('VAULT_INIT', { passphrase: vaultPassphrase }, 'options')
-          : action === 'unlock'
-            ? await sendExtensionRequest('VAULT_UNLOCK', { passphrase: vaultPassphrase }, 'options')
-            : await sendExtensionRequest('VAULT_LOCK', undefined, 'options');
-
-      syncVaultState(response.vault);
-      await reloadState(true);
-      setVaultPassphrase('');
-      setVaultNoticeState('success');
-      setVaultNotice(
-        action === 'init'
-          ? 'Vault initialized and unlocked for this browser session.'
-          : action === 'unlock'
-            ? 'Vault unlocked for this browser session.'
-            : 'Vault locked. Credentials are no longer available until you unlock again.',
-      );
-    } catch (error) {
-      setVaultNoticeState('error');
-      setVaultNotice(
-        getErrorMessage(
-          error,
-          action === 'init'
-            ? 'Failed to initialize the vault.'
-            : action === 'unlock'
-              ? 'Failed to unlock the vault.'
-              : 'Failed to lock the vault.',
-        ),
-      );
-    } finally {
-      setIsVaultBusy(false);
-    }
-  }
-
   async function handleDeleteCredential(): Promise<void> {
-    if (vaultState.lockState !== 'unlocked') {
-      setVaultNoticeState('error');
-      setVaultNotice('Unlock the vault before removing a credential.');
-      return;
-    }
-
     setIsVaultBusy(true);
-    setVaultNoticeState('idle');
-    setVaultNotice('');
+    setSaveState('idle');
+    setSaveMessage('');
 
     try {
       const response = await sendExtensionRequest(
@@ -1087,13 +1056,11 @@ export function App() {
       );
       syncVaultState(response.vault);
       await reloadState(true);
-      setVaultNoticeState('success');
-      setVaultNotice(
-        `${PROVIDER_LOOKUP[selectedProvider].label} credential removed from the vault.`,
-      );
+      setSaveState('success');
+      setSaveMessage(`${PROVIDER_LOOKUP[selectedProvider].label} credential removed from local storage.`);
     } catch (error) {
-      setVaultNoticeState('error');
-      setVaultNotice(getErrorMessage(error, 'Failed to remove the stored credential.'));
+      setSaveState('error');
+      setSaveMessage(getErrorMessage(error, 'Failed to remove the stored credential.'));
     } finally {
       setIsVaultBusy(false);
       clearApiKeyInputValue();
@@ -1103,7 +1070,7 @@ export function App() {
   async function handleGitHubOAuth(): Promise<void> {
     if (vaultState.lockState !== 'unlocked') {
       setOauthState('error');
-      setOauthError('Unlock the vault before connecting GitHub Copilot.');
+      setOauthError('Prepare or unlock the local Copilot storage before connecting GitHub.');
       return;
     }
 
@@ -1181,7 +1148,7 @@ export function App() {
 
     if (
       !ensureUnlockedVaultForAccounts(
-        'Unlock the vault before importing an official auth artifact for Codex.',
+        'Stored account state is unavailable right now. Reconnect or re-import the account before continuing.',
       )
     ) {
       return;
@@ -1231,14 +1198,6 @@ export function App() {
   }
 
   async function handleOpenAIBrowserConnect(): Promise<void> {
-    if (
-      !ensureUnlockedVaultForAccounts(
-        'Unlock the vault before starting OpenAI browser-account status checks.',
-      )
-    ) {
-      return;
-    }
-
     setAccountActionKey('connect');
     resetAccountMessage();
 
@@ -1267,7 +1226,7 @@ export function App() {
   async function handleAccountValidate(accountId: string): Promise<void> {
     if (
       !ensureUnlockedVaultForAccounts(
-        'Unlock the vault before validating an imported Codex account.',
+        'Stored account state is unavailable right now. Reconnect or re-import the account before validating it.',
       )
     ) {
       return;
@@ -1313,7 +1272,9 @@ export function App() {
 
   async function handleAccountActivate(accountId: string): Promise<void> {
     if (
-      !ensureUnlockedVaultForAccounts('Unlock the vault before activating an imported Codex account.')
+      !ensureUnlockedVaultForAccounts(
+        'Stored account state is unavailable right now. Reconnect or re-import the account before activating it.',
+      )
     ) {
       return;
     }
@@ -1340,7 +1301,9 @@ export function App() {
 
   async function handleAccountRevoke(accountId: string): Promise<void> {
     if (
-      !ensureUnlockedVaultForAccounts('Unlock the vault before revoking an imported Codex account.')
+      !ensureUnlockedVaultForAccounts(
+        'Stored account state is unavailable right now. Reconnect or re-import the account before revoking it.',
+      )
     ) {
       return;
     }
@@ -1371,7 +1334,9 @@ export function App() {
 
   async function handleAccountRemove(accountId: string): Promise<void> {
     if (
-      !ensureUnlockedVaultForAccounts('Unlock the vault before removing an imported Codex account.')
+      !ensureUnlockedVaultForAccounts(
+        'Stored account state is unavailable right now. Reconnect or re-import the account before removing it.',
+      )
     ) {
       return;
     }
@@ -1389,7 +1354,7 @@ export function App() {
       setAccountMessageState(response.removed ? 'success' : 'error');
       setAccountMessage(
         response.removed
-          ? 'Imported account removed from the local vault-backed store.'
+          ? 'Imported account removed from local storage.'
           : 'That imported account was already missing.',
       );
     } catch (error) {
@@ -1402,7 +1367,9 @@ export function App() {
 
   async function handleAccountQuotaRefresh(accountId: string): Promise<void> {
     if (
-      !ensureUnlockedVaultForAccounts('Unlock the vault before refreshing Codex account quota.')
+      !ensureUnlockedVaultForAccounts(
+        'Stored account state is unavailable right now. Reconnect or re-import the account before refreshing quota.',
+      )
     ) {
       return;
     }
@@ -1474,12 +1441,6 @@ export function App() {
         }
       }
 
-      if (usesApiKeyLane && rawApiKey && vaultState.lockState !== 'unlocked') {
-        setSaveState('error');
-        setSaveMessage('Unlock the vault before saving a new provider credential.');
-        return;
-      }
-
       await sendExtensionRequest(
         'PROVIDER_SET',
         {
@@ -1511,15 +1472,15 @@ export function App() {
       setSaveState('success');
       setSaveMessage(
         selectedProvider === 'cliproxyapi' && rawApiKey
-          ? 'CLIProxyAPI endpoint saved and the API key was stored in the vault. Run Test connection to mark this provider ready.'
+          ? 'CLIProxyAPI endpoint saved and the API key was stored locally. Run Test connection to mark this provider ready.'
           : selectedProvider === 'cliproxyapi' && !savedRecord
-            ? 'CLIProxyAPI endpoint saved. Add a vault-backed API key, then run Test connection before using popup or sidepanel workflows.'
+            ? 'CLIProxyAPI endpoint saved. Add an API key, then run Test connection before using popup or sidepanel workflows.'
             : usesApiKeyLane && rawApiKey
-              ? 'Provider settings saved and the credential was stored in the vault.'
+              ? 'Provider settings saved and the credential was stored locally.'
               : usesApiKeyLane && !savedRecord
-                ? 'Provider settings saved. Add a vault credential before using this provider.'
-              : usesOAuthLane && !savedRecord
-                ? 'Provider settings saved. Connect GitHub Copilot in the vault before using this provider.'
+                ? 'Provider settings saved. Add a credential before using this provider.'
+                : usesOAuthLane && !savedRecord
+                  ? 'Provider settings saved. Connect GitHub Copilot before using this provider.'
                 : usesBrowserAccountLane && importedAccounts.length === 0
                   ? 'OpenAI browser login method saved. Use Connect browser account to ask the background for trusted status. If the helper is unavailable, Flux will show helper-missing instead of faking a login.'
                   : usesBrowserAccountLane && activeImportedAccount
@@ -1741,8 +1702,8 @@ export function App() {
           setValidationState('error');
           setValidationMessage(
             usesBrowserAccountLane
-              ? 'Unlock the vault before validating OpenAI browser-account state.'
-              : 'Unlock the vault before validating an imported account-backed provider.',
+              ? 'Stored browser-account state is unavailable right now. Reconnect the account, then run Test connection again.'
+              : 'Stored account state is unavailable right now. Re-import or reconnect the account, then run Test connection again.',
           );
           return;
         }
@@ -1803,7 +1764,7 @@ export function App() {
     if (usesApiKeyLane && !rawApiKey && !savedMetadata) {
       setValidationState('error');
       setValidationMessage(
-        'Enter an API key or unlock a stored vault credential before testing this provider.',
+        'Enter an API key or use a saved local credential before testing this provider.',
       );
       clearApiKeyInputValue();
       return;
@@ -1812,19 +1773,6 @@ export function App() {
     if (selectedAuthChoice.authMethod === 'oauth-github' && !savedMetadata) {
       setValidationState('error');
       setValidationMessage('Connect GitHub Copilot before testing this provider.');
-      clearApiKeyInputValue();
-      return;
-    }
-
-    if (
-      (usesApiKeyLane || selectedAuthChoice.authMethod === 'oauth-github') &&
-      !rawApiKey &&
-      vaultState.lockState !== 'unlocked'
-    ) {
-      setValidationState('error');
-      setValidationMessage(
-        'Unlock the vault or enter a fresh credential before testing this provider.',
-      );
       clearApiKeyInputValue();
       return;
     }
@@ -1939,18 +1887,6 @@ export function App() {
     : PERMISSION_DEFINITIONS.filter((permission) => permission.key !== 'allowCustomScripts');
   const savedMetadata = apiKeyMetadata[selectedProvider];
   const shouldShowOnboarding = isReady && showOnboarding;
-  const vaultStatusLabel =
-    vaultState.lockState === 'uninitialized'
-      ? 'Not initialized'
-      : vaultState.lockState === 'locked'
-        ? 'Locked'
-        : 'Unlocked';
-  const vaultStatusDescription =
-    vaultState.lockState === 'uninitialized'
-      ? 'Create a passphrase to encrypt provider credentials locally.'
-      : vaultState.lockState === 'locked'
-        ? 'Unlock once per browser session before saving, validating, or using credentials.'
-        : 'Credentials are available for this browser session only.';
   const openAIBrowserHelperMessage = getOpenAIBrowserLoginHelperText(
     accountAuthStatus,
     surfacedActiveProviderAccount,
@@ -1958,10 +1894,10 @@ export function App() {
   );
   const credentialStatusLabel = selectedUsesBrowserAccountLane
     ? vaultState.lockState === 'uninitialized'
-      ? 'Vault not initialized'
+      ? 'Browser account missing'
       : vaultState.lockState === 'locked'
         ? surfacedActiveProviderAccount || accountAuthStatus?.browserLogin
-          ? 'Vault locked'
+          ? 'Stored credential unavailable'
           : 'Browser account missing'
         : surfacedActiveProviderAccount?.status === 'revoked' ||
             activeProviderSessionStatus === 'revoked'
@@ -1981,12 +1917,12 @@ export function App() {
                       : 'Browser account missing'
     : !selectedDefinition.requiresCredential
     ? 'Not required'
-    : selectedUsesAccountImportLane
-      ? vaultState.lockState === 'uninitialized'
-        ? 'Vault not initialized'
+      : selectedUsesAccountImportLane
+        ? vaultState.lockState === 'uninitialized'
+        ? 'Account missing'
         : vaultState.lockState === 'locked'
           ? surfacedProviderAccounts.length > 0
-            ? 'Vault locked'
+            ? 'Stored credential unavailable'
             : 'Account missing'
           : !surfacedActiveProviderAccount
             ? surfacedProviderAccounts.length > 0
@@ -2009,10 +1945,10 @@ export function App() {
                     ? 'Account imported'
                     : 'Account available'
       : vaultState.lockState === 'uninitialized'
-        ? 'Vault not initialized'
+        ? 'Credential missing'
         : vaultState.lockState === 'locked'
           ? savedMetadata
-            ? 'Vault locked'
+            ? 'Stored credential unavailable'
             : selectedUsesOAuthLane
               ? 'OAuth required'
               : 'Credential missing'
@@ -2043,22 +1979,22 @@ export function App() {
             ? 'The active imported account looks expired. Re-import a fresh official auth artifact, then validate again.'
             : surfacedActiveProviderAccount?.status === 'needs-auth'
               ? 'The active imported account still needs an official auth artifact refresh before Codex can rely on it.'
-              : surfacedActiveProviderAccount?.stale
-          ? 'The imported account changed after the last validation. Re-test before relying on this provider.'
+          : surfacedActiveProviderAccount?.stale
+            ? 'The imported account changed after the last validation. Re-test before relying on this provider.'
           : vaultState.lockState === 'locked'
-            ? 'Unlock the vault to validate or inspect the imported account state.'
+            ? 'The stored account state is unavailable in the current session. Re-import or reconnect it before validating again.'
             : surfacedActiveProviderAccount?.validatedAt
               ? `Imported account ${surfacedActiveProviderAccount.label} validated against the current runtime.`
               : surfacedActiveProviderAccount
-                ? `Imported account ${surfacedActiveProviderAccount.label} is stored. Run a connection test to confirm the current account session.`
+                ? `Imported account ${surfacedActiveProviderAccount.label} is stored locally. Run a connection test to confirm the current account session.`
                 : 'Select and validate an imported account before using this provider.'
     : !savedMetadata
       ? selectedUsesOAuthLane
-        ? 'Connect GitHub Copilot and store the token in the vault before running this provider.'
+        ? 'Connect GitHub Copilot before running this provider.'
         : selectedProvider === 'cliproxyapi'
-          ? 'CLIProxyAPI needs both a saved endpoint and a vault-backed API key. Save first, then run Test connection before relying on it.'
+          ? 'CLIProxyAPI needs both a saved endpoint and a locally stored API key. Save first, then run Test connection before relying on it.'
           : selectedDefinition.requiresCredential
-            ? 'Save a vault-backed credential or enter a fresh one when testing.'
+            ? 'Save a credential locally or enter a fresh one when testing.'
             : 'No credential is required for this provider.'
       : selectedCredentialRecord?.stale
         ? selectedProvider === 'cliproxyapi'
@@ -2066,15 +2002,15 @@ export function App() {
           : 'The provider configuration changed after the last validation. Re-test before relying on this credential.'
         : vaultState.lockState === 'locked'
           ? selectedProvider === 'cliproxyapi'
-            ? 'Unlock the vault to validate, rotate, or remove the saved CLIProxyAPI API key.'
-            : 'Unlock the vault to validate, rotate, or remove this credential.'
+            ? 'The saved CLIProxyAPI API key is unavailable in the current session. Save it again, then re-run Test connection.'
+            : 'The saved credential is unavailable in the current session. Save it again, then re-run Test connection.'
           : selectedCredentialRecord?.validatedAt
               ? selectedProvider === 'cliproxyapi'
                 ? 'CLIProxyAPI endpoint and API key validated against the current provider settings.'
                 : 'Credential validated against the current provider settings.'
               : selectedProvider === 'cliproxyapi'
-                ? 'CLIProxyAPI settings are saved in the vault. Run Test connection to confirm the endpoint and API key together.'
-                : 'Credential is stored in the vault. Run a connection test to validate it.';
+                ? 'CLIProxyAPI settings are saved locally. Run Test connection to confirm the endpoint and API key together.'
+                : 'Credential is saved locally. Run a connection test to validate it.';
   const onboardingProviderStatusLabel = selectedUsesBrowserAccountLane
     ? credentialStatusLabel
     : selectedUsesAccountImportLane
@@ -2089,17 +2025,17 @@ export function App() {
   const onboardingProviderSetupHint = selectedUsesBrowserAccountLane
     ? surfacedActiveProviderAccount
       ? `${credentialHelperMessage} The browser-account lane stays background-owned and never exposes raw helper payloads or account artifacts in Options.`
-      : 'OpenAI browser-account reuses the live provider setup controls. Save the login method, unlock the vault, use Connect browser account, then run Test connection once trusted artifacts exist. If the helper is unavailable, Flux will show helper-missing instead of pretending success.'
+      : 'OpenAI browser-account reuses the live provider setup controls. Save the login method, use Connect browser account, then run Test connection once trusted artifacts exist. If the helper is unavailable, Flux will show helper-missing instead of pretending success.'
     : selectedUsesAccountImportLane
     ? surfacedProviderAccounts.length === 0
-      ? 'Codex stays locked until an official auth artifact is imported into the vault and validated against the runtime.'
+      ? 'Codex stays blocked until an official auth artifact is imported and validated against the runtime.'
       : `${credentialHelperMessage} Popup quick actions and sidepanel sends stay locked until the active Codex account is validated and healthy.`
     : selectedUsesOAuthLane
       ? savedMetadata
-        ? 'The Copilot token is already in the vault. Run connection validation before you finish onboarding.'
-        : 'Connect GitHub Copilot, keep the token in the unlocked vault, then validate the provider connection.'
+        ? 'The Copilot token is already stored. Run connection validation before you finish onboarding.'
+        : 'Connect GitHub Copilot, then validate the provider connection.'
       : selectedProvider === 'cliproxyapi'
-        ? 'CLIProxyAPI requires an explicit endpoint. Save the endpoint first, keep the API key in the vault, then run Test connection before popup quick actions or sidepanel chat unlock.'
+        ? 'CLIProxyAPI requires an explicit endpoint. Save the endpoint first, save the API key locally, then run Test connection before popup quick actions or sidepanel chat unlock.'
       : selectedDefinition.requiresCredential
         ? 'Save the provider settings first, then validate the current credential before finishing onboarding.'
         : 'Save the provider settings so the active model and endpoint are carried into the workspace.';
@@ -2114,23 +2050,16 @@ export function App() {
     : selectedUsesOAuthLane
       ? isProviderReadyForOnboarding()
         ? 'Copilot is connected and validated, so the side panel and popup can reuse it immediately.'
-        : 'Copilot still needs a connected vault token plus a successful validation before onboarding can finish.'
+        : 'Copilot still needs a connected token plus a successful validation before onboarding can finish.'
       : selectedProvider === 'cliproxyapi'
         ? isProviderReadyForOnboarding()
-          ? 'CLIProxyAPI is ready because the endpoint is saved, the API key is in the vault, and the latest connection test passed.'
+          ? 'CLIProxyAPI is ready because the endpoint is saved, the API key is stored locally, and the latest connection test passed.'
           : `CLIProxyAPI is not ready yet. Current state: ${credentialStatusLabel.toLowerCase()}. Save endpoint -> save key -> Test connection -> ready.`
       : selectedDefinition.requiresCredential
         ? isProviderReadyForOnboarding()
           ? 'This provider passed validation, so Flux can carry the saved credential into live workflows.'
           : 'This provider still needs a saved credential and a passing connection test before onboarding can finish.'
         : 'No credential gate remains for this provider.';
-  const vaultTone =
-    vaultNoticeState === 'success'
-      ? 'border-success-500/30 bg-success-50 text-success-700'
-      : vaultNoticeState === 'error'
-        ? 'border-error-500/30 bg-error-50 text-error-700'
-        : 'border-border bg-surface-elevated text-content-secondary';
-
   const statusTone =
     validationState === 'success'
       ? 'border-success-500/30 bg-success-50 text-success-700'
@@ -2282,124 +2211,6 @@ export function App() {
           />
         ) : null}
 
-        <div className="space-y-3 rounded-2xl border border-border bg-surface-elevated px-4 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-content-primary">Credential vault</p>
-              <p className="mt-1 text-xs leading-5 text-content-secondary">
-                {vaultStatusDescription}
-              </p>
-            </div>
-            <Badge
-              variant={
-                vaultState.lockState === 'unlocked'
-                  ? 'success'
-                  : vaultState.lockState === 'locked'
-                    ? 'warning'
-                    : 'default'
-              }
-            >
-              {vaultStatusLabel}
-            </Badge>
-          </div>
-
-          {vaultState.lockState !== 'unlocked' ? (
-            <Input
-              label={
-                vaultState.lockState === 'uninitialized' ? 'Vault passphrase' : 'Unlock passphrase'
-              }
-              type="password"
-              value={vaultPassphrase}
-              onChange={(event) => setVaultPassphrase(event.target.value)}
-              placeholder={
-                vaultState.lockState === 'uninitialized'
-                  ? 'Create a passphrase for local encryption'
-                  : 'Enter the vault passphrase'
-              }
-              helperText={
-                vaultState.lockState === 'uninitialized'
-                  ? 'You will enter this passphrase once per browser session to unlock saved credentials.'
-                  : 'Credentials stay unavailable until the correct passphrase unlocks this session.'
-              }
-              autoComplete="off"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-          ) : (
-            <div className="rounded-2xl border border-success-500/20 bg-success-50 px-4 py-3 text-sm text-success-700">
-              Credentials are unlocked in memory for this browser session.
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            {vaultState.lockState === 'uninitialized' ? (
-              <Button
-                type="button"
-                variant="secondary"
-                loading={isVaultBusy}
-                onClick={() => {
-                  void runVaultAction('init');
-                }}
-                disabled={!isReady}
-              >
-                Initialize vault
-              </Button>
-            ) : vaultState.lockState === 'locked' ? (
-              <Button
-                type="button"
-                variant="secondary"
-                loading={isVaultBusy}
-                onClick={() => {
-                  void runVaultAction('unlock');
-                }}
-                disabled={!isReady}
-              >
-                Unlock vault
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                loading={isVaultBusy}
-                onClick={() => {
-                  void runVaultAction('lock');
-                }}
-                disabled={!isReady}
-              >
-                Lock vault
-              </Button>
-            )}
-
-            {selectedDefinition.requiresCredential &&
-            savedMetadata &&
-            !selectedUsesAccountSurface ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  void handleDeleteCredential();
-                }}
-                iconLeft={<Trash2 className="h-4 w-4" />}
-                disabled={!isReady || isVaultBusy || vaultState.lockState !== 'unlocked'}
-              >
-                Remove credential
-              </Button>
-            ) : null}
-          </div>
-
-          {vaultState.hasLegacySecrets ? (
-            <p className="text-xs leading-5 text-content-tertiary">
-              Legacy secrets were detected and will be migrated into the encrypted vault the next
-              time you unlock it.
-            </p>
-          ) : null}
-
-          <div className={`rounded-2xl border px-4 py-3 text-sm ${vaultTone}`}>
-            {vaultNotice || 'Initialize or unlock the vault before storing long-lived credentials.'}
-          </div>
-        </div>
-
         {selectedUsesApiKeyLane ? (
           <div className="space-y-3">
             <Input
@@ -2407,7 +2218,7 @@ export function App() {
               label="API key"
               type="password"
               placeholder="Paste a provider key when needed"
-              helperText="Enter a fresh key to test immediately, or save it into the unlocked vault for later sessions."
+              helperText="Enter a fresh key to test immediately, or save it locally for later sessions."
               autoComplete="off"
               autoCapitalize="none"
               autoCorrect="off"
@@ -2419,13 +2230,27 @@ export function App() {
               <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
                   <KeyRound className="h-4 w-4 text-primary-600" />
-                  Vault credential
+                  Saved locally
                 </div>
                 <p className="mt-2 text-sm text-content-secondary">
                   {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
                 </p>
                 <p className="mt-1 text-xs text-content-tertiary">{credentialHelperMessage}</p>
               </div>
+            ) : null}
+
+            {savedMetadata ? (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  void handleDeleteCredential();
+                }}
+                iconLeft={<Trash2 className="h-4 w-4" />}
+                disabled={!isReady || isVaultBusy}
+              >
+                Remove saved credential
+              </Button>
             ) : null}
           </div>
         ) : selectedUsesOAuthLane ? (
@@ -2435,9 +2260,46 @@ export function App() {
                 GitHub Copilot authentication
               </p>
               <p className="mt-1 text-xs leading-5 text-content-secondary">
-                Sign in with a GitHub account that has an active Copilot subscription. The OAuth
-                token is stored in the unlocked vault instead of plain extension storage.
+                Sign in with a GitHub account that has an active Copilot subscription. This legacy
+                provider still uses secured local storage behind the scenes in this build.
               </p>
+
+              {vaultState.lockState !== 'unlocked' ? (
+                <div className="mt-3 space-y-2 rounded-xl border border-border bg-surface-primary px-4 py-3">
+                  <Input
+                    label="Local storage passphrase"
+                    type="password"
+                    value={legacyStoragePassphrase}
+                    onChange={(event) => setLegacyStoragePassphrase(event.target.value)}
+                    placeholder={
+                      vaultState.lockState === 'uninitialized'
+                        ? 'Create a local passphrase for Copilot'
+                        : 'Unlock the local Copilot storage'
+                    }
+                    helperText="This legacy Copilot path still needs a local unlock step before the token can be stored on this device."
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    loading={isVaultBusy}
+                    onClick={() => {
+                      void runLegacyStorageAction(
+                        vaultState.lockState === 'uninitialized' ? 'init' : 'unlock',
+                      );
+                    }}
+                    disabled={!isReady}
+                  >
+                    {vaultState.lockState === 'uninitialized'
+                      ? 'Prepare local storage'
+                      : 'Unlock local storage'}
+                  </Button>
+                </div>
+              ) : null}
 
               {oauthState === 'idle' || oauthState === 'error' ? (
                 <div className="mt-3 space-y-2">
@@ -2454,7 +2316,7 @@ export function App() {
                   </Button>
                   {vaultState.lockState !== 'unlocked' ? (
                     <p className="text-xs text-content-tertiary">
-                      Unlock the vault first so the Copilot token can be stored securely.
+                      Prepare or unlock the local Copilot storage first, then continue with GitHub.
                     </p>
                   ) : null}
                   {oauthError ? <p className="text-xs text-error-600">{oauthError}</p> : null}
@@ -2511,7 +2373,7 @@ export function App() {
               <div className="rounded-2xl border border-border bg-surface-elevated px-4 py-3">
                 <div className="flex items-center gap-2 text-sm font-medium text-content-primary">
                   <Github className="h-4 w-4" />
-                  Copilot token in vault
+                  Copilot token stored locally
                 </div>
                 <p className="mt-2 text-sm text-content-secondary">
                   {savedMetadata.maskedValue} - updated {formatUpdatedAt(savedMetadata.updatedAt)}
@@ -2533,9 +2395,9 @@ export function App() {
                       <Badge variant="info">OpenAI only</Badge>
                       <Badge variant="default">Background-owned trust</Badge>
                     </div>
-                    <p className="mt-1 text-xs leading-5 text-content-secondary">
-                      Flux only shows sanitized browser-account status from the background. Raw helper payloads, auth artifacts, and runtime secrets never appear in Options.
-                    </p>
+                      <p className="mt-1 text-xs leading-5 text-content-secondary">
+                        Flux only shows sanitized browser-account status from the background. Raw helper payloads, auth artifacts, and runtime secrets never appear in Options.
+                      </p>
                   </div>
 
                   <Badge
@@ -2645,11 +2507,11 @@ export function App() {
                       Auth surface
                     </p>
                     <p className="mt-1 text-sm font-semibold text-content-primary">
-                      {accountAuthStatus?.status === 'vault-locked'
-                        ? 'Vault locked'
-                        : accountAuthStatus?.status === 'needs-auth'
-                          ? 'Needs import'
-                          : surfacedActiveProviderAccount
+                        {accountAuthStatus?.status === 'vault-locked'
+                          ? 'Stored credential unavailable'
+                          : accountAuthStatus?.status === 'needs-auth'
+                            ? 'Needs import'
+                            : surfacedActiveProviderAccount
                             ? getAccountBadgeLabel(surfacedActiveProviderAccount)
                             : 'Awaiting import'}
                     </p>
@@ -2738,8 +2600,7 @@ export function App() {
                       Import official auth artifact
                     </p>
                     <p className="mt-2 text-xs leading-5 text-content-secondary">
-                      Paste an official `auth.json` export or supported text bundle. The vault must
-                      be unlocked before Flux can store or validate the imported account.
+                       Paste an official `auth.json` export or supported text bundle. Flux stores only the background-managed account record needed for later validation.
                     </p>
 
                     <div className="mt-3 space-y-3">
@@ -2793,8 +2654,7 @@ export function App() {
 
                       {vaultState.lockState !== 'unlocked' ? (
                         <p className="text-xs leading-5 text-content-tertiary">
-                          Unlock the vault first. Imported account artifacts are never kept in plain
-                          extension storage.
+                          Imported account artifacts are background-managed and never shown again after import.
                         </p>
                       ) : null}
                     </div>
@@ -2803,7 +2663,7 @@ export function App() {
 
                 <div className={`rounded-xl border px-4 py-3 text-sm ${accountTone}`}>
                   {accountMessage ||
-                    'Imported Codex accounts stay local, vault-backed, and provider-specific. Validate before relying on an account for runtime work.'}
+                    'Imported Codex accounts stay local, provider-specific, and require validation before runtime use.'}
                 </div>
 
                 <div className="space-y-3">
@@ -3058,7 +2918,7 @@ export function App() {
                   Configure providers and capability boundaries in one place.
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-content-secondary sm:text-base">
-                  The options workspace now drives provider setup, the encrypted vault, and runtime
+                  The options workspace now drives provider setup, stored credentials, and runtime
                   permission boundaries through the same background APIs used during live
                   automation.
                 </p>
@@ -3100,7 +2960,7 @@ export function App() {
               <CardHeader className="border-b border-border/80 bg-[linear-gradient(180deg,_rgb(var(--color-bg-secondary)),_transparent)]">
                 <CardTitle as="h2">Provider settings</CardTitle>
                 <CardDescription>
-                  Provider dropdown, model config, vault-backed credentials, and connection testing.
+                  Provider dropdown, model config, locally saved credentials, and connection testing.
                 </CardDescription>
               </CardHeader>
 
@@ -3350,7 +3210,7 @@ export function App() {
               <CardHeader>
                 <CardTitle as="h2">Control surface status</CardTitle>
                 <CardDescription>
-                  Live state pulled from the background runtime and the credential vault.
+                  Live state pulled from the background runtime and the current stored auth state.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-content-secondary">
@@ -3419,9 +3279,11 @@ export function App() {
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">
                     <ShieldCheck className="h-4 w-4 text-primary-600" />
-                    Vault session
+                    Stored credentials
                   </div>
-                  <p className="mt-1">{vaultStatusDescription}</p>
+                  <p className="mt-1">
+                    API-key providers now use simpler local credential wording in the UI. Legacy vault/runtime behavior may still exist behind the scenes until migration cleanup lands.
+                  </p>
                 </div>
                 <div className="rounded-2xl border border-border bg-surface-primary px-4 py-3">
                   <div className="flex items-center gap-2 font-medium text-content-primary">

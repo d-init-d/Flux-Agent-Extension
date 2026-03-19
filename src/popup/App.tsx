@@ -250,12 +250,12 @@ function createDefaultProviderStatus(snapshot: SettingsGetResponse): PopupProvid
     return {
       provider,
       providerLabel,
-      badgeLabel: 'Vault locked',
+      badgeLabel: 'Stored credential unavailable',
       badgeVariant: 'warning',
-      title: `${providerLabel} is stored but locked`,
+      title: `${providerLabel} needs a fresh local credential`,
       detail:
-        'The active provider is configured, but the vault is locked for this browser session, so live requests may need options before they can resume.',
-      action: 'Unlock the vault in options if quick actions start failing.',
+        'The active provider is configured, but the stored credential is unavailable in the current session, so live requests may need provider settings before they can resume.',
+      action: 'Open provider settings, save the credential again if needed, then re-run Test connection.',
       blocksQuickActions: false,
     };
   }

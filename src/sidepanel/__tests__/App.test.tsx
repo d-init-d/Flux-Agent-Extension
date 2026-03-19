@@ -306,7 +306,7 @@ describe('Side panel App (U-15 integration)', () => {
     await renderApp();
 
     expect(await screen.findByText('Codex needs a fresh artifact')).toBeInTheDocument();
-    expect(screen.getByText('Refresh required')).toBeInTheDocument();
+    expect(screen.getByText('Reconnect required')).toBeInTheDocument();
     expect(screen.getByText(/re-import a fresh official artifact in options, then validate the account again/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Open provider settings' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
@@ -603,10 +603,10 @@ describe('Side panel App (U-15 integration)', () => {
 
     await renderApp();
 
-    expect(await screen.findByText('Unlock the vault for Codex')).toBeInTheDocument();
-    expect(screen.getByText('Vault locked')).toBeInTheDocument();
+    expect(await screen.findByText('Reconnect Codex account')).toBeInTheDocument();
+    expect(screen.getByText('Stored credential unavailable')).toBeInTheDocument();
     expect(
-      screen.getByText(/unlock the vault in options, then validate the active account again if needed/i),
+      screen.getByText(/import or reconnect an account in options, then validate the active account again if needed/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });

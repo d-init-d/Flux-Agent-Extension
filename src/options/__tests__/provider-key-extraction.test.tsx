@@ -47,7 +47,7 @@ describe('Provider key extraction resistance', () => {
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: rawKey } });
     await user.click(screen.getByRole('button', { name: /save provider/i }));
 
-    expect(await screen.findByText(/credential was stored in the vault/i)).toBeInTheDocument();
+    expect(await screen.findByText(/credential was stored locally/i)).toBeInTheDocument();
     await expect(readStorage('providerKeyMetadata')).resolves.toEqual({
       openrouter: expect.objectContaining({
         maskedValue: '••••••••••••',
@@ -55,7 +55,7 @@ describe('Provider key extraction resistance', () => {
     });
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();
     expect(screen.getByLabelText('API key')).toHaveValue('');
-    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
+    expect(screen.getByText(/^saved locally$/i)).toBeInTheDocument();
     expect(screen.getByText(/••••••••••••/i)).toBeInTheDocument();
     expectNoRecoverableSecrets(container, rawKey);
   });
@@ -197,7 +197,7 @@ describe('Provider key extraction resistance', () => {
     });
 
     expect(screen.getByLabelText('API key')).toHaveValue('');
-    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
+    expect(screen.getByText(/^saved locally$/i)).toBeInTheDocument();
     expect(screen.getByText(/••••••••••••/i)).toBeInTheDocument();
     expectNoRecoverableSecrets(container, staleOpenAiKey, staleClaudeKey);
   });
@@ -212,7 +212,7 @@ describe('Provider key extraction resistance', () => {
 
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: openAiKey } });
     await user.click(screen.getByRole('button', { name: /save provider/i }));
-    expect(await screen.findByText(/credential was stored in the vault/i)).toBeInTheDocument();
+    expect(await screen.findByText(/credential was stored locally/i)).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText('Provider'), 'claude');
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: claudeKey } });
@@ -224,7 +224,7 @@ describe('Provider key extraction resistance', () => {
     });
 
     await user.selectOptions(screen.getByLabelText('Provider'), 'openai');
-    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
+    expect(screen.getByText(/^saved locally$/i)).toBeInTheDocument();
     expect(screen.getByText(/••••••••••••/i)).toBeInTheDocument();
     expect(screen.getByLabelText('API key')).toHaveValue('');
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();

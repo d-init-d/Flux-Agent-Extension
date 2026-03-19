@@ -19,9 +19,9 @@ interface AccountBackedProviderUxCopy {
   emptyTitle: string;
   emptyDetail: string;
   emptyAction: string;
-  vaultLockedTitle: string;
-  vaultLockedDetail: string;
-  vaultLockedAction: string;
+   storedCredentialUnavailableTitle: string;
+   storedCredentialUnavailableDetail: string;
+   storedCredentialUnavailableAction: string;
   needsValidationTitle: string;
   needsValidationAction: string;
   readyTitle: string;
@@ -40,11 +40,11 @@ function getAccountBackedProviderUxCopy(
         'No trusted browser-account artifact is available for the active OpenAI lane yet, so popup quick actions and sidepanel chat stay blocked.',
       emptyAction:
         'Use Connect browser account in options, then run Test connection before relying on live requests.',
-      vaultLockedTitle: 'Unlock the vault for OpenAI browser-account',
-      vaultLockedDetail:
-        'Flux can see the selected OpenAI browser-account lane, but trusted stored artifacts are unavailable until this browser session unlocks the vault.',
-      vaultLockedAction:
-        'Unlock the vault in options, then validate the active browser account again if needed.',
+      storedCredentialUnavailableTitle: 'Reconnect OpenAI browser-account',
+      storedCredentialUnavailableDetail:
+        'Flux can see the selected OpenAI browser-account lane, but the saved browser-account state is unavailable in the current session.',
+      storedCredentialUnavailableAction:
+        'Reconnect the browser account or validate a newly available stored account before relying on live requests.',
       needsValidationTitle: 'OpenAI browser-account is imported but not validated',
       needsValidationAction:
         'Run Test connection in options before relying on quick actions or sidepanel chat.',
@@ -57,16 +57,16 @@ function getAccountBackedProviderUxCopy(
 
   return {
     providerName: 'Codex',
-    emptyTitle: 'Import a Codex account',
-    emptyDetail:
-      'No official auth artifact is available for the active Codex provider yet, so live runtime requests stay locked.',
-    emptyAction:
-      'Import an official artifact in options, then run validation before using quick actions or chat.',
-    vaultLockedTitle: 'Unlock the vault for Codex',
-    vaultLockedDetail:
-      'Flux can see the provider selection, but the imported account is unavailable until this browser session unlocks the vault.',
-    vaultLockedAction:
-      'Unlock the vault in options, then validate the active account again if needed.',
+      emptyTitle: 'Import a Codex account',
+      emptyDetail:
+        'No official auth artifact is available for the active Codex provider yet, so live runtime requests stay locked.',
+      emptyAction:
+        'Import an official artifact in options, then run validation before using quick actions or chat.',
+      storedCredentialUnavailableTitle: 'Reconnect Codex account',
+      storedCredentialUnavailableDetail:
+        'Flux can see the provider selection, but the saved account state is unavailable in the current session.',
+      storedCredentialUnavailableAction:
+        'Import or reconnect an account in options, then validate the active account again if needed.',
     needsValidationTitle: 'Codex account is imported but not validated',
     needsValidationAction:
       'Run account validation in options before relying on quick actions or sidepanel chat.',
@@ -174,11 +174,11 @@ export function resolveAccountBackedProviderUx(
   if (status.status === 'vault-locked') {
     return {
       state: 'locked',
-      badgeLabel: 'Vault locked',
+      badgeLabel: 'Stored credential unavailable',
       badgeVariant: 'warning',
-      title: copy.vaultLockedTitle,
-      detail: copy.vaultLockedDetail,
-      action: copy.vaultLockedAction,
+      title: copy.storedCredentialUnavailableTitle,
+      detail: copy.storedCredentialUnavailableDetail,
+      action: copy.storedCredentialUnavailableAction,
       blocksRuntime: true,
       activeAccount,
     };
@@ -205,7 +205,7 @@ export function resolveAccountBackedProviderUx(
   if (activeAccount.status === 'revoked' || sessionStatus === 'revoked') {
     return {
         state: 'degraded',
-        badgeLabel: 'Revoked',
+        badgeLabel: 'Reconnect required',
         badgeVariant: 'error',
         title: `${copy.providerName} access was revoked`,
         detail: `${activeAccount.label} can no longer back runtime requests because the imported account or runtime session was revoked.`,
@@ -218,7 +218,7 @@ export function resolveAccountBackedProviderUx(
   if (sessionStatus === 'refresh-required') {
     return {
         state: 'degraded',
-        badgeLabel: 'Refresh required',
+        badgeLabel: 'Reconnect required',
         badgeVariant: 'warning',
         title: `${copy.providerName} needs a fresh artifact`,
         detail: `${activeAccount.label} is still stored locally, but its runtime session now requires a newer official artifact before Flux can resume safely.`,
@@ -231,7 +231,7 @@ export function resolveAccountBackedProviderUx(
   if (sessionStatus === 'expired') {
     return {
         state: 'degraded',
-        badgeLabel: 'Session expired',
+        badgeLabel: 'Reconnect required',
         badgeVariant: 'warning',
         title: `${copy.providerName} session expired`,
         detail: `${activeAccount.label} no longer has a usable runtime session snapshot for ${copy.providerName}.`,
@@ -244,10 +244,10 @@ export function resolveAccountBackedProviderUx(
   if (activeAccount.status === 'needs-auth') {
     return {
         state: 'degraded',
-        badgeLabel: 'Needs auth',
+        badgeLabel: 'Reconnect required',
         badgeVariant: 'warning',
         title: `${copy.providerName} account needs re-auth`,
-        detail: `${activeAccount.label} is stored in the vault, but the imported auth artifact is no longer trusted for runtime work.`,
+        detail: `${activeAccount.label} is stored locally, but the imported auth artifact is no longer trusted for runtime work.`,
         action: 'Re-import the official artifact, then validate the active account again.',
       blocksRuntime: true,
       activeAccount,
@@ -255,9 +255,9 @@ export function resolveAccountBackedProviderUx(
   }
 
   if (activeAccount.stale) {
-    return {
+      return {
         state: 'degraded',
-        badgeLabel: 'Stale',
+        badgeLabel: 'Validation required',
         badgeVariant: 'warning',
         title: `${copy.providerName} account changed after validation`,
         detail: `${activeAccount.label} no longer matches the last validated runtime snapshot, so Flux treats it as stale.`,
@@ -270,7 +270,7 @@ export function resolveAccountBackedProviderUx(
   if (!activeAccount.validatedAt) {
     return {
       state: 'needs-validation',
-      badgeLabel: 'Validate account',
+      badgeLabel: 'Validation required',
       badgeVariant: 'info',
       title: copy.needsValidationTitle,
       detail: `${activeAccount.label} is stored locally, but Flux has not confirmed the current runtime session yet.`,

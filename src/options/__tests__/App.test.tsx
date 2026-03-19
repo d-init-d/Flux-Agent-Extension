@@ -134,7 +134,7 @@ describe('Options App', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Provider')).toHaveValue('claude');
     expect(screen.getByDisplayValue('claude-3-opus-20240229')).toBeInTheDocument();
-    expect(screen.getByText(/vault credential/i)).toBeInTheDocument();
+    expect(screen.getByText(/^saved locally$/i)).toBeInTheDocument();
     expect(screen.getByText(/updated/i)).toBeInTheDocument();
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();
   });
@@ -592,7 +592,7 @@ describe('Options App', () => {
     ).toBeInTheDocument();
   });
 
-  it('blocks codex validation with a clear vault unlock message when imported accounts are locked', async () => {
+  it('blocks codex validation with a clear stored-account message when imported accounts are unavailable', async () => {
     const user = userEvent.setup();
     const observedAt = Date.UTC(2026, 2, 17, 9, 0, 0);
 
@@ -642,7 +642,7 @@ describe('Options App', () => {
     await user.click(screen.getByRole('button', { name: /test connection/i }));
 
     expect(
-      await screen.findByText(/unlock the vault before validating an imported account-backed provider/i),
+      await screen.findByText(/stored account state is unavailable right now/i),
     ).toBeInTheDocument();
 
     const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
@@ -810,7 +810,7 @@ describe('Options App', () => {
     expect(await screen.findByText(/imported account revoked/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /remove account codex primary/i }));
-    expect(await screen.findByText(/imported account removed from the local vault-backed store/i)).toBeInTheDocument();
+    expect(await screen.findByText(/imported account removed from local storage/i)).toBeInTheDocument();
 
     const messageTypes = vi.mocked(chrome.runtime.sendMessage).mock.calls.map((call) => {
       const message = call[0] as { type?: string };
@@ -911,7 +911,7 @@ describe('Options App', () => {
     });
 
     expect(
-      await screen.findByText(/cliproxyapi endpoint saved and the api key was stored in the vault/i),
+      await screen.findByText(/cliproxyapi endpoint saved and the api key was stored locally/i),
     ).toBeInTheDocument();
     expect(screen.getByDisplayValue('http://127.0.0.1:8317/v1')).toBeInTheDocument();
 
@@ -1543,12 +1543,12 @@ describe('Options App', () => {
 
     expect(
       screen.getByText(
-        /for cliproxyapi, the endpoint is mandatory: save the endpoint, keep the api key in the vault, then run test connection before flux marks it ready/i,
+        /for cliproxyapi, the endpoint is mandatory: save the endpoint, save the api key locally, then run test connection before flux marks it ready/i,
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /cliproxyapi requires an explicit endpoint\. save the endpoint first, keep the api key in the vault, then run test connection before popup quick actions or sidepanel chat unlock/i,
+        /cliproxyapi requires an explicit endpoint\. save the endpoint first, save the api key locally, then run test connection before popup quick actions or sidepanel chat unlock/i,
       ),
     ).toBeInTheDocument();
   });

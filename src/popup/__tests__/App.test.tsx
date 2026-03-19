@@ -481,7 +481,7 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     renderApp();
 
     const providerCard = await screen.findByTestId('popup-provider-card');
-    expect((await screen.findAllByText('Refresh required')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Reconnect required')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /extract data/i })).toBeDisabled();
     expect(screen.getByText('Codex needs a fresh artifact')).toBeInTheDocument();
     expect(
@@ -554,10 +554,10 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     renderApp();
 
     const providerCard = await screen.findByTestId('popup-provider-card');
-    expect(within(providerCard).getByText('Vault locked')).toBeInTheDocument();
-    expect(within(providerCard).getByText('Unlock the vault for Codex')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Stored credential unavailable')).toBeInTheDocument();
+    expect(within(providerCard).getByText('Reconnect Codex account')).toBeInTheDocument();
     expect(
-      within(providerCard).getByText(/unlock the vault in options, then validate the active account again if needed/i),
+      within(providerCard).getByText(/import or reconnect an account in options, then validate the active account again if needed/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /summarize page/i })).toBeDisabled();
   });
@@ -621,7 +621,7 @@ describe('Popup App (U-06 quick actions + page info)', () => {
     expect(within(providerCard).getByText('Test connection')).toBeInTheDocument();
     expect(within(providerCard).getByText('CLIProxyAPI endpoint saved but unvalidated')).toBeInTheDocument();
     expect(
-      within(providerCard).getByText(/saved cliproxyapi endpoint and vault-backed api key/i),
+      within(providerCard).getByText(/saved cliproxyapi endpoint and local api key/i),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /extract data/i })).toBeDisabled();
   });

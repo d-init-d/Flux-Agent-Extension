@@ -75,11 +75,11 @@ export function resolveKeyBasedProviderUx(
         ? 'Add a CLIProxyAPI API key'
         : `Add a ${definition.label} ${credentialLabel}`,
       detail: isCLIProxyAPI(provider)
-        ? 'The CLIProxyAPI endpoint can be saved, but runtime requests stay blocked until an API key is stored locally.'
-        : `${definition.label} still needs a stored ${credentialLabel} before live requests can run.`,
+        ? 'The CLIProxyAPI endpoint can be saved, but runtime requests stay blocked until an API key is saved locally.'
+        : `${definition.label} still needs a locally saved ${credentialLabel} before live requests can run.`,
       action: isCLIProxyAPI(provider)
         ? 'Save the API key locally, then run Test connection so Flux can mark CLIProxyAPI ready.'
-        : `Store the ${credentialLabel}, then run Test connection before relying on this provider.`,
+        : `Save the ${credentialLabel} locally, then run Test connection before relying on this provider.`,
       blocksRuntime: true,
     };
   }
@@ -87,15 +87,16 @@ export function resolveKeyBasedProviderUx(
   if (options.vaultLockState !== 'unlocked' && hasCredential && credentialSource === 'vault') {
     return {
       state: 'vault-locked',
-      badgeLabel: 'Vault locked',
+      badgeLabel: 'Stored credential unavailable',
       badgeVariant: 'warning',
       title: isCLIProxyAPI(provider)
-        ? 'Unlock the vault for CLIProxyAPI'
-        : `Unlock the vault for ${definition.label}`,
+        ? 'CLIProxyAPI needs a fresh local credential'
+        : `${definition.label} needs a fresh local credential`,
       detail: isCLIProxyAPI(provider)
-        ? 'CLIProxyAPI has stored settings, but the saved endpoint and API key cannot back runtime requests until the vault is unlocked for this browser session.'
-        : `${definition.label} has stored credentials, but they are unavailable until the vault is unlocked for this browser session.`,
-      action: 'Unlock the vault in options, then re-run Test connection if this provider was edited after the last validation.',
+        ? 'CLIProxyAPI has saved settings, but the stored endpoint and API key are unavailable in the current session.'
+        : `${definition.label} has a saved credential, but it is unavailable in the current session.`,
+      action:
+        'Open provider settings, save the credential again if needed, then re-run Test connection before relying on this provider.',
       blocksRuntime: true,
     };
   }
@@ -126,7 +127,7 @@ export function resolveKeyBasedProviderUx(
         : `${definition.label} is saved but unvalidated`,
       detail: isCLIProxyAPI(provider)
         ? 'Flux sees a saved CLIProxyAPI endpoint and local API key, but readiness stays blocked until a live connection test succeeds.'
-        : `Flux sees stored ${definition.label} credentials, but readiness stays blocked until a live connection test succeeds.`,
+        : `Flux sees a locally saved ${definition.label} credential, but readiness stays blocked until a live connection test succeeds.`,
       action: isCLIProxyAPI(provider)
         ? 'Keep the saved endpoint, then run Test connection. Flux marks CLIProxyAPI ready only after that validation passes.'
         : 'Run Test connection before relying on this provider in popup or sidepanel workflows.',
@@ -141,7 +142,7 @@ export function resolveKeyBasedProviderUx(
     title: isCLIProxyAPI(provider) ? 'CLIProxyAPI is ready' : `${definition.label} is ready`,
     detail: isCLIProxyAPI(provider)
       ? 'The saved CLIProxyAPI endpoint and local API key passed validation, so popup quick actions and sidepanel sends can use the real provider state.'
-      : `${definition.label} has a validated credential and can back popup or sidepanel requests.`,
+      : `${definition.label} has a validated locally saved credential and can back popup or sidepanel requests.`,
     action: isCLIProxyAPI(provider)
       ? 'If the endpoint or key changes later, save again and re-run Test connection before relying on it.'
       : 'If requests fail later, re-run Test connection before relying on this provider again.',
