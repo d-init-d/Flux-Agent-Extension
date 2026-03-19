@@ -34,6 +34,11 @@ export type BrowserLoginResultStatus =
   | 'helper-missing'
   | 'error';
 export type BrowserLoginSurfaceStatus = 'idle' | 'pending' | BrowserLoginResultStatus;
+export type AppManagedAuthStoreAuthChoiceId =
+  | 'api-key'
+  | 'browser-account'
+  | 'oauth-token'
+  | 'account-artifact';
 
 export interface BrowserLoginHelperSummary {
   id?: string;
@@ -64,6 +69,87 @@ export interface ProviderBrowserLoginState
   extends Omit<ProviderBrowserLoginMetadata, 'status'> {
   status: BrowserLoginSurfaceStatus;
   pending?: BrowserLoginPendingState;
+}
+
+export interface ApiKeyAuthStoreRecord {
+  version: number;
+  authChoiceId: 'api-key';
+  authFamily: Extract<ProviderAuthFamily, 'api-key'>;
+  authKind: Extract<ProviderAuthKind, 'api-key'>;
+  secret: string;
+  credential: ProviderCredentialRecord;
+}
+
+export interface BrowserAccountArtifactStoreRecord {
+  accountId: string;
+  authKind: Extract<ProviderAuthKind, 'account-artifact'>;
+  value: string;
+  updatedAt: number;
+  filename?: string;
+  format?: 'json' | 'text' | 'unknown';
+}
+
+export interface BrowserAccountAuthStoreRecord {
+  version: number;
+  authChoiceId: 'browser-account';
+  authFamily: Extract<ProviderAuthFamily, 'account-backed'>;
+  authKind: Extract<ProviderAuthKind, 'account-artifact'>;
+  credential?: ProviderCredentialRecord;
+  accounts: ProviderAccountRecord[];
+  activeAccountId?: string;
+  browserLogin?: ProviderBrowserLoginMetadata;
+  artifacts: Record<string, BrowserAccountArtifactStoreRecord>;
+}
+
+export type ProviderAuthStoreRecord = ApiKeyAuthStoreRecord | BrowserAccountAuthStoreRecord;
+
+export interface ProviderAuthStore {
+  version: number;
+  provider: AIProviderType;
+  providerFamily?: AIProviderFamily;
+  updatedAt: number;
+  apiKey?: ApiKeyAuthStoreRecord;
+  browserAccount?: BrowserAccountAuthStoreRecord;
+  migratedFromVaultAt?: number;
+}
+
+export interface AppManagedAuthStore {
+  version: number;
+  providers: Partial<Record<AIProviderType, ProviderAuthStore>>;
+  migratedFromVaultAt?: number;
+}
+
+export interface ApiKeyAuthStoreState {
+  authChoiceId: 'api-key';
+  authFamily: Extract<ProviderAuthFamily, 'api-key'>;
+  authKind: Extract<ProviderAuthKind, 'api-key'>;
+  credential: ProviderCredentialRecord;
+}
+
+export interface BrowserAccountAuthStoreState {
+  authChoiceId: 'browser-account';
+  authFamily: Extract<ProviderAuthFamily, 'account-backed'>;
+  authKind: Extract<ProviderAuthKind, 'account-artifact'>;
+  credential?: ProviderCredentialRecord;
+  accounts: ProviderAccountRecord[];
+  activeAccountId?: string;
+  browserLogin?: ProviderBrowserLoginState;
+}
+
+export interface ProviderAuthStoreState {
+  version: number;
+  provider: AIProviderType;
+  providerFamily?: AIProviderFamily;
+  updatedAt: number;
+  apiKey?: ApiKeyAuthStoreState;
+  browserAccount?: BrowserAccountAuthStoreState;
+  migratedFromVaultAt?: number;
+}
+
+export interface AppManagedAuthStoreState {
+  version: number;
+  providers: Partial<Record<AIProviderType, ProviderAuthStoreState>>;
+  migratedFromVaultAt?: number;
 }
 
 export interface ProviderCredentialRecord {
@@ -182,6 +268,9 @@ export interface StorageSchema {
 
   // Credential vault metadata. Ciphertext is stored separately by SecureStorage.
   vault: VaultMetadata;
+
+  // Planned app-managed auth store metadata and durable auth material.
+  authStore?: AppManagedAuthStore;
 
   // Conversation history (per session)
   conversationHistory: Record<string, AIMessage[]>;

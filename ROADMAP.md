@@ -255,7 +255,7 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 | Task                                          | Status | Verify                                                                                                                    | Notes                                                                                                                                                    |
 | --------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OS-01 - ADR lock for app-managed auth store   | DONE   | `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-os-01-opencode-style-auth-store-adr.md` | Locked the app-managed auth-store decision, trust boundary, migration rule, and security trade-off in `docs/task-os-01-opencode-style-auth-store-adr.md` |
-| OS-02 - Auth store schema redesign            | TODO   | -                                                                                                                         | Design extension-owned persistent auth storage for API-key + browser-account lanes                                                                       |
+| OS-02 - Auth store schema redesign            | DONE   | `pnpm exec vitest run src/shared/storage/__tests__/auth-store.test.ts src/shared/config/__tests__/openai-legacy-codex-bridge.test.ts src/background/__tests__/openai-runtime-auth-coordinator.test.ts`; `pnpm typecheck` | Added additive app-managed auth-store types/defaults/normalizers and a sanitized state projection without changing runtime or UI precedence yet |
 | OS-03 - Background secret-ownership contract  | TODO   | -                                                                                                                         | Keep background as the only secret owner; UI only receives masked metadata and status                                                                    |
 | OS-04 - Vault to app-store migration bridge   | TODO   | -                                                                                                                         | Dual-read, single-write migration plan from current vault metadata/secrets to the new auth store                                                         |
 | OS-05 - Runtime and readiness contract update | TODO   | -                                                                                                                         | Replace `vault-locked` semantics with app-managed auth-store readiness semantics                                                                         |
@@ -325,6 +325,11 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
   - Synced `ROADMAP.md` and `BLUEPRINT.md` so the planned initiative now consistently states the trust boundary, migration rule, and honest security trade-off.
   - Verify: `git diff --check`; `pnpm exec prettier --check ROADMAP.md BLUEPRINT.md docs/task-os-01-opencode-style-auth-store-adr.md`
   - Next step: OS-02 redesigns the persistent auth-store schema before any migration, runtime, or UX changes land.
+- [2026-03-19] OS-02 DONE
+  - Added additive app-managed auth-store schema primitives in `src/shared/types/storage.ts` plus shared defaults/normalizers in `src/shared/storage/auth-store.ts`.
+  - Added a sanitized auth-store state projection that deliberately strips API-key secrets and browser-account artifact payloads while keeping the current vault-backed runtime/UI behavior unchanged.
+  - Verify: `pnpm exec vitest run src/shared/storage/__tests__/auth-store.test.ts src/shared/config/__tests__/openai-legacy-codex-bridge.test.ts src/background/__tests__/openai-runtime-auth-coordinator.test.ts`; `pnpm typecheck`
+  - Next step: OS-03 uses this schema to lock the background-only secret ownership contract before migration or UX simplification work lands.
 
 ---
 

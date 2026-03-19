@@ -109,11 +109,22 @@ export type {
 
 // Storage types
 export type {
+  ApiKeyAuthStoreRecord,
+  ApiKeyAuthStoreState,
+  AppManagedAuthStore,
+  AppManagedAuthStoreAuthChoiceId,
+  AppManagedAuthStoreState,
+  BrowserAccountArtifactStoreRecord,
+  BrowserAccountAuthStoreRecord,
+  BrowserAccountAuthStoreState,
   BrowserLoginHelperSummary,
   BrowserLoginPendingState,
   BrowserLoginResultStatus,
   BrowserLoginSurfaceStatus,
   BrowserLoginUiContext,
+  ProviderAuthStore,
+  ProviderAuthStoreRecord,
+  ProviderAuthStoreState,
   StorageSchema,
   ExtensionSettings,
   OnboardingState,
