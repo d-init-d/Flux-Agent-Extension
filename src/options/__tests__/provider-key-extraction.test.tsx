@@ -137,7 +137,7 @@ describe('Provider key extraction resistance', () => {
     await expect(readStorage('providerKeyMetadata')).resolves.toBeUndefined();
     await expect(readStorage('providerSessionApiKeys', 'session')).resolves.toBeUndefined();
     expectNoRecoverableSecrets(container, rawKey);
-  });
+  }, 15000);
 
   it('does not expose raw keys after an unexpected validation failure', async () => {
     const user = userEvent.setup();

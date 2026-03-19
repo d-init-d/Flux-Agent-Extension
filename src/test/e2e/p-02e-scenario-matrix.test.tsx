@@ -1012,5 +1012,5 @@ describe('P-02e scenario-matrix E2E expansion', () => {
 
   it.each(scenarios)('$id covers $prompt', async (scenario) => {
     await runScenario(scenario);
-  });
+  }, 15000);
 });

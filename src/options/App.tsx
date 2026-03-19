@@ -1864,7 +1864,6 @@ export function App() {
   const selectedUsesOAuthLane = selectedAuthChoice.authMethod === 'oauth-github';
   const selectedUsesAccountImportLane = selectedAuthChoice.authMethod === 'account-import';
   const selectedUsesBrowserAccountLane = selectedAuthChoice.authMethod === 'browser-login';
-  const selectedUsesAccountSurface = selectedAuthChoice.authFamily === 'account-backed';
   const providerAccounts = getProviderAccounts(vaultState, selectedProvider);
   const activeProviderAccount = getActiveProviderAccount(vaultState, selectedProvider);
   const selectedCredentialRecord = vaultState.credentials[selectedProvider];

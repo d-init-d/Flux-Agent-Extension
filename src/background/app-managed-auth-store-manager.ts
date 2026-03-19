@@ -1,7 +1,6 @@
 import { PROVIDER_LOOKUP, providerSupportsAccountBackedAuth } from '@shared/config';
 import {
   AUTH_STORE_STORAGE_KEY,
-  createDefaultAuthStore,
   normalizeAuthStore,
   toAuthStoreState,
 } from '@shared/storage/auth-store';
@@ -11,9 +10,7 @@ import type {
   AppManagedAuthStore,
   AppManagedAuthStoreState,
   BrowserAccountArtifactStoreRecord,
-  BrowserLoginPendingState,
   ProviderAccountRecord,
-  ProviderAuthKind,
   ProviderBrowserLoginMetadata,
   ProviderBrowserLoginState,
   ProviderCredentialRecord,
@@ -221,8 +218,12 @@ export class AppManagedAuthStoreManager {
       validatedAt: Date.now(),
       stale: false,
     };
+    const providerStore = store.providers[provider];
+    if (!providerStore) {
+      return undefined;
+    }
     store.providers[provider] = {
-      ...store.providers[provider]!,
+      ...providerStore,
       updatedAt: nextCredential.updatedAt,
       apiKey: {
         ...current,
@@ -245,8 +246,12 @@ export class AppManagedAuthStoreManager {
       validatedAt: undefined,
       stale: true,
     };
+    const providerStore = store.providers[provider];
+    if (!providerStore) {
+      return undefined;
+    }
     store.providers[provider] = {
-      ...store.providers[provider]!,
+      ...providerStore,
       updatedAt: nextCredential.updatedAt,
       apiKey: {
         ...current,
@@ -328,8 +333,12 @@ export class AppManagedAuthStoreManager {
         delete store.providers[provider];
       }
     } else {
+      const providerStore = store.providers[provider];
+      if (!providerStore) {
+        return this.getState();
+      }
       store.providers[provider] = {
-        ...store.providers[provider]!,
+        ...providerStore,
         browserAccount: {
           ...current,
           accounts: nextAccounts,

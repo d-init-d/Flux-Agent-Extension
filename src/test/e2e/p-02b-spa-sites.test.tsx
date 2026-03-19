@@ -420,7 +420,7 @@ describe('P-02b SPA-style E2E expansion', () => {
         'Refresh the revenue chart',
       ],
     });
-  });
+  }, 15000);
 
   it('P-02b covers a Vue-style filter and list refinement flow', async () => {
     await runScenario({

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as providerLoader from '../../core/ai-client/provider-loader';
 import { SecureStorage } from '../../shared/crypto/secure-storage';
+import type { AppManagedAuthStore } from '../../shared/types';
 import { CredentialVault } from '../credential-vault';
 
 function encodeBase64UrlJson(payload: Record<string, unknown>): string {
@@ -13,6 +14,10 @@ function createJwt(payload: Record<string, unknown>): string {
 }
 
 describe('CredentialVault account store', () => {
+  function readAuthStore(value: unknown): AppManagedAuthStore {
+    return value as AppManagedAuthStore;
+  }
+
   beforeEach(async () => {
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
@@ -217,8 +222,8 @@ describe('CredentialVault account store', () => {
     );
 
     const stored = await chrome.storage.local.get(['authStore', 'vault']);
-    expect((stored.authStore as any).providers.openai.apiKey.secret).toBe('sk-openai-local');
-    expect((stored.vault as any)?.credentials?.openai).toBeUndefined();
+    expect(readAuthStore(stored.authStore).providers.openai?.apiKey?.secret).toBe('sk-openai-local');
+    expect((stored.vault as { credentials?: Record<string, unknown> } | undefined)?.credentials?.openai).toBeUndefined();
 
     const state = await vault.getState();
     expect(state.credentials.openai).toEqual(
@@ -266,7 +271,7 @@ describe('CredentialVault account store', () => {
     expect(secret).toBe('sk-legacy-cliproxy');
 
     const stored = await chrome.storage.local.get('authStore');
-    expect((stored.authStore as any).providers.cliproxyapi.apiKey.secret).toBe('sk-legacy-cliproxy');
+    expect(readAuthStore(stored.authStore).providers.cliproxyapi?.apiKey?.secret).toBe('sk-legacy-cliproxy');
   });
 
   it('marks migrated API-key credentials validated and stale in the app-managed auth store', async () => {
@@ -283,7 +288,7 @@ describe('CredentialVault account store', () => {
 
     await vault.markCredentialStale('openai');
     const stored = await chrome.storage.local.get('authStore');
-    expect((stored.authStore as any).providers.openai.apiKey.credential).toEqual(
+    expect(readAuthStore(stored.authStore).providers.openai?.apiKey?.credential).toEqual(
       expect.objectContaining({
         stale: true,
         validatedAt: undefined,

@@ -260,7 +260,7 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
 | OS-04 - Vault to app-store migration bridge   | DONE   | `pnpm exec vitest run src/background/__tests__/credential-vault.test.ts src/background/__tests__/app-managed-auth-store-manager.test.ts src/shared/storage/__tests__/auth-store.test.ts src/background/__tests__/openai-runtime-auth-coordinator.test.ts src/background/__tests__/ui-session-runtime.test.ts`; `pnpm typecheck`; `pnpm build` | Added a dual-read, single-write bridge for API-key lanes so new writes land in the app-managed auth store while legacy vault data remains a non-destructive fallback |
 | OS-05 - Runtime and readiness contract update | DONE   | `pnpm exec vitest run src/shared/ui/__tests__/key-based-provider-ux.test.ts src/background/__tests__/ui-session-runtime.test.ts src/background/__tests__/openai-runtime-auth-coordinator.test.ts`; `pnpm typecheck`; `pnpm build` | API-key readiness now honors auth-store-backed credentials without requiring a vault unlock, while account-backed lanes continue to fail closed on their own semantic state |
 | OS-06 - UX simplification spec                | DONE   | `pnpm exec vitest run src/shared/ui/__tests__/key-based-provider-ux.test.ts src/options/__tests__/App.test.tsx src/options/__tests__/provider-key-extraction.test.tsx src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx`; `pnpm typecheck`; `pnpm build` | Removed visible vault/passphrase UX from primary Options/onboarding flows, switched popup/sidepanel notices to simpler stored-credential states, and kept helper-missing honest while leaving legacy vault runtime code intact |
-| OS-07 - Regression, QA, and rollout plan      | TODO   | -                                                                                                                         | Extend tests, E2E fixtures, and rollout strategy before cleanup                                                                                          |
+| OS-07 - Regression, QA, and rollout plan      | DONE   | `pnpm lint`; `pnpm test`; `pnpm typecheck`; `pnpm build`; `pnpm audit --audit-level=high`                                                                      | Hardened auth-store-first regressions, fixed slow test timeouts under full-suite load, and restored the full repo gate set before final cleanup       |
 | OS-08 - Legacy vault cleanup and closeout     | TODO   | -                                                                                                                         | Remove passphrase UX/code only after migration and regressions are proven stable                                                                         |
 
 ### MVP Scope
@@ -351,6 +351,11 @@ The browser path should use a helper/deep-link login flow. This phase explicitly
   - Verify: `pnpm exec vitest run src/shared/ui/__tests__/key-based-provider-ux.test.ts src/options/__tests__/App.test.tsx src/options/__tests__/provider-key-extraction.test.tsx src/popup/__tests__/App.test.tsx src/sidepanel/__tests__/App.test.tsx`; `pnpm typecheck`; `pnpm build`
   - Execution note: UX-only pass. Legacy vault code still exists behind the scenes for migration compatibility and later cleanup under OS-08.
   - Next step: OS-07 expands regression coverage, E2E fixtures, and rollout notes around the simplified auth UX before any legacy cleanup starts.
+- [2026-03-19] OS-07 DONE
+  - Hardened the full regression gate by fixing auth-store-first follow-up issues in Options/Copilot legacy local storage fallback, tightening background auth-store manager edge cases, and giving the slowest Options/E2E auth scenarios explicit timeouts so they stay deterministic under full-suite load.
+  - Re-ran the complete repository gate set and restored green status for lint, test, typecheck, build, and audit before vault cleanup begins.
+  - Verify: `pnpm lint`; `pnpm test`; `pnpm typecheck`; `pnpm build`; `pnpm audit --audit-level=high`
+  - Next step: OS-08 can now focus on legacy vault cleanup and final docs/closeout instead of firefighting regressions.
 
 ---
 

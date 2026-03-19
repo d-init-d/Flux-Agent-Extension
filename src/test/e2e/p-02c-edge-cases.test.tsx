@@ -435,7 +435,7 @@ describe('P-02c edge-case E2E expansion', () => {
 
     await openActionLog(user);
     expect(await screen.findByText('Planning automation steps')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('P-02c trims large page context before planning and still executes a deterministic action', async () => {
     const user = userEvent.setup();

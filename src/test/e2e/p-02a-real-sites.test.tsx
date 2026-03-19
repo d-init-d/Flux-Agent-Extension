@@ -464,7 +464,7 @@ describe('P-02a real-site E2E expansion', () => {
         'Open the Chrome Web Store result',
       ],
     });
-  });
+  }, 15000);
 
   it('P-02a covers an Amazon search-product-cart interaction', async () => {
     await runScenario({

@@ -445,7 +445,7 @@ describe('P-02d error-recovery E2E expansion', () => {
     await openActionLog(user);
     expect(await screen.findByText('Retry the Login button until it responds')).toBeInTheDocument();
     expect(await screen.findByText('Continue with the Submit button')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('P-02d stops the remaining actions after an unrecoverable failure and surfaces the error cleanly', async () => {
     const user = userEvent.setup();

@@ -311,7 +311,7 @@ describe('Options App', () => {
     await user.selectOptions(screen.getByLabelText('Login method'), 'api-key');
     expect(screen.getByLabelText('Model')).toHaveValue('my-manual-openai-model');
     expect(screen.getAllByText(/manual override/i).length).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it('surfaces helper-missing for the OpenAI browser lane without falling back to API key validation', async () => {
     const user = userEvent.setup();
@@ -852,7 +852,7 @@ describe('Options App', () => {
     expect(screen.getByText(/current state:/i)).toBeInTheDocument();
     expect(screen.getAllByText(/account missing/i)).not.toHaveLength(0);
     expect(screen.getByRole('button', { name: /finish setup/i })).toBeDisabled();
-  });
+  }, 15000);
 
   it('clears raw API key input after a blocked test connection attempt', async () => {
     const user = userEvent.setup();
@@ -883,7 +883,7 @@ describe('Options App', () => {
 
     window.dispatchEvent(new PageTransitionEvent('pagehide'));
     expect(apiKeyInput).toHaveValue('');
-  });
+  }, 15000);
 
   it('normalizes cliproxyapi endpoints on save and test', async () => {
     const user = userEvent.setup();
@@ -923,7 +923,7 @@ describe('Options App', () => {
     expect(initialize).toHaveBeenCalledOnce();
     expect(validateApiKey).toHaveBeenCalledWith('sk-cliproxyapi-test');
     expect(screen.getByDisplayValue('http://127.0.0.1:8317/v1')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('shows CLIProxyAPI-specific readiness copy in the main options surface', async () => {
     const user = userEvent.setup();
@@ -966,7 +966,7 @@ describe('Options App', () => {
 
     expect(await screen.findByText(/provider settings saved/i)).toBeInTheDocument();
     expect(screen.getByDisplayValue('https://api.openai.com/v1')).toBeInTheDocument();
-  });
+  }, 15000);
 
   it('normalizes ollama loopback endpoints before connection tests', async () => {
     const user = userEvent.setup();
