@@ -365,7 +365,10 @@ function normalizeArtifactRecord(value: unknown): BrowserAccountArtifactStoreRec
   };
 }
 
-function normalizeBrowserAccountRecord(value: unknown): BrowserAccountAuthStoreRecord | undefined {
+function normalizeBrowserAccountRecord(
+  provider: AIProviderType,
+  value: unknown,
+): BrowserAccountAuthStoreRecord | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
@@ -399,7 +402,8 @@ function normalizeBrowserAccountRecord(value: unknown): BrowserAccountAuthStoreR
     accounts,
     activeAccountId:
       typeof candidate.activeAccountId === 'string' ? candidate.activeAccountId : undefined,
-    browserLogin: normalizeBrowserLoginMetadata(candidate.browserLogin),
+    browserLogin:
+      provider === 'openai' ? normalizeBrowserLoginMetadata(candidate.browserLogin) : undefined,
     artifacts,
   };
 }
@@ -427,7 +431,7 @@ function normalizeProviderAuthStore(
     providerFamily: isProviderFamily(candidate.providerFamily) ? candidate.providerFamily : undefined,
     updatedAt: Math.trunc(candidate.updatedAt),
     apiKey: normalizeApiKeyRecord(candidate.apiKey),
-    browserAccount: normalizeBrowserAccountRecord(candidate.browserAccount),
+    browserAccount: normalizeBrowserAccountRecord(provider, candidate.browserAccount),
     migratedFromVaultAt:
       typeof candidate.migratedFromVaultAt === 'number'
         ? Math.trunc(candidate.migratedFromVaultAt)
