@@ -33,7 +33,6 @@ Complete all items before starting.
 - [ ] Confirm the unpacked extension build is loaded from the latest local `dist/` output in `chrome://extensions`.
 - [ ] Confirm the extension is enabled and the side panel permission is granted if Chrome prompts for it.
 - [ ] Confirm `Options`, `Popup`, and `Sidepanel` all open successfully after loading the unpacked build.
-- [ ] Confirm the vault is initialized and you know the unlock passphrase or flow needed for the session.
 - [ ] Prepare one valid OpenAI API key for the API-key lane.
 - [ ] Prepare one valid trusted browser-account setup path if available for this QA pass:
   - trusted helper artifacts already installed, or
@@ -50,7 +49,7 @@ Capture lightweight evidence for every failed check and every P0/P1 pass.
 - [ ] Screenshot one success state for the API-key lane.
 - [ ] Screenshot one browser-account state, including `helper-missing` if that is the real local result.
 - [ ] Screenshot popup and sidepanel readiness/blocking states when the selected OpenAI login method changes.
-- [ ] Record Chrome version, extension build source, date/time, and whether the vault was locked or unlocked at the start.
+- [ ] Record Chrome version, extension build source, date/time, and whether you used a clean profile or a legacy compatibility profile.
 - [ ] Never paste raw API keys, tokens, or raw browser-account artifacts into the QA report.
 
 ## Test Data
@@ -174,17 +173,16 @@ Expected results:
 
 ## P1 - Browser-Account Degraded States And Legacy Bridge
 
-### TC-P1-01 - Vault locked blocks browser-account use
+### TC-P1-01 - Legacy compatibility lock state stays scoped to legacy paths only
 
-- [ ] Lock the vault.
-- [ ] Keep `OpenAI -> ChatGPT Pro/Plus (browser)` selected.
-- [ ] Attempt validation or live use.
+- [ ] Use a profile/build where an older legacy account-backed path still depends on the compatibility vault shim.
+- [ ] Attempt validation or live use through that legacy path.
 
 Expected results:
 
 - [ ] Validation/send is blocked before a live provider call is attempted.
-- [ ] UI clearly says the vault must be unlocked first.
-- [ ] Popup and sidepanel readiness reflect the same blocked state.
+- [ ] Any lock/unlock wording is clearly scoped to the legacy compatibility path rather than the primary OpenAI first-run UX.
+- [ ] Popup and sidepanel readiness reflect the same blocked legacy state.
 
 ### TC-P1-02 - Helper-missing state is surfaced honestly
 

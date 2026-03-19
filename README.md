@@ -26,7 +26,7 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 
 - Popup: `src/popup/index.html` (launcher that opens the side panel and dispatches live quick actions)
 - Side panel: `src/sidepanel/index.html`
-- Options page: `src/options/index.html` (provider config, credential vault, permissions, appearance)
+- Options page: `src/options/index.html` (provider config, local auth setup, permissions, appearance)
 - Background service worker: `src/background/index.ts`
 - Content script: `src/content/index.ts`
 - Manifest: `src/manifest.json`
@@ -44,20 +44,20 @@ Status: active development (`v0.1.0`). The repo contains a working Manifest V3 e
 ## CLIProxyAPI Current Status
 
 - Provider label in-product: `CLIProxyAPI`.
-- Auth model: endpoint + API key stored in the background-owned vault.
+- Auth model: endpoint + API key stored in the extension-owned local auth store.
 - Supported endpoint shapes:
   - local loopback: `http://127.0.0.1:8317` or `http://127.0.0.1:8317/v1`
   - hosted: `https://your-domain/v1`
 - Endpoint normalization: the setup flow accepts `/v1`, `/v1/chat/completions`, and `/v1/models`, then normalizes them to a stable base URL.
 - Readiness rule: Flux only treats CLIProxyAPI as ready after a valid endpoint is saved and `Test connection` succeeds.
-- Runtime guard: popup quick actions and sidepanel sends stay blocked when the CLIProxyAPI credential is missing, locked, stale, or not validated yet.
+- Runtime guard: popup quick actions and sidepanel sends stay blocked when the CLIProxyAPI credential is missing, stale, or not validated yet.
 
 ## OpenAI Current Status
 
 - Primary provider label in-product: `OpenAI`.
 - Login methods in-product: exactly `ChatGPT Pro/Plus (browser)` and `Manually enter API Key`.
 - Browser-account lane ownership: background-owned and account-backed. UI surfaces only consume sanitized status and readiness state.
-- Secret boundary: long-lived account artifacts stay encrypted in the vault/background path; normal settings storage keeps masked metadata and health state only.
+- Secret boundary: primary API-key flows now use the extension-owned local auth store, while browser-account artifacts remain background-owned and sanitized before they reach UI state.
 - Runtime boundary: popup, options, and sidepanel are auth-choice-aware and talk to background messages; they do not persist raw browser-login artifacts or runtime tokens in UI-local state.
 - Browser-login implementation boundary: no headless login, no scraping, and no extension-owned OAuth callback handling in this repo/build. See `docs/task-08-manifest-auth-wiring.md` and `docs/task-oa-03-browser-helper-deep-link-auth-contract.md`.
 - Helper/deep-link contract exists, but this repo/build still surfaces `helper-missing` unless trusted helper artifacts or the legacy Codex bridge are already present.
@@ -165,10 +165,10 @@ Release packaging is handled by `.github/workflows/release.yml` on tags matching
 
 ## Security Notes
 
-- Provider credentials now flow through the background-owned credential vault. Secrets are encrypted at rest, while regular settings storage keeps only masked metadata.
-- Unlocking the vault is a per-browser-session action. The unlock state lives in session storage and memory only; options and popup flows do not persist raw provider secrets.
-- CLIProxyAPI follows the same vault boundary. Its runtime path also requires a valid saved endpoint plus a non-stale validated credential before live requests can proceed.
-- OpenAI browser-account follows the same vault boundary, but with helper/deep-link account artifacts and legacy-bridge-compatible account state rather than an API key. If the vault is locked, helper is unavailable, the account is missing, revoked, stale, or refresh-required, browser-account runtime flows stay blocked until the account path is restored.
+- Primary API-key providers now persist long-lived credentials in the extension-owned local auth store. Raw secrets still stay background-owned; UI surfaces only receive masked metadata and readiness state.
+- CLIProxyAPI follows the auth-store-first model. Its runtime path still requires a valid saved endpoint plus a non-stale validated credential before live requests can proceed.
+- OpenAI browser-account remains helper/deep-link based and background-owned. Helper status, trusted-account state, and degraded states are surfaced honestly, but raw helper payloads and runtime tokens never reach UI state.
+- Some legacy vault-backed internals still remain as compatibility shims for migration and older account-backed paths; they are no longer the primary user-facing setup model.
 - `evaluate` and custom scripts stay off by default. They require `Advanced mode` plus the explicit custom-scripts capability, and exported recordings/action logs mark `evaluate` as high risk.
 - See `SECURITY.md` for the threat model and current hardening posture.
 - See `TESTING.md` for the broader QA strategy and OpenAI dual-auth / legacy-bridge test guidance.

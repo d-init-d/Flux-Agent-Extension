@@ -539,6 +539,8 @@ function buildMaskedValue(
 }
 
 export class CredentialVault {
+  // Legacy compatibility shim: primary API-key flows now prefer the app-managed auth store,
+  // but older account-backed paths and migration fallback still route through this facade.
   private activePassphrase: string | null = null;
   private unlockedAt: number | undefined;
   private readonly browserLoginAttempts = new Map<AIProviderType, StoredBrowserLoginAttempt>();

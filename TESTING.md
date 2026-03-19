@@ -1,6 +1,6 @@
 # Testing Guide
 
-Last updated: 2026-03-18
+Last updated: 2026-03-19
 
 This file is the current testing source of truth for the repo.
 
@@ -52,7 +52,7 @@ The detailed `50`-scenario accounting lives in [E2E_SCENARIO_MATRIX.md](/D:/Open
 ## CLIProxyAPI manual QA
 
 - Treat `CLIProxyAPI` as the endpoint-first provider under test.
-- Use one real local or hosted endpoint plus a real vault-backed API key.
+- Use one real local or hosted endpoint plus a real locally stored API key.
 - Canonical local examples:
   - `http://127.0.0.1:8317`
   - `http://127.0.0.1:8317/v1`
@@ -67,16 +67,16 @@ The detailed `50`-scenario accounting lives in [E2E_SCENARIO_MATRIX.md](/D:/Open
   - `Endpoint required`
   - `Test connection`
   - `Ready`
-- Confirm `Sidepanel` blocks send until CLIProxyAPI has both a saved endpoint and a validated vault-backed API key.
+- Confirm `Sidepanel` blocks send until CLIProxyAPI has both a saved endpoint and a validated locally stored API key.
 - Confirm changing the CLIProxyAPI endpoint after validation marks the credential as stale and re-locks readiness until validation is rerun.
 - Confirm raw CLIProxyAPI API keys never appear in regular storage snapshots, UI text, or blocked-save error states.
 
 ## OpenAI browser-account checks
 
 - Confirm `OpenAI` shows exactly 2 login methods and that browser-account is selected through `ChatGPT Pro/Plus (browser)` rather than through `codex` first-run UX.
-- Confirm the vault is initialized and unlocked before validation or live prompt tests for the browser-account lane.
+- Confirm the browser-account lane only becomes ready when trusted local artifacts/helper-backed state exists; do not treat vault init/unlock as a primary setup step anymore.
 - Confirm browser-account status is background-owned and surfaced to UI as sanitized readiness/health data only.
-- Confirm popup quick actions and sidepanel send stay blocked for `Vault locked`, `Helper missing`, `Account missing`, `Refresh required`, `Revoked`, `Session expired`, or other degraded browser-account states.
+- Confirm popup quick actions and sidepanel send stay blocked for `Helper missing`, `Account missing`, `Refresh required`, `Revoked`, `Session expired`, or other degraded browser-account states, plus any legacy compatibility-only lock state when you intentionally test that path.
 - Confirm auth-choice-aware copy and readiness stay consistent across `Options`, `Popup`, and `Sidepanel` when switching between OpenAI login methods.
 
 ## OpenAI browser-account limitations and legacy bridge
@@ -88,6 +88,7 @@ The detailed `50`-scenario accounting lives in [E2E_SCENARIO_MATRIX.md](/D:/Open
 - Refresh is intentionally deferred to the official client/helper flow. If a browser-account session becomes stale, expired, revoked, or refresh-required, recover through the supported account-backed path rather than an extension-owned OAuth exchange.
 - Legacy bridge coverage matters: when legacy trusted Codex artifacts/state already exist, the product may surface that readiness under `OpenAI + ChatGPT Pro/Plus (browser)` without requiring users to start from the legacy Codex UX.
 - Current account-backed adapter coverage is text-only; image input is not supported.
+- If you specifically test a legacy compatibility path that still relies on the old vault shim, document it as legacy-only coverage rather than the primary setup route.
 
 ## Release gates
 
