@@ -158,6 +158,7 @@ export interface ProviderCredentialRecord {
   providerFamily?: AIProviderFamily;
   authFamily: ProviderAuthFamily;
   authKind: ProviderAuthKind;
+  storageSource?: 'vault' | 'auth-store';
   maskedValue: string;
   updatedAt: number;
   validatedAt?: number;

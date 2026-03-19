@@ -112,4 +112,29 @@ describe('resolveKeyBasedProviderUx', () => {
       }),
     );
   });
+
+  it('does not surface vault-locked for auth-store-backed API-key credentials', () => {
+    const ux = resolveKeyBasedProviderUx('openai', {
+      credential: {
+        version: 1,
+        provider: 'openai',
+        providerFamily: 'default',
+        authFamily: 'api-key',
+        authKind: 'api-key',
+        storageSource: 'auth-store',
+        maskedValue: 'sk-****store',
+        updatedAt: Date.UTC(2026, 2, 19, 18, 0, 0),
+        validatedAt: Date.UTC(2026, 2, 19, 18, 0, 0),
+      },
+      vaultLockState: 'locked',
+    });
+
+    expect(ux).toEqual(
+      expect.objectContaining({
+        state: 'ready',
+        badgeLabel: 'Ready',
+        blocksRuntime: false,
+      }),
+    );
+  });
 });

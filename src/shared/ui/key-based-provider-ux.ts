@@ -47,6 +47,7 @@ export function resolveKeyBasedProviderUx(
   const credentialLabel = providerUsesOAuthToken(definition) ? 'token' : 'API key';
   const credential = options.credential;
   const hasCredential = Boolean(credential);
+  const credentialSource = credential?.storageSource ?? 'vault';
   const endpointPolicy = definition.supportsEndpoint
     ? evaluateProviderEndpointPolicy(provider, options.config?.customEndpoint)
     : { valid: true };
@@ -74,16 +75,16 @@ export function resolveKeyBasedProviderUx(
         ? 'Add a CLIProxyAPI API key'
         : `Add a ${definition.label} ${credentialLabel}`,
       detail: isCLIProxyAPI(provider)
-        ? 'The CLIProxyAPI endpoint can be saved, but runtime requests stay blocked until an API key is stored in the vault.'
+        ? 'The CLIProxyAPI endpoint can be saved, but runtime requests stay blocked until an API key is stored locally.'
         : `${definition.label} still needs a stored ${credentialLabel} before live requests can run.`,
       action: isCLIProxyAPI(provider)
-        ? 'Save the API key in the vault, then run Test connection so Flux can mark CLIProxyAPI ready.'
-        : `Store the ${credentialLabel} in the vault, then run Test connection before relying on this provider.`,
+        ? 'Save the API key locally, then run Test connection so Flux can mark CLIProxyAPI ready.'
+        : `Store the ${credentialLabel}, then run Test connection before relying on this provider.`,
       blocksRuntime: true,
     };
   }
 
-  if (options.vaultLockState !== 'unlocked' && hasCredential) {
+  if (options.vaultLockState !== 'unlocked' && hasCredential && credentialSource === 'vault') {
     return {
       state: 'vault-locked',
       badgeLabel: 'Vault locked',
@@ -124,7 +125,7 @@ export function resolveKeyBasedProviderUx(
         ? 'CLIProxyAPI endpoint saved but unvalidated'
         : `${definition.label} is saved but unvalidated`,
       detail: isCLIProxyAPI(provider)
-        ? 'Flux sees a saved CLIProxyAPI endpoint and vault-backed API key, but readiness stays blocked until a live connection test succeeds.'
+        ? 'Flux sees a saved CLIProxyAPI endpoint and local API key, but readiness stays blocked until a live connection test succeeds.'
         : `Flux sees stored ${definition.label} credentials, but readiness stays blocked until a live connection test succeeds.`,
       action: isCLIProxyAPI(provider)
         ? 'Keep the saved endpoint, then run Test connection. Flux marks CLIProxyAPI ready only after that validation passes.'
@@ -139,7 +140,7 @@ export function resolveKeyBasedProviderUx(
     badgeVariant: 'success',
     title: isCLIProxyAPI(provider) ? 'CLIProxyAPI is ready' : `${definition.label} is ready`,
     detail: isCLIProxyAPI(provider)
-      ? 'The saved CLIProxyAPI endpoint and vault-backed API key passed validation, so popup quick actions and sidepanel sends can use the real provider state.'
+      ? 'The saved CLIProxyAPI endpoint and local API key passed validation, so popup quick actions and sidepanel sends can use the real provider state.'
       : `${definition.label} has a validated credential and can back popup or sidepanel requests.`,
     action: isCLIProxyAPI(provider)
       ? 'If the endpoint or key changes later, save again and re-run Test connection before relying on it.'

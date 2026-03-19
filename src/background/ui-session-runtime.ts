@@ -1243,8 +1243,12 @@ export class UISessionRuntime {
     }
 
     const snapshot = await this.getAccountSurfaceSnapshot(payload.provider);
+    const usesBrowserAccountLane = this.usesBrowserAccountLane(
+      payload.provider,
+      snapshot.runtimeState.providers[payload.provider],
+    );
     const status =
-      snapshot.vault.lockState !== 'unlocked'
+      snapshot.vault.lockState !== 'unlocked' && usesBrowserAccountLane
         ? 'vault-locked'
         : snapshot.accounts.length > 0
           ? 'ready'
@@ -2446,6 +2450,7 @@ export class UISessionRuntime {
   }
 
   private async getAccountSurfaceSnapshot(provider: SessionConfig['provider']): Promise<{
+    runtimeState: RuntimeState;
     vault: VaultState;
     browserLogin?: ProviderBrowserLoginState;
     credential?: ProviderCredentialRecord;
@@ -2455,13 +2460,38 @@ export class UISessionRuntime {
     const runtimeState = await this.loadRuntimeState();
     const sourceProvider = this.resolveAccountSourceProvider(provider, runtimeState);
     const accounts = await this.credentialVault.listAccounts(sourceProvider);
+    const selectedProviderConfig = runtimeState.providers[provider];
+    const selectedAuthChoice = this.resolveProviderAuthChoice(provider, selectedProviderConfig);
+    const credential =
+      selectedAuthChoice.authFamily === 'account-backed'
+        ? runtimeState.vault.credentials[provider]
+        : undefined;
 
     return {
+      runtimeState,
       vault: runtimeState.vault,
       browserLogin: runtimeState.vault.browserLogins?.[provider],
-      credential: runtimeState.vault.credentials[provider],
+      credential,
       accounts: accounts.map((account) => this.mapAccountRecordForSurface(provider, account)),
       activeAccountId: runtimeState.vault.activeAccounts[provider],
+    };
+  }
+
+  private usesBrowserAccountLane(
+    provider: SessionConfig['provider'],
+    config: Partial<ProviderConfig> | undefined,
+  ): boolean {
+    return this.resolveProviderAuthChoice(provider, config).authMethod === 'browser-login';
+  }
+
+  private resolveProviderAuthChoice(
+    provider: SessionConfig['provider'],
+    config: Partial<ProviderConfig> | undefined,
+  ) {
+    return PROVIDER_LOOKUP[provider].authChoices?.find((choice) => choice.id === config?.authChoiceId) ?? {
+      id: 'legacy',
+      authFamily: PROVIDER_LOOKUP[provider].authFamily,
+      authMethod: PROVIDER_LOOKUP[provider].authMethod,
     };
   }
 

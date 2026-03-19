@@ -64,6 +64,10 @@ function normalizeCredentialRecord(value: unknown): ProviderCredentialRecord | u
       : undefined,
     authFamily: candidate.authFamily,
     authKind: candidate.authKind,
+    storageSource:
+      candidate.storageSource === 'vault' || candidate.storageSource === 'auth-store'
+        ? candidate.storageSource
+        : undefined,
     maskedValue: candidate.maskedValue,
     updatedAt: Math.trunc(candidate.updatedAt),
     validatedAt:

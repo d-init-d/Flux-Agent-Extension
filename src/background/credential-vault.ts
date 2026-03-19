@@ -155,6 +155,10 @@ function normalizeCredentialRecord(value: unknown): ProviderCredentialRecord | n
     providerFamily: resolveProviderFamily(provider),
     authFamily,
     authKind: candidate.authKind,
+    storageSource:
+      candidate.storageSource === 'auth-store' || candidate.storageSource === 'vault'
+        ? candidate.storageSource
+        : 'vault',
     maskedValue: candidate.maskedValue,
     updatedAt: candidate.updatedAt,
     validatedAt: typeof candidate.validatedAt === 'number' ? candidate.validatedAt : undefined,
@@ -441,6 +445,7 @@ function buildCredentialRecord(
     providerFamily: resolveProviderFamily(provider),
     authFamily,
     authKind,
+    storageSource: 'vault',
     maskedValue,
     updatedAt,
   };
@@ -1396,7 +1401,15 @@ export class CredentialVault {
   private async getBridgedCredentialSurface(
     credentials: Partial<Record<AIProviderType, ProviderCredentialRecord>>,
   ): Promise<Partial<Record<AIProviderType, ProviderCredentialRecord>>> {
-    const merged = { ...credentials };
+    const merged = Object.fromEntries(
+      Object.entries(credentials).map(([provider, record]) => [
+        provider,
+        {
+          ...record,
+          storageSource: 'vault' as const,
+        },
+      ]),
+    ) as Partial<Record<AIProviderType, ProviderCredentialRecord>>;
     const authStore = await this.authStoreManager.getStore();
 
     for (const [provider, providerState] of Object.entries(authStore.providers)) {
@@ -1405,7 +1418,10 @@ export class CredentialVault {
       }
 
       if (providerState.apiKey?.credential) {
-        merged[provider] = providerState.apiKey.credential;
+        merged[provider] = {
+          ...providerState.apiKey.credential,
+          storageSource: 'auth-store',
+        };
         continue;
       }
 
